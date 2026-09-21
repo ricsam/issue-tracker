@@ -1,0 +1,57 @@
+name: Publish Helm repository
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - charts/**
+      - scripts/publish-helm.sh
+      - scripts/helm-repository.html
+      - .github/workflows/helm-pages.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-pages
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - name: Verify chart
+        run: |
+          helm lint charts/issue-tracker --strict --set image.tag=ci --set baseUrl=https://issues.example.com --set existingSecret=issue-tracker-settings
+          helm template issue-tracker charts/issue-tracker --set image.tag=ci --set baseUrl=https://issues.example.com --set existingSecret=issue-tracker-settings > /dev/null
+      - name: Archive version and build static repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELM_REPO_DIR: ${{ runner.temp }}/helm-site-${{ github.run_id }}-${{ github.run_attempt }}
+          HELM_REPO_URL: https://ricsam.github.io/issue-tracker
+        run: bash scripts/publish-helm.sh
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/helm-site-${{ github.run_id }}-${{ github.run_attempt }}
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy static Helm repository
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -75,6 +75,16 @@ The container runs as UID/GID 1000, listens on port 3000, and requires a writabl
 
 The chart is in [`charts/issue-tracker`](charts/issue-tracker). It enforces one replica and `Recreate` updates because SQLite uses one ReadWriteOnce persistent volume. The chart creates a retained PVC by default, or can use `persistence.existingClaim`. No storage class is hard-coded, ingress is disabled by default, and the settings key must come from a pre-existing Secret.
 
+The public chart repository is hosted on GitHub Pages:
+
+```sh
+helm repo add issue-tracker https://ricsam.github.io/issue-tracker
+helm repo update
+helm search repo issue-tracker --versions
+```
+
+Install `issue-tracker/issue-tracker` instead of the local chart path. Chart archives are immutable and retained in [GitHub Releases](https://github.com/ricsam/issue-tracker/releases); maintainers must bump `Chart.yaml`'s version whenever chart content changes.
+
 Choose an image tag that you have built or confirmed is published, then follow [the deployment guide](docs/deployment.md). In particular, claim the first administrator privately before enabling public ingress.
 
 ## Verification

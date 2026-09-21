@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Threadline · Helm repository</title>
+  <meta name="description" content="The official Helm chart repository for Threadline, a self-hosted issue tracker.">
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#272334;background:#faf9fc;color-scheme:light}
+    body{max-width:780px;margin:10vh auto;padding:24px;line-height:1.7}h1{font-size:2.7rem;letter-spacing:-.06em;margin-bottom:0}
+    .eyebrow,a{color:#7555ba}pre{background:#242132;color:#efebfb;border-radius:12px;padding:22px;overflow:auto;font-size:14px}
+    code{font-family:ui-monospace,monospace}nav{display:flex;gap:24px;flex-wrap:wrap;margin:28px 0}footer{border-top:1px solid #e5dfec;margin-top:36px;padding-top:16px;color:#6e6779}
+  </style>
+</head>
+<body>
+  <p class="eyebrow">SELF-HOSTED · OPEN SOURCE · MIT</p>
+  <h1>Threadline</h1>
+  <p>Projects, issues, and the conversations that move them forward.</p>
+  <h2>Helm chart repository</h2>
+  <pre><code>helm repo add issue-tracker https://ricsam.github.io/issue-tracker
+helm repo update
+helm search repo issue-tracker --versions</code></pre>
+  <p>Before installing, choose a published image tag, create an encryption-key Secret, and provide your HTTPS origin. Ingress is off by default: claim the first administrator privately before exposing your workspace.</p>
+  <nav>
+    <a href="https://github.com/ricsam/issue-tracker/blob/main/docs/deployment.md">Installation guide</a>
+    <a href="https://github.com/ricsam/issue-tracker/tree/main/docs">Documentation</a>
+    <a href="https://github.com/ricsam/issue-tracker">Source code</a>
+    <a href="index.yaml">Chart index</a>
+  </nav>
+  <footer>One shared authenticated workspace. SQLite-backed, single replica. Chart archives are also available in <a href="https://github.com/ricsam/issue-tracker/releases">GitHub Releases</a>.</footer>
+</body>
+</html>

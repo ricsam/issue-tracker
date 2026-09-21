@@ -2,6 +2,16 @@
 
 Issue Tracker is a single-instance application backed by SQLite. Its database, uploads, and encrypted runtime settings are all stored under `/data` and must survive pod replacement.
 
+## Add the public Helm repository
+
+```sh
+helm repo add issue-tracker https://ricsam.github.io/issue-tracker
+helm repo update
+helm search repo issue-tracker --versions
+```
+
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.1.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+
 ## 1. Build or select an image
 
 Production assets must be built before the server image is assembled. The repository Dockerfile does this automatically:
