@@ -1,0 +1,5 @@
+Issue Tracker is installed with one replica and Recreate updates because its SQLite database uses a ReadWriteOnce volume.
+
+If this is a new installation, do not expose it publicly yet. Claim the first administrator through private access as described in docs/deployment.md, then configure the final BASE_URL and ingress.
+
+The PVC is annotated with helm.sh/resource-policy: keep and is intentionally retained by `helm uninstall`. Back up both the SQLite database and uploads under /data.

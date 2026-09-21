@@ -1,0 +1,27 @@
+# Source control and automation metadata
+.git
+.github
+charts
+docs
+
+# Dependencies and build/test output
+node_modules
+dist
+coverage
+playwright-report
+test-results
+.local
+*.log
+
+# Local runtime state and secrets
+.env
+.env.*
+data
+*.db
+*.db-shm
+*.db-wal
+
+# Editor and OS files
+.DS_Store
+.vscode
+.idea
