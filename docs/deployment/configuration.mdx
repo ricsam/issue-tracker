@@ -1,0 +1,59 @@
+---
+title: Configuration reference
+description: Understand origins, encryption keys, persistent state, and runtime health.
+---
+
+Threadline reads its server configuration from environment variables. OIDC settings are managed separately in the administrator UI and persisted in SQLite.
+
+## Environment variables
+
+| Variable | Source default | Container/chart value | Purpose |
+| --- | --- | --- | --- |
+| `NODE_ENV` | Unset | `production` | Enforces HTTPS origin and explicit settings key |
+| `DATA_DIR` | `data` | `/data` | SQLite database, uploads, and development key |
+| `BASE_URL` | `http://localhost:3000` | Required by chart | Browser-visible origin, including scheme and non-default port |
+| `SETTINGS_ENCRYPTION_KEY` | Generated development key when empty | Required Secret | Canonical base64 representing exactly 32 bytes |
+| `HOST` | `0.0.0.0` | `0.0.0.0` | Listen address; use loopback for local-only development |
+| `PORT` | `3000` | `3000` | HTTP listen port |
+| `ALLOW_INSECURE_OIDC` | Disabled | Do not enable in production | Allows loopback HTTP provider URLs only in non-production mode |
+
+The development example uses the Vite browser origin `http://127.0.0.1:5173`. Do not confuse that with the API's listen address on port 3000.
+
+## Origin and TLS
+
+Production `BASE_URL` must start with HTTPS. Use an origin such as `https://issues.example.com`, not an application subpath. The server normalizes it to the URL origin.
+
+Unsafe API methods require an `Origin` header matching this configured origin. The same setting determines the OIDC callback URL and whether session cookies have the `Secure` flag. TLS terminates at your ingress or reverse proxy; the app itself serves HTTP internally.
+
+<Note>
+A successful liveness probe does not prove that a browser can authenticate. Check DNS, TLS, the browser origin, and provider callback registration separately.
+</Note>
+
+## Encryption-key lifecycle
+
+Generate 32 random bytes with `openssl rand -base64 32`, then store the resulting text in your secret manager. Startup checks both decoded length and canonical encoding; whitespace or malformed base64 is rejected.
+
+The key encrypts the OIDC client secret using AES-256-GCM. It is **not full-database encryption**: issues, profiles, and uploads still need filesystem, volume, and backup access controls.
+
+In development only, a missing key is generated once at `DATA_DIR/.settings-key`. Production fails without an explicit key. Restoring an existing database requires the matching key. There is no automatic key-rotation migration; replacing the variable alone is unsafe.
+
+## Persistent layout
+
+| Path under `DATA_DIR` | Contents |
+| --- | --- |
+| `app.sqlite` | Users, identities, sessions, projects, issues, comments, attachment metadata, OIDC settings |
+| `app.sqlite-wal`, `app.sqlite-shm` | SQLite WAL sidecars that may exist while running |
+| `uploads/` | Uploaded file bytes identified by generated IDs |
+| `.settings-key` | Generated development-only key, if no explicit key was supplied |
+
+Back up this state consistently. Do not copy only `app.sqlite` from a running WAL-mode database and assume you captured all writes.
+
+## Health and limits
+
+- `GET /healthz` returns a minimal liveness result.
+- `GET /readyz` queries SQLite before returning readiness; it is not a disk-space or write-permission test.
+- Upload files are limited to **10 MiB** each. Total incoming bodies are limited to **11 MiB** to allow multipart overhead.
+- Authentication entry routes are rate limited by the direct peer address; forwarded headers are not trusted for that decision. Clients behind one proxy can share a rate-limit bucket.
+- Sessions last seven days by default. Session cookie values are stored as hashes, not plaintext tokens.
+
+Resource requests and limits are adjustable in Helm. Storage and backup capacity must account for uploads retained even after their references are removed.

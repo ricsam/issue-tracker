@@ -1,0 +1,105 @@
+---
+title: Development and API reference
+description: Contribute to Threadline and integrate with its cookie-authenticated HTTP API.
+---
+
+Threadline is an MIT-licensed Bun/TypeScript application. The public repository is [ricsam/issue-tracker](https://github.com/ricsam/issue-tracker). The web UI is the primary API client; the JSON API is useful for same-origin automation but is not a versioned public SDK.
+
+## Development workflow
+
+```sh
+git clone https://github.com/ricsam/issue-tracker.git
+cd issue-tracker
+bun install
+cp .env.example .env
+```
+
+Run the API and Vite in separate terminals:
+
+```sh
+bun dev
+```
+
+```sh
+bun dev:web
+```
+
+Before opening a pull request:
+
+```sh
+bun run typecheck
+bun run test
+bun run build
+bunx playwright install chromium
+bun run test:e2e
+```
+
+Add tests for behavior changes and avoid committing dependencies, build output, `.env`, data files, or credentials. Deployment changes should also pass the chart's lint and template checks documented in the repository.
+
+## API conventions
+
+- Every response is JSON except redirects and authenticated file downloads. Errors have shape `{ "error": "message" }`.
+- Authentication uses an HTTP-only, SameSite=Lax session cookie. It is `Secure` when the configured origin is HTTPS.
+- Unsafe methods (`POST`, `PUT`, `PATCH`, and `DELETE`) require an `Origin` header exactly matching `BASE_URL`.
+- All `/api` routes require authentication except auth status, first setup, local login, and the OIDC redirect/callback flow.
+- Canonical issue and comment bodies are Markdown, not HTML.
+- API objects and enums are declared in `shared/types.ts`.
+
+<Warning>
+Do not put the API behind a proxy that strips the browser `Origin` header or changes the externally visible origin without updating `BASE_URL`. Do not use an administrator's persistent browser cookie as a general-purpose API token.
+</Warning>
+
+## Authentication and users
+
+| Method | Path | Body or result |
+| --- | --- | --- |
+| `GET` | `/api/auth/status` | Setup state, current user, and public OIDC display state |
+| `POST` | `/api/auth/setup` | `{name,email,password}`; succeeds only when there are zero users |
+| `POST` | `/api/auth/login` | `{email,password}`; starts a local session |
+| `POST` | `/api/auth/logout` | Invalidates the current session |
+| `GET` | `/api/auth/oidc/login` | Redirects to the configured provider |
+| `GET` | `/api/auth/oidc/callback` | Completes state, PKCE, nonce, token, and identity validation |
+| `GET` | `/api/users` | `{users: User[]}` for authenticated users |
+| `POST` | `/api/admin/users` | Administrator creates a local member from `{name,email,password}` |
+| `GET` | `/api/admin/oidc` | Administrator-only settings without the client secret |
+| `PUT` | `/api/admin/oidc` | Updates provider settings; omitted or empty `clientSecret` preserves it |
+
+The OIDC callback keys identities by immutable issuer and subject. Verified email is profile data and never performs account linking.
+
+## Projects and issues
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/api/projects` | All shared projects with issue/open counts |
+| `POST` | `/api/projects` | `{name,description?}`; generated slug is stable |
+| `GET` | `/api/projects/:slug` | One project |
+| `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
+| `POST` | `/api/projects/:slug/issues` | Creates an issue; number increments within the project |
+| `GET` | `/api/issues/:id` | `{issue,comments}` |
+| `PATCH` | `/api/issues/:id` | Any authenticated user may update supplied issue fields |
+
+Issue fields include `title`, Markdown `body`, `status`, `priority`, `labels`, and nullable `assigneeId`. Status is `backlog`, `todo`, `in_progress`, or `done`. Priority is `none`, `low`, `medium`, `high`, or `urgent`. Labels contain at most 30 nonempty values of up to 50 characters; the title is limited to 300 characters and the body to 100,000.
+
+Projects and issues have no delete endpoint.
+
+## Comments and uploads
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/api/issues/:id/comments` | `{body}` creates a Markdown comment |
+| `PATCH` | `/api/comments/:id` | Author or administrator updates body |
+| `DELETE` | `/api/comments/:id` | Author or administrator deletes comment |
+| `POST` | `/api/uploads` | Multipart form with field `file`, at most 10 MiB |
+| `GET` | `/api/uploads/:id/:name` | Authenticated download; exact stored name must match |
+
+PNG, JPEG, GIF, and WebP bytes are signature-sniffed and may render inline. Other files are downloaded with a restrictive content disposition, `nosniff`, and sandbox CSP. A supplied MIME type alone cannot make an arbitrary file render as an image. Uploads are workspace-wide and retained even if no content references them.
+
+## Health endpoints
+
+`GET /healthz` and `GET /readyz` are deliberately public and minimal. Readiness executes a database query. Do not place secrets or detailed infrastructure state in probe responses.
+
+## Documentation contributions
+
+The Mintlify project root is `docs/`. Preview and validate it using the commands in `docs/README.md`. Existing `docs/*.md` files are implementation and operator source references; the rendered site uses the MDX pages declared in `docs/docs.json`.
+
+Security reports should follow the repository's `SECURITY.md`, not a public issue.

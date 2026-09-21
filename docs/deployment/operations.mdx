@@ -1,0 +1,88 @@
+---
+title: Backups, upgrades, and recovery
+description: Preserve the database, uploaded files, and key through operational changes.
+---
+
+Threadline uses one SQLite database and one writable data directory. Treat image updates, storage changes, and credential recovery as maintenance operations with a tested rollback plan.
+
+## Back up a consistent data set
+
+1. Record the image tag, chart version, values, claim or volume identity, and the matching encryption-key reference.
+2. Stop the single application instance and confirm its process or pod has terminated.
+3. Back up the complete data directory, including the database, any WAL sidecars, and uploads. Alternatively, use a storage snapshot with an explicitly understood consistency guarantee.
+4. Back up the encryption key through your secret-management system, separately from public configuration.
+5. Restart one instance and check readiness, login, an issue, and an attachment download.
+
+For the default Helm release name:
+
+```sh
+kubectl -n issue-tracker scale deployment/issue-tracker --replicas=0
+kubectl -n issue-tracker wait --for=delete pod \
+  -l app.kubernetes.io/instance=issue-tracker --timeout=120s
+# Take the operator-managed backup before restarting.
+kubectl -n issue-tracker scale deployment/issue-tracker --replicas=1
+kubectl -n issue-tracker rollout status deployment/issue-tracker
+```
+
+Pause automation that could reconcile the replica count during maintenance. Do not run another application pod on the claim while copying data.
+
+<Warning>
+PVC retention is not a backup. It protects against normal Helm removal, not manual claim deletion, storage failure, corruption, or accidental application writes.
+</Warning>
+
+## Test restores
+
+Restore into a separate private environment with exactly one instance, using the original key. Verify a known issue and comment, download an attachment, and check OIDC settings without exposing the client secret. Avoid making the restored copy public or sending users to the wrong identity-provider callback.
+
+Record recovery time and the last included write. A backup that has never been restored is an untested assumption.
+
+## Upgrade deliberately
+
+Pin the chart version and image tag independently. Back up first, inspect release notes, then render the intended manifests:
+
+```sh
+helm repo update
+helm template issue-tracker issue-tracker/issue-tracker \
+  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+helm upgrade issue-tracker issue-tracker/issue-tracker \
+  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+kubectl -n issue-tracker rollout status deployment/issue-tracker
+```
+
+Update `image.tag` in your values file to the confirmed published tag before running the upgrade. `Recreate` stops the old pod before starting the replacement, so expect downtime. Do not add replicas or change the strategy to avoid that downtime.
+
+Database migrations run during application startup. An image or Helm rollback does not undo database changes; confirm compatibility or restore the pre-upgrade backup before running an older image.
+
+A retained PVC can outlive its release. To reuse it in a new release, supply `persistence.existingClaim` and the matching settings key rather than creating an empty data volume.
+
+## Offline administrator recovery
+
+The recovery script resets an **existing administrator's** local password and invalidates that user's sessions. It does not create a new administrator, promote a member, reopen setup, or change OIDC identities.
+
+Stop the server and back up first. Run from the application directory with access to the original data directory:
+
+```bash
+read -r -s -p 'New admin password (12–1024 characters): ' ADMIN_PASSWORD
+printf '\n'
+printf '%s' "$ADMIN_PASSWORD" | \
+  DATA_DIR=/data bun server/recover-admin.ts admin@example.com
+unset ADMIN_PASSWORD
+```
+
+The password is supplied through stdin, not command arguments. Select the real existing administrator email and the correct mounted `DATA_DIR`.
+
+For Kubernetes, use an operator-controlled temporary recovery pod with the same image, UID 1000, and filesystem group 1000, mounting the retained claim **only after** the Deployment's pod is gone. Run the script there, stop the recovery pod, then restore exactly one application replica. For Docker, stop the app container and use the same volume with the recovery command in a temporary container.
+
+After recovery, log in with the new local password. Preserve the original encryption key throughout; password recovery does not repair lost encrypted-setting keys.
+
+## Diagnose without destroying state
+
+| Symptom | Safe next check |
+| --- | --- |
+| Startup rejects the key | Verify canonical base64 text and decoded length in the secret-management system; do not print it to logs. |
+| Pod cannot write `/data` | Check PVC binding and UID/GID/fsGroup ownership support. |
+| Setup reappears unexpectedly | Stop and inspect `DATA_DIR`/claim selection: you may be using a new empty volume. |
+| OIDC fails after restore | Verify matching key, external origin, provider configuration, and verified-email claims. |
+| Storage usage keeps increasing | Unreferenced uploads are retained; there is no automatic garbage collector. |
+
+Never delete the database, encryption key, or PVC as a login troubleshooting step.

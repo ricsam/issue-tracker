@@ -1,0 +1,67 @@
+---
+title: Current limitations
+description: Understand Threadline's access, account-management, retention, and operational boundaries.
+---
+
+Threadline is a small, self-hosted issue tracker for a trusted, authenticated team.
+Review these boundaries before inviting users or storing sensitive information.
+They describe current behavior, not a roadmap or a promise of future features.
+
+## One shared workspace
+
+Every authenticated user can access every project and upload.
+There are no per-project access controls or private projects.
+Assigning an issue to someone does not restrict who can read or update it.
+The workspace user directory, including names and email addresses, is also visible to authenticated users.
+Anonymous visitors cannot access application data.
+
+<Warning>
+  Do not use projects as security boundaries between customers, departments, or teams.
+  Only admit users who may access the entire workspace and its uploaded files.
+</Warning>
+
+## Limited account management
+
+The first local account is an administrator; local accounts created through Administration are members.
+The current interface and API do not provide user deletion, role changes, or password resets.
+There is no built-in local self-registration after initial setup.
+There is also no self-service password editor or forced first-login password change.
+
+The **Temporary password** label does not make a password expire or require replacement.
+Treat it as a lasting credential and share it through a secure channel.
+See [local users](/admin/local-users) for provisioning details.
+
+## OIDC does not merge accounts
+
+OIDC identities are bound to the provider's issuer and subject, not matched by email alone.
+The provider must return a verified email, and an existing email collision does not link accounts.
+An OIDC-created account does not receive a local password.
+
+Keep a separate local administrator login for identity-provider outages.
+Review [OIDC configuration](/admin/oidc) before provisioning users or changing providers.
+
+## Retention is not automatic cleanup
+
+Issues and projects are retained; the application does not expose deletion for them.
+Comment authors and administrators can edit or delete comments.
+Deleting a comment does not imply that its uploaded attachments are removed.
+
+Uploads remain stored even when no issue or comment references them.
+There is no automatic orphan-upload cleanup in the current release.
+Plan storage capacity for retained files, and include uploads in backups rather than saving only SQLite.
+
+## Single-instance deployment
+
+The packaged Helm deployment enforces one replica and uses `Recreate` updates.
+SQLite and uploads share a persistent data volume; this is not a horizontally scalable deployment.
+Plan for service interruption during replacement rather than assuming rolling-update availability.
+
+Preserve the complete `DATA_DIR` and the settings encryption key needed by the existing database.
+Do not rotate that key without a settings migration or erase storage to reopen administrator setup.
+See [operations and recovery](/deployment/operations) for maintenance procedures.
+
+## Rich editing supports a Markdown subset
+
+Threadline stores canonical Markdown, but the rich **Write** editor does not round-trip every GFM structure.
+For example, **Preview** renders GFM tables while switching through Write mode may normalize unsupported content.
+Keep unsupported rich-editor structures in Markdown source mode to preserve their source.

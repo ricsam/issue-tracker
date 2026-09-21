@@ -1,0 +1,82 @@
+---
+title: Issues
+description: Create actionable issues, update their properties, and discuss work with your team.
+---
+
+An issue holds a title, Markdown description, status, priority, labels, and one optional assignee.
+Its discussion keeps comments alongside the work.
+All authenticated users can read and update issues across all projects.
+
+## Create an issue
+
+1. Open the project that should contain the work.
+2. Select **Create issue** from either **List** or **Board**.
+3. Enter an **Issue title** that describes the desired outcome.
+4. Add a **Description** with context, reproduction steps, or a checklist.
+5. Choose a status, priority, and assignee, and optionally enter comma-separated labels.
+6. Select **Create issue** to save and open the issue detail page.
+
+New issues default to **Backlog**, **No priority**, and **Unassigned**.
+Descriptions and labels may be empty.
+Numbers are allocated within each project, not across the entire workspace.
+
+## Choose useful properties
+
+| Property | Available values or limits |
+| --- | --- |
+| Title | Required; up to 300 characters |
+| Description | Up to 100,000 characters |
+| Status | Backlog, Todo, In progress, Done |
+| Priority | No priority, Low, Medium, High, Urgent |
+| Assignee | One existing workspace user, or Unassigned |
+| Labels | Up to 30 entries, each up to 50 characters |
+
+Enter labels such as `bug, checkout, mobile` in the **Labels** field.
+The interface trims surrounding whitespace, ignores empty entries, and removes exact duplicates.
+Assignment communicates responsibility; it does not restrict who can edit the issue.
+
+## Edit and save
+
+Open an issue by selecting its title in the list or board.
+Change the title, description, or properties, then select **Save changes**.
+Wait for **Changes saved** before leaving the page.
+Edits on the detail page are not automatically saved.
+
+<Note>
+  The status menu on a list row or board card saves immediately.
+  On the issue detail page, status is saved with **Save changes**, like the other properties.
+</Note>
+
+Use [rich text and Markdown](/guides/rich-text) for structured descriptions.
+Use [uploads](/guides/uploads) for screenshots and supporting files.
+Wait for an upload to finish before saving the surrounding content.
+
+## Find an issue
+
+Within a project, **Search issues** matches title text, issue numbers, and labels without case sensitivity.
+It does not search descriptions or comments.
+Combine search with **Filter by status** to narrow the results.
+Clear the search and choose **All statuses** if an expected issue is missing.
+
+## Add to the discussion
+
+Write in **Add a comment**, then select **Post comment**.
+Comments must contain non-whitespace content and may be up to 100,000 characters.
+Posting a comment is separate from saving changes to the issue itself.
+
+The comment author and administrators can select **Edit comment**, then **Save comment**.
+They can also select **Delete comment** and confirm with **Confirm delete**.
+Other members can read the discussion and post their own comments, but cannot edit someone else's comment.
+
+<Warning>
+  Comment deletion is permanent and has no undo action.
+  Comments are the only content with a deletion action: projects, issues, and uploaded files are retained.
+  Deleting a comment does not remove its uploaded files.
+</Warning>
+
+## Finish or reopen work
+
+Set the issue to **Done** when the work is complete.
+It remains available in the project and still counts toward the total issue count.
+Choose another status to reopen it; there is no separate close or reopen action.
+For a visual workflow, continue with [the board guide](/guides/board).

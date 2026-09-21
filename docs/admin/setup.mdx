@@ -1,0 +1,73 @@
+---
+title: First administrator setup
+description: Claim the workspace privately before making it available to your team.
+---
+
+Threadline has no default administrator or shared bootstrap password. While the database contains zero users, the first successful setup request creates an administrator. The database transaction makes this atomic, but it does not decide which visitor should be trusted.
+
+<Warning>
+Keep a new installation private. Do not enable public ingress or a public reverse-proxy route until you have successfully claimed the administrator account.
+</Warning>
+
+## Local development
+
+Follow the [quickstart](/quickstart), bind the API to loopback, and open the local Vite URL. The setup screen asks for:
+
+| Field | Requirement |
+| --- | --- |
+| Name | Nonempty, up to 100 characters |
+| Email | Valid email, up to 254 characters; normalized to lowercase |
+| Password | 12–1024 characters |
+
+After setup you are signed in. Save the administrator credentials in your password manager.
+
+## Production bootstrap through a private tunnel
+
+Set the final HTTPS `BASE_URL` before starting the production container. Do **not** temporarily use an HTTP base URL: production startup rejects it.
+
+For Helm, leave ingress disabled and open a loopback port-forward:
+
+```sh
+kubectl -n issue-tracker rollout status deployment/issue-tracker
+kubectl -n issue-tracker port-forward service/issue-tracker 3000:3000
+```
+
+For Docker, use the loopback port mapping from the [Docker guide](/deployment/docker). In either case, submit setup directly over the local connection. The example below uses Bash, Python 3, and curl, and keeps the password out of command arguments and shell history:
+
+```bash
+export BASE_URL='https://issues.example.com'
+read -r -p 'Admin name: ' ADMIN_NAME
+read -r -p 'Admin email: ' ADMIN_EMAIL
+read -r -s -p 'Admin password (12+ characters): ' ADMIN_PASSWORD
+printf '\n'
+export ADMIN_NAME ADMIN_EMAIL ADMIN_PASSWORD
+python3 - <<'PY' | curl --fail-with-body \
+  --header "Origin: $BASE_URL" \
+  --header 'Content-Type: application/json' \
+  --data-binary @- http://127.0.0.1:3000/api/auth/setup
+import json, os
+print(json.dumps({
+    "name": os.environ["ADMIN_NAME"],
+    "email": os.environ["ADMIN_EMAIL"],
+    "password": os.environ["ADMIN_PASSWORD"],
+}))
+PY
+unset ADMIN_NAME ADMIN_EMAIL ADMIN_PASSWORD
+```
+
+The configured `Origin` is required even for this local API request. The response contains the new user with role `admin`; there is no need to retain the returned session cookie.
+
+Confirm setup is closed:
+
+```sh
+curl --fail http://127.0.0.1:3000/api/auth/status
+```
+
+Expect `setupRequired: false`. Stop the port-forward, enable your HTTPS route, and log in through the browser at the configured external origin.
+
+## Keep a recovery path
+
+- Local administrator login remains available when OIDC is disabled or unavailable.
+- Use a different email for the bootstrap account than for a new OIDC-provisioned member; email collisions do not link accounts.
+- `409 Setup already completed` means setup is closed, not that it should be reset.
+- If credentials are lost, use [offline administrator recovery](/deployment/operations#offline-administrator-recovery). Never erase the database or PVC to reopen setup.

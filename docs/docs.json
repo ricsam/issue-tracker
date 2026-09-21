@@ -1,0 +1,29 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Threadline",
+  "description": "A thoughtful home for your team's work. Learn to use, administer, and self-host Threadline.",
+  "colors": { "primary": "#7050D9", "light": "#A78BFA", "dark": "#6140C5" },
+  "logo": { "light": "/logo/light.svg", "dark": "/logo/dark.svg" },
+  "favicon": "/favicon.svg",
+  "appearance": { "default": "system" },
+  "navigation": {
+    "tabs": [
+      { "tab": "Product", "groups": [
+        { "group": "Start here", "pages": ["introduction", "quickstart"] },
+        { "group": "Work together", "pages": ["guides/projects", "guides/issues", "guides/board", "guides/rich-text", "guides/uploads"] },
+        { "group": "Administration", "pages": ["admin/setup", "admin/local-users", "admin/oidc", "admin/limitations"] }
+      ] },
+      { "tab": "Self-host", "groups": [
+        { "group": "Deploy", "pages": ["deployment/helm", "deployment/docker", "deployment/configuration"] },
+        { "group": "Operate", "pages": ["deployment/operations"] }
+      ] },
+      { "tab": "Develop", "groups": [
+        { "group": "Build and integrate", "pages": ["development/reference"] }
+      ] }
+    ]
+  },
+  "navbar": { "primary": { "type": "github", "href": "https://github.com/ricsam/issue-tracker" } },
+  "footer": { "socials": { "github": "https://github.com/ricsam/issue-tracker" } },
+  "search": { "prompt": "Search Threadline documentation" }
+}

@@ -1,0 +1,84 @@
+---
+title: Board
+description: View project issues by status and move work forward with drag-and-drop or status menus.
+---
+
+The board displays a project's issues in four fixed status columns.
+It is another view of the same issues shown in **List**, not a separate planning system.
+
+## Open the board
+
+1. Open **Projects** and select a project.
+2. Select **Board** above the issue list.
+3. Review the cards in each status column.
+4. Select an issue title to open its description, properties, and discussion.
+
+Select **List** to return to the row-based view.
+You can create an issue from either view with **Create issue**.
+New issues default to **Backlog** unless you choose another status in the creation form.
+
+## Understand the columns
+
+| Column | Suggested team convention |
+| --- | --- |
+| Backlog | Work captured for later consideration |
+| Todo | Work ready to be picked up |
+| In progress | Work currently being done |
+| Done | Work considered complete |
+
+These descriptions are suggested conventions, not enforced transition rules.
+Any issue can move directly to any of the four statuses.
+The current release does not provide custom columns or workflow rules.
+
+## Move a card
+
+Drag a card from its current column and drop it into the destination column.
+Threadline saves the new status and updates the board after a successful response.
+Moving within the same status does not change the issue.
+
+Alternatively, use the status menu on the card:
+
+1. Find the issue you want to update.
+2. Open its status menu.
+3. Choose **Backlog**, **Todo**, **In progress**, or **Done**.
+4. Wait for the update to finish before making another move.
+
+<Tip>
+  Use the status menu when dragging is inconvenient or when navigating with a keyboard.
+  The same immediate-save menu is available in the list view.
+</Tip>
+
+Status controls are disabled while a move is saving.
+If a move fails, the page displays an error rather than treating the move as saved.
+Check the error and retry once the connection or sign-in problem is resolved.
+
+## Focus the board
+
+Use **Search issues** to match a title, issue number, or label.
+Search is case-insensitive and does not include descriptions or comments.
+Use **Filter by status** to limit the visible cards further.
+
+The result count and each column count reflect the filtered issues.
+An empty column therefore does not necessarily mean the project has no issues in that status.
+Clear the search and choose **All statuses** for a complete view.
+
+## Read a card
+
+Cards show the issue number and title, up to three labels, priority when set, and an assignee initial.
+The assignee indicator identifies the user by name on hover, or shows **Unassigned**.
+Open the issue to see all labels and edit its full properties.
+
+## Know what a move changes
+
+Moving a card changes its status, not its priority, assignee, or project.
+The board does not persist a manual card ranking within a column.
+Issues are loaded in issue-number order rather than sorted by priority.
+Marking an issue **Done** updates project progress but does not delete it.
+
+<Note>
+  All authenticated users can move issues on every project's board.
+  Assignment and project organization do not create access restrictions.
+</Note>
+
+For descriptions and discussion, see [issues](/guides/issues).
+For the broader feature boundaries, see [current limitations](/admin/limitations).

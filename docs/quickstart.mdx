@@ -1,0 +1,63 @@
+---
+title: Local quickstart
+description: Run Threadline on your machine and take an issue from idea to done.
+---
+
+You need Git and Bun. Keep this initial workspace on a trusted machine; production deployment has additional requirements described in [Helm](/deployment/helm) and [Docker](/deployment/docker).
+
+<Steps>
+  <Step title="Clone and install">
+    ```sh
+    git clone https://github.com/ricsam/issue-tracker.git
+    cd issue-tracker
+    bun install
+    cp .env.example .env
+    ```
+
+    The example environment uses `DATA_DIR=./data` and `BASE_URL=http://127.0.0.1:5173`. That origin must match the URL you open in the browser.
+  </Step>
+  <Step title="Start the API">
+    ```sh
+    HOST=127.0.0.1 bun dev
+    ```
+
+    Bun listens on port 3000. In development, an empty encryption-key variable causes the app to create `data/.settings-key` once. Preserve this file with the database; do not regenerate it between runs.
+  </Step>
+  <Step title="Start the frontend in another terminal">
+    From the same checkout:
+
+    ```sh
+    bun dev:web
+    ```
+
+    Open `http://127.0.0.1:5173`. Vite proxies API requests to Bun on port 3000.
+  </Step>
+  <Step title="Claim the workspace">
+    Enter your name, email address, and a password of at least 12 characters. The first successful setup request creates the local administrator and signs you in. Subsequent visitors see login instead of setup.
+  </Step>
+  <Step title="Create your first issue">
+    Create a project, open it, and choose **Create issue**. Add a title, a short description, and a priority. Save the issue, then open the project's board and move it from **Backlog** toward **Done**.
+  </Step>
+</Steps>
+
+## Try the production assets locally
+
+Stop the development API before reusing its port. Build the frontend, then serve it directly from Bun:
+
+```sh
+bun run build
+BASE_URL=http://127.0.0.1:3000 HOST=127.0.0.1 bun start
+```
+
+Open `http://127.0.0.1:3000`. This is a local development-mode server using production assets, **not** a production security configuration. The Docker image sets `NODE_ENV=production` and requires an HTTPS `BASE_URL` and an explicit encryption key.
+
+## Common first-run problems
+
+| Symptom | Check |
+| --- | --- |
+| An action returns `Invalid origin` | Use the exact host and port in `BASE_URL`; `localhost` and `127.0.0.1` are different origins. |
+| Vite cannot reach the API | Start `bun dev` on port 3000 before using the browser. |
+| Setup is no longer available | The data directory already contains a user. Log in; do not delete data to recover a password. |
+| Encrypted settings cannot be read | Restore the original key associated with that data directory. |
+
+Next: [projects](/guides/projects), [rich text](/guides/rich-text), or [administrator setup](/admin/setup).

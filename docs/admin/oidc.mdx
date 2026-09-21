@@ -1,0 +1,89 @@
+---
+title: OpenID Connect
+description: Configure single sign-on with verified email and immutable provider identity matching.
+---
+
+Administrators can connect one OpenID Connect provider from **Administration**.
+OIDC adds a sign-in option without disabling local email-and-password login.
+Complete the first local administrator setup before configuring SSO.
+
+## Prepare the provider
+
+Register an OIDC client for Threadline with authorization-code flow and PKCE support.
+Threadline requests the `openid email profile` scopes and uses S256 PKCE, state, and nonce checks.
+Use the provider's exact issuer URL, not its sign-in page URL.
+Production issuer and discovered endpoint URLs must use HTTPS.
+
+The callback is built from `BASE_URL` with the path `/api/auth/oidc/callback`.
+For an example origin of `https://issues.example.com`, it is:
+
+```text
+https://issues.example.com/api/auth/oidc/callback
+```
+
+Register the exact **Callback URL** shown in Administration with your provider.
+Ensure `BASE_URL` matches the browser-visible origin before testing login.
+
+## Save the configuration
+
+1. Sign in as the local administrator and open **Administration**.
+2. In **Single sign-on**, enter a recognizable **Provider name**.
+3. Fill in **Issuer URL**, **Client ID**, and the provider's **Client secret**, if applicable.
+4. Confirm that the displayed **Callback URL** matches the provider registration.
+5. Select **Enable OIDC login**.
+6. Decide whether to enable **Allow new users to join through SSO**.
+7. Select **Save OIDC settings** and wait for the saved confirmation.
+
+The provider name appears on the sign-in button.
+A blank client-secret field preserves an existing secret; it does not clear it.
+The saved secret is encrypted at rest and is not returned to the administration form.
+Saving settings is not an end-to-end provider login test.
+
+<Warning>
+  Keep your local administrator credentials available and test SSO in a separate browser session.
+  Do not sign out of your only working administrator session before verifying recovery access.
+</Warning>
+
+## Require verified email
+
+The provider must supply a valid email address and the boolean claim `email_verified: true`.
+Threadline first examines the ID token.
+If either `email` or `email_verified` is absent, it requests UserInfo and checks that profile instead.
+The UserInfo response must match the ID token subject.
+
+An explicit `email_verified: false` in an ID token with an email is rejected, not bypassed through UserInfo.
+Missing, invalid, or unverified email causes login to fail.
+Configure the provider's claim mappings and email verification policy accordingly.
+
+## Understand account matching
+
+Identity is bound to the immutable **issuer + subject** pair, not to email.
+An already-bound pair signs in to its existing Threadline user.
+Returning sign-ins do not automatically rewrite the stored user name or email.
+
+For a new pair, **Allow new users to join through SSO** must be enabled.
+Successful signup creates a **member**, never an administrator.
+When signup is disabled, already-bound identities can still sign in.
+
+<Warning>
+  Matching email addresses never link accounts automatically.
+  A new identity whose email collides with an existing user is rejected.
+  Creating a local user with someone's SSO email is not a way to pre-link their identity.
+</Warning>
+
+Changing issuer or subject represents a different identity; it does not migrate the old binding.
+There is no account-linking or identity-migration workflow in the current administration interface.
+Only allow SSO signup for people trusted to access every project and upload.
+
+## Diagnose a failed sign-in
+
+- Verify the exact issuer, client configuration, and registered callback URL.
+- Check that discovery, token, UserInfo, and signing-key endpoints are reachable over HTTPS.
+- Avoid endpoint redirects: outbound OIDC requests reject redirects.
+- Confirm verified-email claims and the signup setting for a first login.
+- Check for an existing account using the same email address.
+- Restart login from Threadline if the flow expired; login flows last ten minutes and are single-use.
+
+If the provider is unavailable, use [local administrator login](/admin/local-users) to correct or disable OIDC.
+Preserve `SETTINGS_ENCRYPTION_KEY` with the deployment's recovery material.
+Do not replace that key for an existing database without a settings migration.

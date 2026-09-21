@@ -1,0 +1,79 @@
+---
+title: Projects
+description: Organize shared work into projects and understand progress at a glance.
+---
+
+Projects group related issues into a list and a status board.
+Use a project for a product, a team initiative, or a clearly scoped body of work.
+
+<Warning>
+  Every project is shared with every authenticated user.
+  There are no project memberships, private projects, or per-project access controls.
+  A project is an organizational boundary, not a security boundary.
+</Warning>
+
+## Create a project
+
+1. Sign in and open **Projects**.
+2. Select **Create project**, or **Create your first project** in an empty workspace.
+3. Enter a **Project name**, such as `Website redesign`.
+4. Add an optional **Description** explaining the goal and scope.
+5. Select **Create project** to open the new project's issue list.
+
+Any authenticated member can create a project; administrator access is not required.
+Choose the name and description carefully because the current application does not expose project editing.
+
+| Field | Limit | Suggested content |
+| --- | --- | --- |
+| Project name | Required; up to 100 characters | A short, recognizable initiative name |
+| Description | Up to 10,000 characters | Purpose, scope, and what belongs here |
+
+The project URL uses a generated slug derived from the name plus a random suffix.
+You do not need to choose or manage that slug yourself.
+Copy the browser URL when directing teammates to the project.
+Recipients must sign in to access its data.
+
+## Read the project overview
+
+Each project card shows its name, description, open issue count, and total issue count.
+The progress bar reflects the proportion of issues marked **Done**.
+A project with no issues has an empty progress bar.
+
+An issue is considered open when its status is **Backlog**, **Todo**, or **In progress**.
+Moving an issue to **Done** reduces the open count without deleting the issue.
+Moving it back to another status makes it open again.
+
+<Tip>
+  Keep the description focused on the project's purpose.
+  Put changing implementation details and discussion in issues, where teammates can update them.
+</Tip>
+
+## Start organizing work
+
+Open a project card, then select **Create issue** to add the first task.
+Issues receive numbers within their project, so two projects can each contain an issue numbered `#1`.
+Include the project name or share the full issue URL when referring to a number.
+
+Use **List** for scanning titles and properties.
+Use **Board** to see the same issues grouped by status.
+Both views offer title, number, and label search plus a status filter.
+Neither view creates a separate copy of the project's issues.
+
+## Plan for retained projects
+
+The current release has no project delete or archive action.
+It also does not expose an issue move between projects.
+Create projects deliberately rather than treating them as disposable folders.
+
+When work finishes, mark its issues **Done** and retain the project as a reference.
+Do not use project organization to separate information that different users must not see.
+Review [current limitations](/admin/limitations) before inviting a broader audience.
+
+<CardGroup cols={2}>
+  <Card title="Create and update issues" href="/guides/issues">
+    Capture context, assign work, and keep discussion with the task.
+  </Card>
+  <Card title="Use the board" href="/guides/board">
+    Move work through the four built-in statuses.
+  </Card>
+</CardGroup>

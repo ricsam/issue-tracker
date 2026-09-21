@@ -1,0 +1,84 @@
+---
+title: Local users
+description: Claim the first administrator, add local members, and keep a recovery login for SSO outages.
+---
+
+Local accounts sign in with an email address and password.
+The first account is an administrator; accounts added through Administration are members.
+Local login remains available when OIDC is enabled.
+
+## Claim the first administrator
+
+On an empty installation, the sign-in screen shows **Make this workspace yours**.
+Complete this setup over private access before exposing the service publicly.
+There is no invitation code protecting an unclaimed installation.
+
+1. Open the installation while access is restricted to the intended operator.
+2. Enter your **Full name** and **Email address**.
+3. Choose a password of at least 12 characters.
+4. Select **Create workspace**.
+5. Store these administrator credentials securely before inviting others.
+
+<Warning>
+  The first local account receives administrator privileges.
+  Setup is claimed atomically and cannot be repeated once a user exists.
+  Do not expose an unclaimed workspace and assume you can choose its administrator later.
+</Warning>
+
+After setup, the same screen becomes the ordinary email-and-password sign-in form.
+For installation context, start with the [quickstart](/quickstart).
+
+## Create a local member
+
+1. Sign in as an administrator and open **Administration**.
+2. Find **Create local user**.
+3. Enter the person's **Full name** and **Email address**.
+4. Set a **Temporary password** of at least 12 characters.
+5. Select **Create user** and wait for the success notice.
+6. Share the login URL and credentials through a secure channel.
+
+| Field | Validation |
+| --- | --- |
+| Full name | Required; up to 100 characters |
+| Email address | Valid email; up to 254 characters; stored lowercase |
+| Password | Between 12 and 1,024 characters |
+
+Email addresses must be unique across existing users, including SSO-created accounts.
+The **Members** section lists names, email addresses, and roles.
+New local users always receive the **member** role; the form has no role selector.
+
+<Note>
+  Although the form calls it a temporary password, the current release does not provide
+  a forced first-login password change, password-reset screen, or self-service password editor.
+  Treat the supplied password as a real credential, not a disposable invitation token.
+</Note>
+
+## Explain member access
+
+Members can create projects and issues, update issues, post comments, and upload files.
+They can access every project and upload, not just work assigned to them.
+All authenticated users can see the workspace user directory, including names and email addresses.
+
+Only administrators can manage OIDC settings and create local users.
+A comment's author or an administrator can edit or delete that comment.
+Being an issue assignee does not grant special permissions over other people's comments.
+
+## Keep recovery access
+
+Retain the first administrator's local credentials even after adopting SSO.
+If the identity provider fails, use the normal email-and-password form to sign in.
+Then open Administration to repair the provider settings or disable OIDC login.
+This is recovery through an existing local account, not a password-reset mechanism.
+
+Do not expect an SSO account to accept a local password: SSO signup does not create one.
+Do not create a local account with the same email to link it to SSO.
+Read [OIDC account matching](/admin/oidc) before planning account provisioning.
+
+## Know the management limits
+
+The current interface and API do not provide user deletion, role changes, or password resets.
+There is also no built-in local self-registration after first setup.
+If sign-in fails, check the email and password rather than trying to run setup again.
+Repeated authentication requests are rate-limited; wait before retrying after a rate-limit response.
+
+For the complete access and retention boundaries, see [current limitations](/admin/limitations).

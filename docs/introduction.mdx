@@ -1,0 +1,41 @@
+---
+title: Welcome to Threadline
+description: A shared workspace for focused teams, with your data on your infrastructure.
+---
+
+Threadline brings projects, issues, boards, and conversations together without a large operational footprint. Capture the next idea, describe the work in Markdown, and move it toward done.
+
+The product is **Threadline**. Its public source repository, container image, and Helm chart use the name **issue-tracker**.
+
+<CardGroup cols={2}>
+  <Card title="Try it locally" icon="bolt" href="/quickstart">Start the app with Bun and create your first project.</Card>
+  <Card title="Deploy with Helm" icon="server" href="/deployment/helm">Install one persistent application instance on Kubernetes.</Card>
+  <Card title="Make work visible" icon="table-columns" href="/guides/board">Use lists and boards to follow the same issues.</Card>
+  <Card title="Connect your identity provider" icon="key" href="/admin/oidc">Add OIDC without giving up local administrator access.</Card>
+</CardGroup>
+
+## A deliberately shared workspace
+
+Every authenticated user can access all projects, issues, and uploads. Administrators additionally manage local users and OIDC settings. Comments can be edited or deleted by their author or an administrator.
+
+<Warning>
+Projects are organizational boundaries, not security boundaries. There are no private projects or per-project upload permissions. Invite only people who may access the whole workspace.
+</Warning>
+
+## Small by design
+
+- **Bun and Hono** serve the API and the built Vite frontend from one process.
+- **React and Lexical** provide issue views and rich Markdown editing.
+- **SQLite** stores workspace records and encrypted OIDC client-secret settings.
+- **Local uploads** live alongside the database in the persistent data directory.
+- **One replica** keeps storage and upgrades straightforward; this is not a highly available deployment.
+
+## Start safely
+
+The first local account becomes the administrator. An unclaimed instance is not safe to expose publicly: create that account over private access before enabling ingress. Production requires an HTTPS external origin and a stable settings-encryption key.
+
+Read [first administrator setup](/admin/setup) before publishing a deployment, and review [first-release boundaries](/admin/limitations) before adopting Threadline for a team.
+
+## Open source
+
+Threadline is MIT-licensed. Source, issues, and release history live in [ricsam/issue-tracker](https://github.com/ricsam/issue-tracker). Contributions should include tests and documentation for behavior changes; see [development and API reference](/development/reference).

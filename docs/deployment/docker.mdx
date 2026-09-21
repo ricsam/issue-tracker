@@ -1,0 +1,75 @@
+---
+title: Deploy with Docker
+description: Run the production Bun server and built frontend as one non-root container.
+---
+
+The Dockerfile builds Vite assets first, installs production dependencies in a separate stage, and runs `bun server/index.ts` as UID/GID 1000. The server provides both the API and `dist` assets on port 3000.
+
+## Build or pull
+
+From a source checkout:
+
+```sh
+docker build -t issue-tracker:local .
+```
+
+Or use a tag published by successful CI:
+
+```sh
+docker pull ghcr.io/ricsam/issue-tracker:sha-9a2ab31
+```
+
+The public package currently includes verified tag `sha-9a2ab31`; `main` is also public but moves with successful CI. Pin the SHA tag for a repeatable deployment.
+
+## Prepare storage and a key
+
+Create a named volume for the complete data directory:
+
+```sh
+docker volume create issue-tracker-data
+```
+
+A fresh named volume is initialized from the image's `/data` directory. If you use a bind mount or an existing volume, arrange writable ownership for UID/GID 1000 before startup. Never recursively change ownership of an unrelated directory.
+
+Inject `SETTINGS_ENCRYPTION_KEY` from your runtime's secret facility. For a single-host deployment, a restricted environment file outside source control is also possible. This Bash example creates a new file without overwriting an existing key:
+
+```bash
+mkdir -p "$HOME/.config/threadline"
+(umask 077; set -o noclobber
+ printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" \
+   > "$HOME/.config/threadline/runtime.env")
+```
+
+Securely back up that file. Do not print it to logs, add it to the Docker build context, or commit it. The `$HOME/.config/threadline` location keeps it outside the repository.
+
+## Start privately
+
+```sh
+docker run -d --name issue-tracker \
+  --restart unless-stopped \
+  --publish 127.0.0.1:3000:3000 \
+  --mount source=issue-tracker-data,target=/data \
+  --env-file "$HOME/.config/threadline/runtime.env" \
+  --env BASE_URL=https://issues.example.com \
+  ghcr.io/ricsam/issue-tracker:sha-9a2ab31
+```
+
+Use `issue-tracker:local` instead if you built locally. Production requires the final HTTPS `BASE_URL`, even while you bootstrap through loopback. Follow [first administrator setup](/admin/setup) before routing public traffic.
+
+## Put HTTPS in front
+
+Configure an operator-managed reverse proxy to terminate TLS for `issues.example.com` and forward to the private port. Route the frontend, `/api`, and health endpoints to the same application. The browser-visible origin must match `BASE_URL` exactly.
+
+Do not publish the raw app port on all network interfaces simply to make the proxy work. A proxy in another container needs a deliberately configured private network instead of the host-loopback mapping above.
+
+## Verify and maintain
+
+```sh
+curl --fail http://127.0.0.1:3000/healthz
+curl --fail http://127.0.0.1:3000/readyz
+docker logs issue-tracker
+```
+
+The image's Docker health check calls `/healthz`; readiness additionally performs a database query. Neither check verifies your external TLS configuration or identity provider.
+
+For updates, stop the old instance before starting its replacement on the same data volume. Never start two application containers against the same SQLite database. See [operations](/deployment/operations) for backup and recovery requirements.

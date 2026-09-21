@@ -87,6 +87,17 @@ Install `issue-tracker/issue-tracker` instead of the local chart path. Chart arc
 
 Choose an image tag that you have built or confirmed is published, then follow [the deployment guide](docs/deployment.md). In particular, claim the first administrator privately before enabling public ingress.
 
+## Documentation
+
+The Mintlify site source is in [`docs/`](docs/README.md), with navigation in [`docs/docs.json`](docs/docs.json). Preview it locally with Node.js 22+:
+
+```sh
+cd docs
+npx --yes mint@4.2.910 dev
+```
+
+Run `npx --yes mint@4.2.910 validate` and `npx --yes mint@4.2.910 broken-links` from the same directory. GitHub Actions checks documentation changes. To host the site on Mintlify, connect this repository's `main` branch and select `/docs` as the documentation directory. The GitHub Pages URL above serves the Helm repository, not the Mintlify site.
+
 ## Verification
 
 ```sh

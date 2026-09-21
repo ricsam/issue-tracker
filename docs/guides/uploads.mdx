@@ -1,0 +1,87 @@
+---
+title: Uploads
+description: Attach screenshots and files, understand download access, and plan for retained storage.
+---
+
+Attach supporting files directly in an issue description or comment.
+Threadline inserts a Markdown image or file link after the upload succeeds.
+Each file must be **10 MiB or smaller**.
+
+<Warning>
+  Every upload is accessible to every authenticated user who has its URL.
+  There are no per-project or per-file access controls, including for files not referenced by an issue.
+  Anonymous users cannot download uploaded files.
+</Warning>
+
+## Attach a file
+
+1. Open an issue description or comment editor.
+2. Choose **Write** or **Markdown** mode.
+3. Select the paperclip control labeled **Attach files**.
+4. Choose one or more files, each within the size limit.
+5. Wait for **Uploading attachment…** to finish and inspect the inserted content.
+6. Save the issue or post the comment to retain the reference in that content.
+
+You can also drop files onto the editor.
+In Write mode, you can paste clipboard files, such as a copied screenshot.
+Attachment controls are disabled in **Preview**; switch to an editing mode first.
+
+In Write mode, the attachment is inserted at the editor selection, or at the end if there is no selection.
+In Markdown mode, its Markdown reference is appended to the source.
+Source-mode uploads preserve unsupported Markdown structures such as tables.
+
+## Images versus download links
+
+The server inspects file bytes rather than trusting the filename or browser-provided media type.
+Recognized raster image types are displayed inline; other files are treated as downloads.
+
+| Recognized format | Inserted content |
+| --- | --- |
+| PNG | Inline image |
+| JPEG | Inline image |
+| GIF | Inline image |
+| WebP | Inline image |
+| Other files, including SVG and HTML | Download link |
+
+Renaming a file to use an image extension does not make it an inline image.
+Filenames have control characters and path separators replaced and are limited to 200 characters.
+The returned link includes the stored filename; keep the generated URL intact.
+
+<Note>
+  Remote image URLs are not rendered as embedded images.
+  Upload the image itself if it should appear in the description or discussion.
+</Note>
+
+## Share an attachment
+
+Keep the inserted reference in an issue or comment so teammates can find it later.
+A teammate opening the upload URL must have an authenticated session.
+Copying the URL does not create a public download or grant access to an anonymous recipient.
+Conversely, moving the reference between projects does not change who can access the file.
+
+## Handle upload failures
+
+For a size error, reduce or split the file before retrying.
+If authentication has expired, sign in again before attaching files.
+For other failures, read the editor error and check that the server has writable storage and sufficient capacity.
+
+Multiple selected files upload sequentially.
+If a later file fails, earlier successful uploads and their inserted references may already exist.
+Check the editor before selecting the whole batch again to avoid unnecessary duplicates.
+
+## Understand retention
+
+Uploading and saving the surrounding issue or comment are separate operations.
+Canceling an issue draft after uploading does not remove the uploaded file.
+Removing an attachment link or deleting its comment does not delete the file either.
+
+<Warning>
+  Uploads are retained even when unused.
+  The current release has no upload deletion action or automatic orphan cleanup.
+  Plan storage capacity for all uploads, not just files still linked from issues.
+</Warning>
+
+Operators should back up the full `DATA_DIR`, including the upload directory and SQLite database.
+In the container, the default persistent location is `/data`.
+Do not treat manually deleting files as a supported cleanup workflow.
+See [current limitations](/admin/limitations) for related retention and operational boundaries.

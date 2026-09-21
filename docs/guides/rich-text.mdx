@@ -1,0 +1,89 @@
+---
+title: Rich text and Markdown
+description: Write structured descriptions and comments while preserving the Markdown features you need.
+---
+
+Threadline stores issue descriptions and comments as canonical Markdown, not HTML.
+The editor offers **Write**, **Markdown**, and **Preview** modes over that content.
+Choose the mode based on the structure you need to preserve.
+
+## Choose an editing mode
+
+| Mode | Use it for |
+| --- | --- |
+| Write | Visual editing of the supported rich-text subset |
+| Markdown | Direct source editing, including GFM structures such as tables |
+| Preview | Checking rendered Markdown before saving or posting |
+
+Switching modes does not save the issue or post the comment.
+Use the surrounding **Create issue**, **Save changes**, **Post comment**, or **Save comment** action.
+Descriptions and comments have a 100,000-character limit; comments cannot be blank.
+
+## Format in Write mode
+
+Select text and use **Bold**, **Italic**, **Strikethrough**, or **Inline code**.
+Use **Heading** for a level-two heading and **Quote** for a block quote.
+The toolbar also provides **Bulleted list**, **Numbered list**, and **Task list**.
+Markdown shortcuts are available in the rich editor.
+
+The supported round-trip subset includes:
+
+- Paragraphs, headings, and block quotes.
+- Bold, italic, strikethrough, and inline code.
+- Fenced code blocks.
+- Links and ordered, unordered, and task lists.
+- Uploaded attachment links and uploaded images.
+
+<Warning>
+  Write mode is not a lossless editor for every GFM structure.
+  Keep unsupported structures, including tables, in **Markdown** source mode.
+  Switching through Write mode may normalize them rather than preserving the original source.
+</Warning>
+
+## Work directly in Markdown
+
+Select **Markdown** to edit source text.
+For example, paste this small acceptance checklist:
+
+```markdown
+## Expected behavior
+
+The checkout keeps the selected delivery address.
+
+- [ ] Reproduce on a narrow screen
+- [ ] Add regression coverage
+- [ ] Confirm the fix with a screenshot
+```
+
+For tabular information, stay in source mode and use **Preview** to check the result:
+
+```markdown
+| Case | Expected result |
+| --- | --- |
+| Empty cart | Checkout is unavailable |
+| Saved address | Address remains selected |
+```
+
+Preview renders GitHub Flavored Markdown, including tables.
+It is read-only, and file attachment controls are disabled while previewing.
+Return to **Markdown** to adjust a table without passing it through rich editing.
+
+## Add links and images
+
+In Write mode, select text and choose **Insert link**.
+Use an `https://`, `http://`, or `mailto:` URL; uploaded attachment paths are also supported.
+Submit an empty link URL to remove the selected link.
+
+Use **Attach files** to insert a screenshot or file link.
+Uploaded PNG, JPEG, GIF, and WebP images can display inline.
+Other uploaded formats are inserted as download links.
+See [uploads](/guides/uploads) for limits and retention behavior.
+
+<Note>
+  Raw HTML rendering is not enabled.
+  Remote images are omitted rather than fetched, preventing embedded images from tracking readers.
+  Upload an image to Threadline when you want it displayed inline.
+</Note>
+
+Before saving, preview the content and confirm that links, checklists, and attachments look right.
+For the surrounding save and discussion workflow, see [issues](/guides/issues).
