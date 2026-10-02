@@ -11,6 +11,12 @@ Threadline is a small, self-hosted issue tracker for an authenticated team. The 
 - SQLite, uploads, and encrypted runtime settings live together under `DATA_DIR`.
 - Uploads are retained even when no issue or comment references them. The first release has no automatic orphan cleanup; include all of `/data` in backups and plan capacity accordingly.
 
+## Issues and boards
+
+Create and edit an issue in a single Markdown editor—there is no separate title field. The create dialog autofocuses the editor and uses a larger writing area on desktop. Lists and board cards derive a title from the first heading, or the first meaningful line when there is no heading. Existing issue titles are automatically moved into leading Markdown headings by a one-time, transactional database migration on upgrade; the original body and metadata are preserved. Back up your data before upgrading as usual.
+
+Use **Configure board** to choose visible status lanes and the issues included in a project's board. Settings are saved for the whole team. By default, all current and future issues are included; turn that option off to select individual issues. When using a selection, **Add to board** is available during issue creation. Hiding a lane does not change issue statuses or membership, and the list view always retains every project issue.
+
 ## Markdown editing
 
 Threadline stores canonical Markdown, not HTML. Rich **Write** mode round-trips the supported subset: paragraphs, headings, block quotes, bold, italic, strikethrough, inline and fenced code, links, ordered, unordered and task lists, plus uploaded attachment links and images. Markdown **source** mode preserves GFM source, and **Preview** renders GFM such as tables. Keep unsupported rich-mode structures in source mode because switching through Write mode may normalize them.

@@ -7,7 +7,11 @@ import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { RichEditor } from "../components/rich-editor";
 import { CommentItem } from "./comment";
-import { parseLabels, validateBody } from "../lib/validation";
+import {
+  parseLabels,
+  validateBody,
+  validateIssueBody,
+} from "../lib/validation";
 import { IssueFields } from "./issues";
 export function DetailPage() {
   const { id } = useParams();
@@ -53,12 +57,11 @@ export function DetailPage() {
     setError("");
     setSaved("");
     try {
-      const { title, body, status, priority, assigneeId } = issue;
-      validateBody(body);
+      const { body, status, priority, assigneeId } = issue;
+      validateIssueBody(body);
       const result = await api<{ issue: Issue }>(`/api/issues/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          title,
           body,
           status,
           priority,
@@ -128,24 +131,13 @@ export function DetailPage() {
               </Button>
             </div>
           </div>
-          <label className="sr-only" htmlFor="issue-title">
-            Issue title
-          </label>
-          <input
-            id="issue-title"
-            className="title-input"
-            value={issue.title}
-            onChange={(e) => update({ title: e.target.value })}
-            required
-            maxLength={300}
-          />
           <div className="detail-grid">
             <section>
-              <span className="field-label">Description</span>
               <RichEditor
                 value={issue.body}
                 onChange={(body) => update({ body })}
-                placeholder="Add a description…"
+                ariaLabel="Issue"
+                placeholder="What needs to happen? Just start writing…"
               />
             </section>
             <aside className="properties">

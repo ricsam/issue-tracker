@@ -74,11 +74,21 @@ The OIDC callback keys identities by immutable issuer and subject. Verified emai
 | `POST` | `/api/projects` | `{name,description?}`; generated slug is stable |
 | `GET` | `/api/projects/:slug` | One project |
 | `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
-| `POST` | `/api/projects/:slug/issues` | Creates an issue; number increments within the project |
+| `POST` | `/api/projects/:slug/issues` | `{body,status?,priority?,labels?,assigneeId?,addToBoard?,title?}`; number increments within the project |
+| `GET` | `/api/projects/:slug/board` | `{board: BoardSettings}` |
+| `PATCH` | `/api/projects/:slug/board` | Full `BoardSettings` body; returns `{board: BoardSettings}` |
 | `GET` | `/api/issues/:id` | `{issue,comments}` |
 | `PATCH` | `/api/issues/:id` | Any authenticated user may update supplied issue fields |
 
-Issue fields include `title`, Markdown `body`, `status`, `priority`, `labels`, and nullable `assigneeId`. Status is `backlog`, `todo`, `in_progress`, or `done`. Priority is `none`, `low`, `medium`, `high`, or `urgent`. Labels contain at most 30 nonempty values of up to 50 characters; the title is limited to 300 characters and the body to 100,000.
+Issue fields include Markdown `body`, derived display `title`, `status`, `priority`, `labels`, and nullable `assigneeId`. Status is `backlog`, `todo`, `in_progress`, or `done`. Priority is `none`, `low`, `medium`, `high`, or `urgent`. Labels contain at most 30 nonempty values of up to 50 characters.
+
+Body-only creation and body updates require non-whitespace content, with a 101,000-character limit (`ISSUE_BODY_MAX_LENGTH` in `shared/issue-content.ts`). `deriveIssueTitle(body)` selects the first real ATX/setext heading outside code, otherwise the first meaningful text line, strips common inline formatting and link destinations, and limits the display cache to 300 characters. Image/code-only content can display `Untitled issue`. Metadata-only PATCH preserves body and title.
+
+Legacy clients may still send a nonempty `title` of up to 300 characters: POST and PATCH with a body merge it as an escaped leading heading, avoiding an equivalent existing heading. Title-only PATCH replaces or adds the leading heading without losing the remainder. The final merged body must fit the body limit. On upgrade, transactional SQLite migration v3 moves old titles into escaped leading headings, preserves original body bytes and timestamps/metadata, and recomputes display titles. Reopening does not repeat the migration.
+
+`BoardSettings` is `{lanes: Status[], issueIds: string[] | null}`. Settings persist per project and are shared by all authenticated collaborators. Defaults are all four statuses in canonical order and `issueIds: null`, meaning all current and future project issues. An explicit selection may be empty (`[]`). PATCH requires both fields: lanes must be unique known statuses with at least one visible lane; issue IDs must be unique and belong to the project. Invalid or foreign IDs return 400 without changing settings. Hidden-lane selections are retained, and the project issue list is unaffected.
+
+The API's optional `addToBoard` boolean defaults to false. When true, creation atomically appends the new issue to an explicit board selection. In all-issues mode, the issue is included regardless. The UI starts **Add to board** checked from Board and unchecked from List.
 
 Projects and issues have no delete endpoint.
 
@@ -92,11 +102,17 @@ Projects and issues have no delete endpoint.
 | `POST` | `/api/uploads` | Multipart form with field `file`, at most 10 MiB |
 | `GET` | `/api/uploads/:id/:name` | Authenticated download; exact stored name must match |
 
+Comment bodies require non-whitespace content and have a 100,000-character limit.
+
 PNG, JPEG, GIF, and WebP bytes are signature-sniffed and may render inline. Other files are downloaded with a restrictive content disposition, `nosniff`, and sandbox CSP. A supplied MIME type alone cannot make an arbitrary file render as an image. Uploads are workspace-wide and retained even if no content references them.
 
 ## Health endpoints
 
 `GET /healthz` and `GET /readyz` are deliberately public and minimal. Readiness executes a database query. Do not place secrets or detailed infrastructure state in probe responses.
+
+## Editor component contract
+
+`RichEditor` from `src/components/rich-editor.tsx` accepts `value: string`, `onChange: (markdown: string) => void`, and optional `placeholder?: string`, `minimal?: boolean`, `ariaLabel?: string`, and `autoFocus?: boolean`. Issue creation uses the single editor with autofocus. `Markdown` from `src/components/markdown.tsx` renders the saved body.
 
 ## Documentation contributions
 

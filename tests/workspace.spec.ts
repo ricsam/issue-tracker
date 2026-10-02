@@ -8,15 +8,23 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const { setupRequired } = await (
+    await page.request.get("/api/auth/status")
+  ).json();
   await page.goto("/projects");
-  await expect(
-    page.getByRole("heading", { name: "Make this workspace yours" }),
-  ).toBeVisible();
-  await page.getByLabel("Full name").fill("Alex Morgan");
+  if (setupRequired) {
+    await expect(
+      page.getByRole("heading", { name: "Make this workspace yours" }),
+    ).toBeVisible();
+    await page.getByLabel("Full name").fill("Alex Morgan");
+  }
   await page.getByLabel("Email address").fill("alex@example.test");
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page
-    .getByRole("button", { name: "Create workspace", exact: true })
+    .getByRole("button", {
+      name: setupRequired ? "Create workspace" : "Sign in",
+      exact: true,
+    })
     .click();
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
   await page
@@ -39,10 +47,9 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     .first()
     .click();
   await expect(modal).toBeVisible();
-  await modal
-    .getByLabel("Issue title", { exact: true })
-    .fill("Improve the onboarding experience");
-  const editor = modal.locator("[contenteditable=true]");
+  await expect(modal.getByLabel("Issue title", { exact: true })).toHaveCount(0);
+  const editor = modal.getByRole("textbox", { name: "Issue", exact: true });
+  await expect(editor).toBeFocused();
   await editor.fill("Make the first five minutes feel effortless.");
   await editor.press("ControlOrMeta+A");
   await modal.getByRole("button", { name: "Bold", exact: true }).click();
@@ -53,7 +60,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await modal
     .getByLabel("Markdown source")
     .fill(
-      "## A better first impression\n\n**Small steps**, meaningful progress.\n\n- [ ] Welcome message\n- [ ] Project checklist\n",
+      "# Improve the onboarding experience\n\n## A better first impression\n\n**Small steps**, meaningful progress.\n\n- [ ] Welcome message\n- [ ] Project checklist\n",
     );
   await modal.getByRole("button", { name: "Write", exact: true }).click();
   await expect(
@@ -79,9 +86,9 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
   await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
-  await expect(page.getByLabel("Issue title", { exact: true })).toHaveValue(
-    "Improve the onboarding experience",
-  );
+  await expect(
+    page.getByRole("textbox", { name: "Issue", exact: true }),
+  ).toContainText("Improve the onboarding experience");
   const issueUrl = page.url();
   await expect(
     page.getByRole("combobox", { name: "Priority", exact: true }),
@@ -161,7 +168,9 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByLabel("Issue title", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Issue", exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() =>
       Array.from(document.querySelectorAll("body *"))
@@ -236,7 +245,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   ).toBeVisible();
   await page.goto(issueUrl);
   await page
-    .getByLabel("Issue title", { exact: true })
+    .getByRole("textbox", { name: "Issue", exact: true })
     .fill("Onboarding ready for review");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
@@ -249,6 +258,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Issue title", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Issue", exact: true }),
+  ).toHaveCount(0);
   expect(errors).toEqual([]);
 });

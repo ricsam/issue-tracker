@@ -3,7 +3,8 @@ title: Issues
 description: Create actionable issues, update their properties, and discuss work with your team.
 ---
 
-An issue holds a title, Markdown description, status, priority, labels, and one optional assignee.
+An issue holds one Markdown body, status, priority, labels, and one optional assignee.
+Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
 All authenticated users can read and update issues across all projects.
 
@@ -11,21 +12,21 @@ All authenticated users can read and update issues across all projects.
 
 1. Open the project that should contain the work.
 2. Select **Create issue** from either **List** or **Board**.
-3. Enter an **Issue title** that describes the desired outcome.
-4. Add a **Description** with context, reproduction steps, or a checklist.
-5. Choose a status, priority, and assignee, and optionally enter comma-separated labels.
+3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
+4. Choose a status, priority, and assignee, and optionally enter comma-separated labels.
+5. If the board uses an explicit issue selection, review **Add to board**: it starts checked when creating from **Board**, and unchecked from **List**. Boards showing all issues include new issues automatically and do not show this checkbox.
 6. Select **Create issue** to save and open the issue detail page.
 
-New issues default to **Backlog**, **No priority**, and **Unassigned**.
-Descriptions and labels may be empty.
+New issues default to **No priority** and **Unassigned**. The initial status is **Backlog** from the list, or the first visible lane from the board.
+The issue body must contain non-whitespace content; labels may be empty.
 Numbers are allocated within each project, not across the entire workspace.
 
 ## Choose useful properties
 
 | Property | Available values or limits |
 | --- | --- |
-| Title | Required; up to 300 characters |
-| Description | Up to 100,000 characters |
+| Issue body | Required Markdown; up to 101,000 characters |
+| Display title | Derived from the body; up to 300 characters |
 | Status | Backlog, Todo, In progress, Done |
 | Priority | No priority, Low, Medium, High, Urgent |
 | Assignee | One existing workspace user, or Unassigned |
@@ -35,10 +36,21 @@ Enter labels such as `bug, checkout, mobile` in the **Labels** field.
 The interface trims surrounding whitespace, ignores empty entries, and removes exact duplicates.
 Assignment communicates responsibility; it does not restrict who can edit the issue.
 
+## How display titles work
+
+The first Markdown heading outside code supplies the title shown in lists and board cards.
+Without a heading, Threadline uses the first meaningful text line, removes common inline formatting and link destinations, and limits the display to 300 characters.
+Image-only or code-only content can display **Untitled issue**.
+The full Markdown body remains available when you open the issue.
+
+On upgrade, existing titles become escaped leading Markdown headings above their original descriptions, unless an equivalent heading is already present.
+This automatic migration preserves the original description bytes, timestamps, and other issue metadata and does not repeat on restart.
+
 ## Edit and save
 
 Open an issue by selecting its title in the list or board.
-Change the title, description, or properties, then select **Save changes**.
+Change the Markdown body or properties, then select **Save changes**.
+Edit the heading or first text line in the body to change the derived display title.
 Wait for **Changes saved** before leaving the page.
 Edits on the detail page are not automatically saved.
 
@@ -47,14 +59,14 @@ Edits on the detail page are not automatically saved.
   On the issue detail page, status is saved with **Save changes**, like the other properties.
 </Note>
 
-Use [rich text and Markdown](/guides/rich-text) for structured descriptions.
+Use [rich text and Markdown](/guides/rich-text) for structured issue bodies.
 Use [uploads](/guides/uploads) for screenshots and supporting files.
 Wait for an upload to finish before saving the surrounding content.
 
 ## Find an issue
 
 Within a project, **Search issues** matches title text, issue numbers, and labels without case sensitivity.
-It does not search descriptions or comments.
+It does not search the full issue body or comments.
 Combine search with **Filter by status** to narrow the results.
 Clear the search and choose **All statuses** if an expected issue is missing.
 

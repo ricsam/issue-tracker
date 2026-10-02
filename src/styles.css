@@ -558,6 +558,7 @@ fieldset > small {
 }
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid #e9e4ef;
@@ -681,9 +682,13 @@ fieldset > small {
 }
 .board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--board-lanes, 4), minmax(0, 1fr));
   gap: 16px;
   align-items: start;
+}
+.board-summary {
+  margin-bottom: 16px;
+  font-size: 12px;
 }
 .board-column {
   background: #f5f2f8;
@@ -781,6 +786,93 @@ fieldset > small {
   overflow: auto;
   padding: 28px;
   z-index: 90;
+}
+.board-settings-dialog {
+  width: min(800px, calc(100vw - 32px));
+}
+.board-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.lane-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.checkbox-option > input[type="checkbox"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #7050d9;
+}
+.lane-options .checkbox-option {
+  padding: 12px;
+  border: 1px solid #e9e3f0;
+  border-radius: 7px;
+}
+.lane-options .checkbox-option:has(:checked) {
+  background: #f6f3fc;
+  border-color: #c8b8ef;
+}
+.settings-help {
+  font-size: 12px;
+  margin: 8px 0;
+}
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.selection-toolbar .search-field {
+  flex: 1 1 240px;
+  margin: 0;
+  order: 0;
+}
+.board-issue-options {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid #e9e3f0;
+  border-radius: 7px;
+}
+.board-issue-option {
+  padding: 12px;
+  border-bottom: 1px solid #efeaf4;
+}
+.board-issue-option:last-child {
+  border-bottom: 0;
+}
+.board-issue-option:hover {
+  background: #fcfaff;
+}
+.board-option-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.board-option-status {
+  font-size: 11px;
+  text-align: right;
+}
+@media (min-width: 761px) {
+  .create-issue-dialog {
+    width: min(960px, calc(100vw - 64px));
+    padding: 32px;
+  }
+  .create-issue-dialog .editor-input,
+  .create-issue-dialog .editor-source,
+  .create-issue-dialog .editor-preview {
+    min-height: clamp(260px, 32dvh, 380px);
+  }
 }
 .dialog-title {
   font-size: 21px;
@@ -1155,7 +1247,10 @@ fieldset > small {
     margin-left: 210px;
   }
   .board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(
+      min(2, var(--board-lanes, 4)),
+      minmax(0, 1fr)
+    );
   }
   .issue-row {
     align-items: start;
@@ -1314,6 +1409,9 @@ fieldset > small {
   }
 }
 @media (max-width: 440px) {
+  .board-option-status {
+    display: none;
+  }
   .project-grid,
   .board {
     grid-template-columns: 1fr;

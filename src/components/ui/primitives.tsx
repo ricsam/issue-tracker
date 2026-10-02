@@ -16,18 +16,25 @@ export function Modal({
   open,
   onOpenChange,
   children,
+  className = "",
+  onOpenAutoFocus,
 }: {
   title: string;
   description: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
+  className?: string;
+  onOpenAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content">
+        <Dialog.Content
+          className={`dialog-content ${className}`}
+          onOpenAutoFocus={onOpenAutoFocus}
+        >
           <Dialog.Title className="dialog-title">{title}</Dialog.Title>
           <Dialog.Description className="muted">
             {description}

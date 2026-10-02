@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Columns3,
@@ -7,6 +7,7 @@ import {
   Search,
   Inbox,
   GripVertical,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   STATUSES,
@@ -14,9 +15,10 @@ import {
   type Issue,
   type Project,
   type Status,
+  type BoardSettings,
 } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { parseLabels, validateBody } from "../lib/validation";
+import { parseLabels, validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
 import {
   Button,
@@ -25,6 +27,7 @@ import {
   Modal,
 } from "../components/ui/primitives";
 import { RichEditor } from "../components/rich-editor";
+import { BoardSettingsDialog } from "../components/board-settings";
 export function IssueFields({
   issue,
   onChange,
@@ -84,11 +87,21 @@ export function IssueFields({
 }
 export function IssuesPage() {
   const { slug } = useParams();
+  return <ProjectIssues key={slug} slug={slug || ""} />;
+}
+
+function ProjectIssues({ slug }: { slug: string }) {
   const { refresh, users } = useWorkspace();
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
   const [project, setProject] = useState<Project | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [boardSettings, setBoardSettings] = useState<BoardSettings>({
+    lanes: STATUSES.map((status) => status.value),
+    issueIds: null,
+  });
+  const [configureBoard, setConfigureBoard] = useState(false);
+  const [addToBoard, setAddToBoard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -113,11 +126,15 @@ export function IssuesPage() {
       api<{ issues: Issue[] }>(
         `/api/projects/${encodeURIComponent(slug || "")}/issues`,
       ),
+      api<{ board: BoardSettings }>(
+        `/api/projects/${encodeURIComponent(slug)}/board`,
+      ),
     ])
-      .then(([p, i]) => {
+      .then(([p, i, b]) => {
         if (active) {
           setProject(p.project);
           setIssues(i.issues);
+          setBoardSettings(b.board);
         }
       })
       .catch((e) => active && setError(message(e)))
@@ -151,15 +168,15 @@ export function IssuesPage() {
     setCreateError("");
     const data = new FormData(e.currentTarget);
     try {
-      validateBody(body);
+      validateIssueBody(body);
       const { issue } = await api<{ issue: Issue }>(
         `/api/projects/${encodeURIComponent(slug || "")}/issues`,
         {
           method: "POST",
           body: JSON.stringify({
-            title: data.get("title"),
             body,
             ...fields,
+            addToBoard,
             labels: parseLabels(String(data.get("labels") || "")),
           }),
         },
@@ -181,8 +198,18 @@ export function IssuesPage() {
         <Button onClick={() => setRetry((v) => v + 1)}>Retry</Button>
       </>
     );
-  const filtered = issues.filter(
+  const lanes = STATUSES.filter((s) => boardSettings.lanes.includes(s.value));
+  const selectedIds =
+    boardSettings.issueIds === null ? null : new Set(boardSettings.issueIds);
+  const boardIssues = issues.filter(
+    (i) => selectedIds === null || selectedIds.has(i.id),
+  );
+  const hiddenCount = boardIssues.filter(
+    (i) => !boardSettings.lanes.includes(i.status),
+  ).length;
+  const filtered = (board ? boardIssues : issues).filter(
     (i) =>
+      (!board || boardSettings.lanes.includes(i.status)) &&
       (status === "all" || i.status === status) &&
       `${i.title} ${i.number} ${i.labels.join(" ")}`
         .toLowerCase()
@@ -254,11 +281,12 @@ export function IssuesPage() {
           onClick={() => {
             setBody("");
             setFields({
-              status: "backlog",
+              status: board ? boardSettings.lanes[0] : "backlog",
               priority: "none",
               assigneeId: null,
             });
             setCreateError("");
+            setAddToBoard(board);
             setOpen(true);
           }}
         >
@@ -301,16 +329,45 @@ export function IssuesPage() {
             </option>
           ))}
         </select>
+        {board && (
+          <Button variant="secondary" onClick={() => setConfigureBoard(true)}>
+            <SlidersHorizontal size={15} /> Configure board
+          </Button>
+        )}
         <span className="muted results-count">{filtered.length} issues</span>
       </div>
       <ErrorNotice error={error} />
       {board ? (
         <>
+          <div className="board-summary">
+            <p className="muted">
+              {selectedIds === null
+                ? "All project issues"
+                : `${boardIssues.length} selected issues`}
+              {` · ${lanes.length} lanes`}
+              {hiddenCount > 0 && ` · ${hiddenCount} issues in hidden lanes`}
+            </p>
+            {selectedIds !== null && boardIssues.length === 0 && (
+              <p>
+                No issues selected. Use Configure board to add issues, or create
+                one for this board.
+              </p>
+            )}
+            {boardIssues.length > 0 && filtered.length === 0 && (
+              <p>
+                No visible issues. Check your search, status filter, or selected
+                lanes.
+              </p>
+            )}
+          </div>
           <p className="sr-only">
             Drag issues between columns, or use each issue’s status menu.
           </p>
-          <div className="board">
-            {STATUSES.map((s) => (
+          <div
+            className="board"
+            style={{ "--board-lanes": lanes.length } as CSSProperties}
+          >
+            {lanes.map((s) => (
               <section
                 className="board-column"
                 key={s.value}
@@ -354,29 +411,36 @@ export function IssuesPage() {
           </p>
         </section>
       )}
+      {configureBoard && (
+        <BoardSettingsDialog
+          slug={slug}
+          settings={boardSettings}
+          issues={issues}
+          onSaved={setBoardSettings}
+          onClose={() => setConfigureBoard(false)}
+        />
+      )}
       <Modal
+        className="create-issue-dialog"
         title="Create issue"
         description={`Add a next step to ${project.name}.`}
         open={open}
         onOpenChange={(v) => !busy && setOpen(v)}
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <form onSubmit={create} className="form-stack">
-          <label>
-            Issue title
-            <input
-              name="title"
-              required
-              placeholder="What needs to happen?"
-              maxLength={300}
-            />
-          </label>
           <div>
-            <span className="field-label">Description</span>
             <RichEditor
               value={body}
               onChange={setBody}
-              placeholder="Add context, a checklist, or attachments…"
+              ariaLabel="Issue"
+              autoFocus
+              placeholder="What needs to happen? Just start writing…"
             />
+            <p className="settings-help muted">
+              Write your issue in one place. A heading or the first line becomes
+              its title on the board.
+            </p>
           </div>
           <IssueFields
             issue={fields}
@@ -386,6 +450,24 @@ export function IssuesPage() {
             Labels
             <input name="labels" placeholder="bug, design (comma-separated)" />
           </label>
+          {boardSettings.issueIds !== null && (
+            <div>
+              <label className="checkbox-option">
+                <input
+                  type="checkbox"
+                  checked={addToBoard}
+                  onChange={(e) => setAddToBoard(e.target.checked)}
+                />
+                Add to board
+              </label>
+              {addToBoard && !boardSettings.lanes.includes(fields.status) && (
+                <p className="settings-help muted">
+                  This issue’s status is in a hidden lane. It will be selected,
+                  but not visible until that lane is shown.
+                </p>
+              )}
+            </div>
+          )}
           <ErrorNotice error={createError} />
           <div className="form-actions">
             <Button
@@ -396,7 +478,7 @@ export function IssuesPage() {
             >
               Cancel
             </Button>
-            <Button disabled={busy}>
+            <Button disabled={busy || !body.trim()}>
               {busy ? "Creating…" : "Create issue"}
             </Button>
           </div>

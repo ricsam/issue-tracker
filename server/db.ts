@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { deriveIssueTitle, prependLegacyTitle } from "../shared/issue-content";
 
 export function openDatabase(path: string) {
   const db = new Database(path, { create: true, strict: true });
@@ -25,6 +26,36 @@ export function openDatabase(path: string) {
       CREATE INDEX sessions_expiry ON sessions(expires);
       INSERT INTO migrations VALUES (1);
     `);
+  }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=2").get())
+      return;
+    db.exec(`
+      CREATE TABLE project_boards (
+        projectId TEXT PRIMARY KEY REFERENCES projects(id),
+        lanes TEXT NOT NULL,
+        issueIds TEXT NOT NULL
+      );
+      INSERT INTO migrations VALUES (2);
+    `);
+  }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=3").get())
+      return;
+    const rows = db.query("SELECT id,title,body FROM issues").all() as {
+      id: string;
+      title: string;
+      body: string;
+    }[];
+    for (const row of rows) {
+      const body = prependLegacyTitle(row.title, row.body);
+      db.query("UPDATE issues SET title=?,body=? WHERE id=?").run(
+        deriveIssueTitle(body),
+        body,
+        row.id,
+      );
+    }
+    db.query("INSERT INTO migrations VALUES (3)").run();
   }).immediate();
   return db;
 }

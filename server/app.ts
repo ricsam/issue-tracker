@@ -7,7 +7,20 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomBytes, createHash } from "node:crypto";
-import type { User, Issue, Comment, Project } from "../shared/types";
+import {
+  STATUSES,
+  type BoardSettings,
+  type User,
+  type Issue,
+  type Comment,
+  type Project,
+} from "../shared/types";
+import {
+  deriveIssueTitle,
+  ISSUE_BODY_MAX_LENGTH,
+  prependLegacyTitle,
+  replaceLeadingTitle,
+} from "../shared/issue-content";
 import { openDatabase } from "./db";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
@@ -41,8 +54,8 @@ const credentials = z.object({
 const account = credentials.extend({ name: text(100) }).strict();
 const issueFields = z
   .object({
-    title: text(300),
-    body: z.string().max(100000),
+    title: text(300).optional(),
+    body: z.string().max(ISSUE_BODY_MAX_LENGTH),
     status: z
       .enum(["backlog", "todo", "in_progress", "done"])
       .default("backlog"),
@@ -51,6 +64,19 @@ const issueFields = z
       .default("none"),
     labels: z.array(text(50)).max(30).default([]),
     assigneeId: z.string().uuid().nullable().default(null),
+  })
+  .strict();
+const boardFields = z
+  .object({
+    lanes: z
+      .array(z.enum(["backlog", "todo", "in_progress", "done"]))
+      .min(1)
+      .max(STATUSES.length)
+      .refine((values) => new Set(values).size === values.length),
+    issueIds: z
+      .array(z.string().uuid())
+      .refine((values) => new Set(values).size === values.length)
+      .nullable(),
   })
   .strict();
 const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, COALESCE(SUM(CASE WHEN i.id IS NOT NULL AND i.status != 'done' THEN 1 ELSE 0 END),0) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
@@ -143,6 +169,24 @@ export function createApp(options: AppOptions = {}) {
       .query(`${projectSql} WHERE p.slug=? GROUP BY p.id`)
       .get(slug) as Project | null;
     return row ?? fail(404, "Project not found");
+  };
+  const board = (projectId: string): BoardSettings => {
+    const row = db
+      .query("SELECT lanes,issueIds FROM project_boards WHERE projectId=?")
+      .get(projectId) as { lanes: string; issueIds: string } | null;
+    return row
+      ? { lanes: JSON.parse(row.lanes), issueIds: JSON.parse(row.issueIds) }
+      : { lanes: STATUSES.map((s) => s.value), issueIds: null };
+  };
+  const saveBoard = (projectId: string, settings: BoardSettings) => {
+    db.query(
+      `INSERT INTO project_boards (projectId,lanes,issueIds) VALUES (?,?,?)
+      ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,issueIds=excluded.issueIds`,
+    ).run(
+      projectId,
+      JSON.stringify(settings.lanes),
+      JSON.stringify(settings.issueIds),
+    );
   };
   const validateAssignee = (value: string | null | undefined) => {
     if (value && !publicUser(value)) fail(400, "Unknown assignee");
@@ -413,6 +457,31 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/projects/:slug", (c) =>
     c.json({ project: project(c.req.param("slug")) }),
   );
+  app.get("/api/projects/:slug/board", (c) =>
+    c.json({ board: board(project(c.req.param("slug")).id) }),
+  );
+  app.patch("/api/projects/:slug/board", async (c) => {
+    const p = project(c.req.param("slug"));
+    const input = boardFields.parse(await json(c));
+    const settings: BoardSettings = {
+      lanes: STATUSES.map((s) => s.value).filter((s) =>
+        input.lanes.includes(s),
+      ),
+      issueIds: input.issueIds,
+    };
+    db.transaction(() => {
+      for (const issueId of settings.issueIds ?? []) {
+        if (
+          !db
+            .query("SELECT id FROM issues WHERE id=? AND projectId=?")
+            .get(issueId, p.id)
+        )
+          fail(400, "Unknown project issue");
+      }
+      saveBoard(p.id, settings);
+    }).immediate();
+    return c.json({ board: settings });
+  });
   app.get("/api/projects/:slug/issues", (c) => {
     const p = project(c.req.param("slug"));
     const rows = db
@@ -422,7 +491,15 @@ export function createApp(options: AppOptions = {}) {
   });
   app.post("/api/projects/:slug/issues", async (c) => {
     const p = project(c.req.param("slug"));
-    const input = issueFields.parse(await json(c));
+    const input = issueFields
+      .extend({ addToBoard: z.boolean().default(false) })
+      .parse(await json(c));
+    const body =
+      input.title === undefined
+        ? input.body
+        : prependLegacyTitle(input.title, input.body);
+    if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
+      fail(400, "Invalid issue body");
     validateAssignee(input.assigneeId);
     const uid = id();
     const time = now();
@@ -436,8 +513,8 @@ export function createApp(options: AppOptions = {}) {
         uid,
         n.n,
         p.id,
-        input.title,
-        input.body,
+        deriveIssueTitle(body),
+        body,
         input.status,
         input.priority,
         JSON.stringify(input.labels),
@@ -446,6 +523,13 @@ export function createApp(options: AppOptions = {}) {
         time,
         time,
       );
+      if (input.addToBoard) {
+        const settings = board(p.id);
+        if (settings.issueIds !== null) {
+          settings.issueIds.push(uid);
+          saveBoard(p.id, settings);
+        }
+      }
     }).immediate();
     return c.json({ issue: issue(uid) });
   });
@@ -466,7 +550,26 @@ export function createApp(options: AppOptions = {}) {
     ) as Partial<z.infer<typeof issueFields>>;
     if (!Object.keys(input).length) return fail(400, "No changes");
     validateAssignee(input.assigneeId);
-    const merged = { ...current, ...input, updatedAt: now() };
+    const body =
+      input.title === undefined
+        ? (input.body ?? current.body)
+        : input.body === undefined
+          ? replaceLeadingTitle(input.title, current.body)
+          : prependLegacyTitle(input.title, input.body);
+    if (input.body !== undefined || input.title !== undefined) {
+      if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
+        fail(400, "Invalid issue body");
+    }
+    const merged = {
+      ...current,
+      ...input,
+      body,
+      title:
+        input.body !== undefined || input.title !== undefined
+          ? deriveIssueTitle(body)
+          : current.title,
+      updatedAt: now(),
+    };
     db.query(
       "UPDATE issues SET title=?,body=?,status=?,priority=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
     ).run(

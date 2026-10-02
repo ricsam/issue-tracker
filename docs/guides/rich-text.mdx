@@ -1,9 +1,11 @@
 ---
 title: Rich text and Markdown
-description: Write structured descriptions and comments while preserving the Markdown features you need.
+description: Write structured issue bodies and comments while preserving the Markdown features you need.
 ---
 
-Threadline stores issue descriptions and comments as canonical Markdown, not HTML.
+Threadline stores each issue's content in one Markdown body, and also stores comments as Markdown, not HTML.
+The issue editor receives focus when you open **Create issue**; there is no separate title field.
+Use a heading to set the derived display title, or let the first meaningful text line supply it.
 The editor offers **Write**, **Markdown**, and **Preview** modes over that content.
 Choose the mode based on the structure you need to preserve.
 
@@ -17,7 +19,9 @@ Choose the mode based on the structure you need to preserve.
 
 Switching modes does not save the issue or post the comment.
 Use the surrounding **Create issue**, **Save changes**, **Post comment**, or **Save comment** action.
-Descriptions and comments have a 100,000-character limit; comments cannot be blank.
+Issue bodies have a 101,000-character limit; comments have a 100,000-character limit.
+Both require non-whitespace content. The derived issue title is limited to 300 characters without truncating the body.
+Headings inside code do not become titles; image-only or code-only issues can display **Untitled issue**.
 
 ## Format in Write mode
 

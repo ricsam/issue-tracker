@@ -3,19 +3,35 @@ title: Board
 description: View project issues by status and move work forward with drag-and-drop or status menus.
 ---
 
-The board displays a project's issues in four fixed status columns.
-It is another view of the same issues shown in **List**, not a separate planning system.
+The board groups project issues into configurable lanes using the four built-in statuses.
+By default, it shows all current and future issues in all four lanes.
+Its saved issue selection and visible lanes are shared with everyone in the project, not personal preferences.
+It is another view of the issues shown in **List**, not a separate copy.
 
 ## Open the board
 
 1. Open **Projects** and select a project.
 2. Select **Board** above the issue list.
 3. Review the cards in each status column.
-4. Select an issue title to open its description, properties, and discussion.
+4. Select an issue title to open its Markdown body, properties, and discussion.
 
 Select **List** to return to the row-based view.
 You can create an issue from either view with **Create issue**.
-New issues default to **Backlog** unless you choose another status in the creation form.
+The initial status is the first visible lane when creating from the board, or **Backlog** when creating from the list; you can choose another status in the creation form.
+When the board uses an explicit issue selection, **Add to board** starts checked when creating from the board and unchecked when creating from the list.
+Checking it adds the new issue to that selection.
+In all-issues mode, new issues are included automatically and this checkbox is not shown.
+
+## Configure issues and lanes
+
+Select **Configure board** to choose between all project issues (including future issues) and an explicit selection.
+An explicit selection may be empty; it does not automatically include future issues unless they are added to the board.
+Choose which built-in status lanes to show, keeping at least one visible, then save the configuration.
+These settings persist across visits and are shared by all authenticated collaborators.
+
+Hiding a lane does not remove its selected issues or change their status.
+Show the lane again to see those cards, or change an issue's status to a visible lane.
+Board configuration never removes issues from the project list or changes project counts.
 
 ## Understand the columns
 
@@ -55,12 +71,13 @@ Check the error and retry once the connection or sign-in problem is resolved.
 ## Focus the board
 
 Use **Search issues** to match a title, issue number, or label.
-Search is case-insensitive and does not include descriptions or comments.
+Search is case-insensitive and matches derived display titles, not the full Markdown body or comments.
 Use **Filter by status** to limit the visible cards further.
 
 The result count and each column count reflect the filtered issues.
 An empty column therefore does not necessarily mean the project has no issues in that status.
-Clear the search and choose **All statuses** for a complete view.
+Clear the search and choose **All statuses** to see every matching card in the saved board configuration.
+If an issue is still missing, check the selected issues and visible lanes in **Configure board**, or open **List**.
 
 ## Read a card
 
@@ -80,5 +97,5 @@ Marking an issue **Done** updates project progress but does not delete it.
   Assignment and project organization do not create access restrictions.
 </Note>
 
-For descriptions and discussion, see [issues](/guides/issues).
+For issue content and discussion, see [issues](/guides/issues).
 For the broader feature boundaries, see [current limitations](/admin/limitations).

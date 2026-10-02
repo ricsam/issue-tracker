@@ -17,6 +17,10 @@ export interface Project {
   issueCount: number;
   openCount: number;
 }
+export interface BoardSettings {
+  lanes: Status[];
+  issueIds: string[] | null;
+}
 export interface Issue {
   id: string;
   number: number;

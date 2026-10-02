@@ -4,6 +4,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
@@ -100,11 +101,15 @@ function EditorContents({
   onChange,
   placeholder,
   minimal,
+  ariaLabel,
+  autoFocus,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   minimal: boolean;
+  ariaLabel: string;
+  autoFocus: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   const [mode, setMode] = useState<Mode>("write");
@@ -327,7 +332,7 @@ function EditorContents({
         <RichTextPlugin
           contentEditable={
             <ContentEditable
-              aria-label={placeholder}
+              aria-label={ariaLabel}
               aria-describedby={`${id}-help`}
               className={`editor-input markdown-content ${minimal ? "editor-minimal" : ""}`}
             />
@@ -357,6 +362,7 @@ function EditorContents({
           )}
         </div>
       )}
+      {autoFocus && <AutoFocusPlugin defaultSelection="rootStart" />}
       <HistoryPlugin />
       <ListPlugin />
       <CheckListPlugin />
@@ -394,11 +400,15 @@ export function RichEditor({
   onChange,
   placeholder = "Write a description…",
   minimal = false,
+  ariaLabel = placeholder,
+  autoFocus = false,
 }: {
   value: string;
   onChange: (markdown: string) => void;
   placeholder?: string;
   minimal?: boolean;
+  ariaLabel?: string;
+  autoFocus?: boolean;
 }) {
   return (
     <LexicalComposer
@@ -445,6 +455,8 @@ export function RichEditor({
         onChange={onChange}
         placeholder={placeholder}
         minimal={minimal}
+        ariaLabel={ariaLabel}
+        autoFocus={autoFocus}
       />
     </LexicalComposer>
   );

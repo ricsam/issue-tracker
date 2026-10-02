@@ -2,8 +2,8 @@ apiVersion: v2
 name: issue-tracker
 description: A small, authenticated issue tracker for shared teams
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://github.com/ricsam/issue-tracker
 sources:
   - https://github.com/ricsam/issue-tracker
