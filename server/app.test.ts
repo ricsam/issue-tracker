@@ -164,7 +164,7 @@ test("projects issues comments collaboration, author/admin permissions and resta
       app,
       `/api/projects/${project.slug}/issues`,
       "POST",
-      { title: "One", body: "**Markdown**", assigneeId: member.user.id },
+      { title: "One", body: "**Markdown**" },
       cookie,
     )
   ).json();
@@ -175,11 +175,11 @@ test("projects issues comments collaboration, author/admin permissions and resta
       app,
       `/api/issues/${issue.id}`,
       "PATCH",
-      { status: "done", labels: ["bug"] },
+      { assigneeId: member.user.id, labels: ["bug"] },
       mc,
     )
   ).json();
-  expect(updated.issue.status).toBe("done");
+  expect(updated.issue).not.toHaveProperty("status");
   expect(updated.issue.title).toBe("One");
   expect(updated.issue.assigneeId).toBe(member.user.id);
   const titleOnly = await (
@@ -191,7 +191,7 @@ test("projects issues comments collaboration, author/admin permissions and resta
       mc,
     )
   ).json();
-  expect(titleOnly.issue.status).toBe("done");
+  expect(titleOnly.issue).not.toHaveProperty("status");
   expect(titleOnly.issue.labels).toEqual(["bug"]);
   expect(titleOnly.issue.assigneeId).toBe(member.user.id);
   expect(

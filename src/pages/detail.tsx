@@ -12,11 +12,27 @@ import {
   validateBody,
   validateIssueBody,
 } from "../lib/validation";
-import { IssueFields } from "./issues";
+import { IssueFields } from "../components/issue-fields";
+
 export function DetailPage() {
   const { id } = useParams();
+  return <IssueDetails key={id} id={id || ""} />;
+}
+
+export function IssueDetails({
+  id,
+  embedded = false,
+  onSaved,
+  onPendingChange,
+}: {
+  id: string;
+  embedded?: boolean;
+  onSaved?: (issue: Issue) => void;
+  onPendingChange?: (pending: boolean) => void;
+}) {
   const { users, projects, refresh } = useWorkspace();
   const [issue, setIssue] = useState<Issue | null>(null);
+  const [persisted, setPersisted] = useState<Issue | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -26,6 +42,17 @@ export function DetailPage() {
   const [saved, setSaved] = useState("");
   const [labels, setLabels] = useState("");
   const [retry, setRetry] = useState(0);
+  const dirty =
+    !!issue &&
+    !!persisted &&
+    (issue.body !== persisted.body ||
+      issue.assigneeId !== persisted.assigneeId ||
+      labels !== persisted.labels.join(", "));
+  const pending = dirty || !!comment.trim() || busy || posting;
+  useEffect(() => {
+    onPendingChange?.(pending);
+    return () => onPendingChange?.(false);
+  }, [pending, onPendingChange]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -35,6 +62,7 @@ export function DetailPage() {
       .then((d) => {
         if (active) {
           setIssue(d.issue);
+          setPersisted(d.issue);
           setLabels(d.issue.labels.join(", "));
           setComments(d.comments);
           setComment("");
@@ -57,19 +85,20 @@ export function DetailPage() {
     setError("");
     setSaved("");
     try {
-      const { body, status, priority, assigneeId } = issue;
+      const { body, assigneeId } = issue;
       validateIssueBody(body);
       const result = await api<{ issue: Issue }>(`/api/issues/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
           body,
-          status,
-          priority,
           assigneeId,
           labels: parseLabels(labels),
         }),
       });
       setIssue(result.issue);
+      setPersisted(result.issue);
+      setLabels(result.issue.labels.join(", "));
+      onSaved?.(result.issue);
       setSaved("Changes saved");
       await refresh();
     } catch (e) {
@@ -108,14 +137,16 @@ export function DetailPage() {
   const project = projects.find((p) => p.id === issue.projectId);
   return (
     <div className="detail-container">
-      <Link
-        className="back-link"
-        to={project ? `/projects/${project.slug}` : "/projects"}
-      >
-        <ArrowLeft size={16} />
-        {project?.name || "Projects"}
-        <span>/</span>Issue #{issue.number}
-      </Link>
+      {!embedded && (
+        <Link
+          className="back-link"
+          to={project ? `/projects/${project.slug}` : "/projects"}
+        >
+          <ArrowLeft size={16} />
+          {project?.name || "Projects"}
+          <span>/</span>Issue #{issue.number}
+        </Link>
+      )}
       <ErrorNotice error={error} />
       <form onSubmit={save} className="detail-form">
         <fieldset disabled={busy}>

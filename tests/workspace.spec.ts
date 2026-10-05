@@ -78,9 +78,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     modal.getByRole("img", { name: "design (v1).png" }),
   ).toBeVisible();
-  await modal
-    .getByRole("combobox", { name: "Priority", exact: true })
-    .selectOption("high");
+  await expect(modal.getByRole("combobox")).toHaveCount(0);
   await modal.getByLabel("Labels", { exact: true }).fill("design, enhancement");
   await modal
     .getByRole("button", { name: "Create issue", exact: true })
@@ -92,10 +90,10 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   const issueUrl = page.url();
   await expect(
     page.getByRole("combobox", { name: "Priority", exact: true }),
-  ).toHaveValue("high");
+  ).toHaveCount(0);
   await page
-    .getByRole("combobox", { name: "Status", exact: true })
-    .selectOption("in_progress");
+    .getByRole("combobox", { name: "Assignee", exact: true })
+    .selectOption({ label: "Alex Morgan" });
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   const commentEditor = page.locator(".comments .rich-editor");
@@ -136,6 +134,13 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   ).toBe(401);
   await anonymous.close();
   await page.goto(projectUrl + "/board");
+  await expect(page.locator(".board-card")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add issues", exact: true }).click();
+  const add = page.getByRole("dialog", { name: "Add issues to board" });
+  await add.getByRole("checkbox", { name: /Add issue #1:/ }).check();
+  await add.getByLabel("Lane", { exact: true }).selectOption("in_progress");
+  await add.getByRole("button", { name: "Add to board", exact: true }).click();
+  await expect(add).toBeHidden();
   const inProgress = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /In progress/ }) });
@@ -153,7 +158,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     done.getByRole("link", { name: /Improve the onboarding/ }),
   ).toBeVisible();
-  await expect(done.getByText("high", { exact: true })).toBeVisible();
+  await expect(done.getByText("design", { exact: true })).toBeVisible();
   await page.screenshot({
     path: "test-results/board-desktop.png",
     fullPage: true,

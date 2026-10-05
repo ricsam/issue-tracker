@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.1.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.3.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.3.0
+
+Version 0.3.0 moves workflow state into board-only lanes. Issue creation accepts only content and labels; clients sending issue status, priority, assignment, or `addToBoard` during creation must be updated. See [the API contract](api-contract.md) for the separate board placement endpoints.
+
+Migration v4 preserves explicit board selections (Backlog becomes Todo). Former automatic/all-issues boards keep only Todo, In progress, and Done work; unselected issues remain in the list. Existing issue content, comments, uploads, and legacy status/priority values are retained.
+
+Take a consistent `/data` backup before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** old application versions expect the previous board schema. If recovery is necessary, stop the application and restore the pre-upgrade data backup together with the previous image/chart and the same encryption-key Secret. Restoring that backup discards any writes made after it, so inspect and preserve newer data before recovery.
 
 - The Deployment is fixed at one replica and uses strategy `Recreate`; SQLite is not an HA database.
 - The data claim uses `ReadWriteOnce`. `persistence.storageClass` defaults to empty, allowing the cluster default. Set `persistence.existingClaim` to reuse an operator-managed claim.

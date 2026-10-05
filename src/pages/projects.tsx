@@ -69,15 +69,8 @@ export function ProjectsPage() {
               <p>
                 {p.description || "A fresh space for your team’s next idea."}
               </p>
-              <div className="project-progress">
-                <span
-                  style={{
-                    width: `${p.issueCount ? (100 * (p.issueCount - p.openCount)) / p.issueCount : 0}%`,
-                  }}
-                />
-              </div>
               <footer>
-                <span>{p.openCount} open issues</span>
+                <span>{p.openCount} unfinished on board</span>
                 <span>{p.issueCount} total</span>
               </footer>
             </Link>

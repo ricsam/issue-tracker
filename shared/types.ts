@@ -1,6 +1,5 @@
 export type Role = "admin" | "member";
-export type Status = "backlog" | "todo" | "in_progress" | "done";
-export type Priority = "none" | "low" | "medium" | "high" | "urgent";
+export type Lane = "todo" | "in_progress" | "done";
 export interface User {
   id: string;
   name: string;
@@ -17,9 +16,13 @@ export interface Project {
   issueCount: number;
   openCount: number;
 }
+export interface BoardCard {
+  issueId: string;
+  lane: Lane;
+}
 export interface BoardSettings {
-  lanes: Status[];
-  issueIds: string[] | null;
+  lanes: Lane[];
+  cards: BoardCard[];
 }
 export interface Issue {
   id: string;
@@ -27,8 +30,6 @@ export interface Issue {
   projectId: string;
   title: string;
   body: string;
-  status: Status;
-  priority: Priority;
   labels: string[];
   assigneeId: string | null;
   authorId: string;
@@ -68,16 +69,8 @@ export interface IssueDetail {
   issue: Issue;
   comments: Comment[];
 }
-export const STATUSES: { value: Status; label: string }[] = [
-  { value: "backlog", label: "Backlog" },
+export const LANES: { value: Lane; label: string }[] = [
   { value: "todo", label: "Todo" },
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },
-];
-export const PRIORITIES: { value: Priority; label: string }[] = [
-  { value: "none", label: "No priority" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
 ];

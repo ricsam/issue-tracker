@@ -8,7 +8,8 @@ import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomBytes, createHash } from "node:crypto";
 import {
-  STATUSES,
+  LANES,
+  type BoardCard,
   type BoardSettings,
   type User,
   type Issue,
@@ -56,30 +57,23 @@ const issueFields = z
   .object({
     title: text(300).optional(),
     body: z.string().max(ISSUE_BODY_MAX_LENGTH),
-    status: z
-      .enum(["backlog", "todo", "in_progress", "done"])
-      .default("backlog"),
-    priority: z
-      .enum(["none", "low", "medium", "high", "urgent"])
-      .default("none"),
     labels: z.array(text(50)).max(30).default([]),
-    assigneeId: z.string().uuid().nullable().default(null),
   })
   .strict();
+const issueUpdateFields = issueFields
+  .extend({ assigneeId: z.string().uuid().nullable() })
+  .partial();
+const laneField = z.enum(["todo", "in_progress", "done"]);
 const boardFields = z
   .object({
     lanes: z
-      .array(z.enum(["backlog", "todo", "in_progress", "done"]))
+      .array(laneField)
       .min(1)
-      .max(STATUSES.length)
+      .max(LANES.length)
       .refine((values) => new Set(values).size === values.length),
-    issueIds: z
-      .array(z.string().uuid())
-      .refine((values) => new Set(values).size === values.length)
-      .nullable(),
   })
   .strict();
-const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, COALESCE(SUM(CASE WHEN i.id IS NOT NULL AND i.status != 'done' THEN 1 ELSE 0 END),0) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
+const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b WHERE b.projectId=p.id AND b.lane != 'done') AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
 
 export function createApp(options: AppOptions = {}) {
   const production =
@@ -160,7 +154,11 @@ export function createApp(options: AppOptions = {}) {
     if (c.get("user").role !== "admin") fail(403, "Administrator required");
   };
   const issue = (issueId: string): Issue => {
-    const row = db.query("SELECT * FROM issues WHERE id=?").get(issueId) as any;
+    const row = db
+      .query(
+        "SELECT id,number,projectId,title,body,labels,assigneeId,authorId,createdAt,updatedAt FROM issues WHERE id=?",
+      )
+      .get(issueId) as any;
     if (!row) return fail(404, "Issue not found");
     return { ...row, labels: JSON.parse(row.labels) };
   };
@@ -172,21 +170,17 @@ export function createApp(options: AppOptions = {}) {
   };
   const board = (projectId: string): BoardSettings => {
     const row = db
-      .query("SELECT lanes,issueIds FROM project_boards WHERE projectId=?")
-      .get(projectId) as { lanes: string; issueIds: string } | null;
-    return row
-      ? { lanes: JSON.parse(row.lanes), issueIds: JSON.parse(row.issueIds) }
-      : { lanes: STATUSES.map((s) => s.value), issueIds: null };
-  };
-  const saveBoard = (projectId: string, settings: BoardSettings) => {
-    db.query(
-      `INSERT INTO project_boards (projectId,lanes,issueIds) VALUES (?,?,?)
-      ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,issueIds=excluded.issueIds`,
-    ).run(
-      projectId,
-      JSON.stringify(settings.lanes),
-      JSON.stringify(settings.issueIds),
-    );
+      .query("SELECT lanes FROM project_boards WHERE projectId=?")
+      .get(projectId) as { lanes: string } | null;
+    const cards = db
+      .query(
+        "SELECT b.issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY i.number",
+      )
+      .all(projectId) as BoardCard[];
+    return {
+      lanes: row ? JSON.parse(row.lanes) : LANES.map((s) => s.value),
+      cards,
+    };
   };
   const validateAssignee = (value: string | null | undefined) => {
     if (value && !publicUser(value)) fail(400, "Unknown assignee");
@@ -463,14 +457,30 @@ export function createApp(options: AppOptions = {}) {
   app.patch("/api/projects/:slug/board", async (c) => {
     const p = project(c.req.param("slug"));
     const input = boardFields.parse(await json(c));
-    const settings: BoardSettings = {
-      lanes: STATUSES.map((s) => s.value).filter((s) =>
-        input.lanes.includes(s),
-      ),
-      issueIds: input.issueIds,
-    };
+    const lanes = LANES.map((s) => s.value).filter((l) =>
+      input.lanes.includes(l),
+    );
+    db.query(
+      `INSERT INTO project_boards VALUES (?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`,
+    ).run(p.id, JSON.stringify(lanes));
+    return c.json({ board: board(p.id) });
+  });
+  app.post("/api/projects/:slug/board/issues", async (c) => {
+    const p = project(c.req.param("slug"));
+    const input = z
+      .object({
+        issueIds: z
+          .array(z.string().uuid())
+          .min(1)
+          .refine((ids) => new Set(ids).size === ids.length),
+        lane: laneField,
+      })
+      .strict()
+      .parse(await json(c));
     db.transaction(() => {
-      for (const issueId of settings.issueIds ?? []) {
+      if (!board(p.id).lanes.includes(input.lane))
+        fail(400, "Destination lane is hidden");
+      for (const issueId of input.issueIds) {
         if (
           !db
             .query("SELECT id FROM issues WHERE id=? AND projectId=?")
@@ -478,9 +488,54 @@ export function createApp(options: AppOptions = {}) {
         )
           fail(400, "Unknown project issue");
       }
-      saveBoard(p.id, settings);
+      for (const issueId of input.issueIds) {
+        if (
+          db
+            .query(
+              "SELECT issueId FROM board_issues WHERE projectId=? AND issueId=?",
+            )
+            .get(p.id, issueId)
+        )
+          fail(409, "Issue already on board");
+        db.query("INSERT INTO board_issues VALUES (?,?,?)").run(
+          p.id,
+          issueId,
+          input.lane,
+        );
+      }
     }).immediate();
-    return c.json({ board: settings });
+    return c.json({ board: board(p.id) });
+  });
+  app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
+    const p = project(c.req.param("slug"));
+    const { lane } = z
+      .object({ lane: laneField })
+      .strict()
+      .parse(await json(c));
+    db.transaction(() => {
+      if (
+        !db
+          .query(
+            "SELECT issueId FROM board_issues WHERE projectId=? AND issueId=?",
+          )
+          .get(p.id, c.req.param("id"))
+      )
+        fail(404, "Board member not found");
+      if (!board(p.id).lanes.includes(lane))
+        fail(400, "Destination lane is hidden");
+      db.query(
+        "UPDATE board_issues SET lane=? WHERE projectId=? AND issueId=?",
+      ).run(lane, p.id, c.req.param("id"));
+    }).immediate();
+    return c.json({ board: board(p.id) });
+  });
+  app.delete("/api/projects/:slug/board/issues/:id", (c) => {
+    const p = project(c.req.param("slug"));
+    const result = db
+      .query("DELETE FROM board_issues WHERE projectId=? AND issueId=?")
+      .run(p.id, c.req.param("id"));
+    if (!result.changes) fail(404, "Board member not found");
+    return c.json({ board: board(p.id) });
   });
   app.get("/api/projects/:slug/issues", (c) => {
     const p = project(c.req.param("slug"));
@@ -491,16 +546,13 @@ export function createApp(options: AppOptions = {}) {
   });
   app.post("/api/projects/:slug/issues", async (c) => {
     const p = project(c.req.param("slug"));
-    const input = issueFields
-      .extend({ addToBoard: z.boolean().default(false) })
-      .parse(await json(c));
+    const input = issueFields.parse(await json(c));
     const body =
       input.title === undefined
         ? input.body
         : prependLegacyTitle(input.title, input.body);
     if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
       fail(400, "Invalid issue body");
-    validateAssignee(input.assigneeId);
     const uid = id();
     const time = now();
     db.transaction(() => {
@@ -515,21 +567,14 @@ export function createApp(options: AppOptions = {}) {
         p.id,
         deriveIssueTitle(body),
         body,
-        input.status,
-        input.priority,
+        "backlog", // Archived legacy columns; not active issue state.
+        "none",
         JSON.stringify(input.labels),
-        input.assigneeId,
+        null,
         c.get("user").id,
         time,
         time,
       );
-      if (input.addToBoard) {
-        const settings = board(p.id);
-        if (settings.issueIds !== null) {
-          settings.issueIds.push(uid);
-          saveBoard(p.id, settings);
-        }
-      }
     }).immediate();
     return c.json({ issue: issue(uid) });
   });
@@ -544,10 +589,10 @@ export function createApp(options: AppOptions = {}) {
   app.patch("/api/issues/:id", async (c) => {
     const current = issue(c.req.param("id"));
     const raw = await json(c);
-    const parsed = issueFields.partial().parse(raw);
+    const parsed = issueUpdateFields.parse(raw);
     const input = Object.fromEntries(
       Object.entries(parsed).filter(([key]) => Object.hasOwn(raw, key)),
-    ) as Partial<z.infer<typeof issueFields>>;
+    ) as z.infer<typeof issueUpdateFields>;
     if (!Object.keys(input).length) return fail(400, "No changes");
     validateAssignee(input.assigneeId);
     const body =
@@ -571,12 +616,10 @@ export function createApp(options: AppOptions = {}) {
       updatedAt: now(),
     };
     db.query(
-      "UPDATE issues SET title=?,body=?,status=?,priority=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
+      "UPDATE issues SET title=?,body=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
     ).run(
       merged.title,
       merged.body,
-      merged.status,
-      merged.priority,
       JSON.stringify(merged.labels),
       merged.assigneeId,
       merged.updatedAt,

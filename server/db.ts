@@ -57,5 +57,66 @@ export function openDatabase(path: string) {
     }
     db.query("INSERT INTO migrations VALUES (3)").run();
   }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=4").get())
+      return;
+    // Keep legacy selections and issue status/priority as archive, never active state.
+    db.exec(`
+      ALTER TABLE project_boards RENAME TO legacy_project_boards;
+      CREATE TABLE project_boards (
+        projectId TEXT PRIMARY KEY REFERENCES projects(id), lanes TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX issues_project_id ON issues(projectId,id);
+      CREATE TABLE board_issues (
+        projectId TEXT NOT NULL REFERENCES projects(id),
+        issueId TEXT NOT NULL,
+        lane TEXT NOT NULL CHECK(lane IN ('todo','in_progress','done')),
+        PRIMARY KEY(projectId,issueId),
+        FOREIGN KEY(projectId,issueId) REFERENCES issues(projectId,id) ON DELETE CASCADE
+      );
+    `);
+    const lanes = ["todo", "in_progress", "done"];
+    const projects = db.query("SELECT id FROM projects").all() as {
+      id: string;
+    }[];
+    for (const project of projects) {
+      const old = db
+        .query(
+          "SELECT lanes,issueIds FROM legacy_project_boards WHERE projectId=?",
+        )
+        .get(project.id) as { lanes: string; issueIds: string } | null;
+      const visible = old
+        ? (JSON.parse(old.lanes) as string[]).map((l) =>
+            l === "backlog" ? "todo" : l,
+          )
+        : lanes;
+      const normalized = lanes.filter((l) => visible.includes(l));
+      db.query("INSERT INTO project_boards VALUES (?,?)").run(
+        project.id,
+        JSON.stringify(normalized.length ? normalized : lanes),
+      );
+      const selected = old
+        ? (JSON.parse(old.issueIds) as string[] | null)
+        : null;
+      const issues = db
+        .query("SELECT id,status FROM issues WHERE projectId=? ORDER BY number")
+        .all(project.id) as { id: string; status: string }[];
+      for (const issue of issues) {
+        if (
+          selected !== null
+            ? !selected.includes(issue.id)
+            : !lanes.includes(issue.status)
+        )
+          continue;
+        const lane = lanes.includes(issue.status) ? issue.status : "todo";
+        db.query("INSERT INTO board_issues VALUES (?,?,?)").run(
+          project.id,
+          issue.id,
+          lane,
+        );
+      }
+    }
+    db.query("INSERT INTO migrations VALUES (4)").run();
+  }).immediate();
   return db;
 }
