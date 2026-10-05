@@ -1,5 +1,9 @@
 export type Role = "admin" | "member";
-export type Lane = "todo" | "in_progress" | "done";
+export type Lane = string;
+export interface BoardLane {
+  value: Lane;
+  label: string;
+}
 export interface User {
   id: string;
   name: string;
@@ -22,6 +26,7 @@ export interface BoardCard {
 }
 export interface BoardSettings {
   lanes: Lane[];
+  customLanes: BoardLane[];
   cards: BoardCard[];
 }
 export interface Issue {
@@ -69,7 +74,7 @@ export interface IssueDetail {
   issue: Issue;
   comments: Comment[];
 }
-export const LANES: { value: Lane; label: string }[] = [
+export const LANES: BoardLane[] = [
   { value: "todo", label: "Todo" },
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },

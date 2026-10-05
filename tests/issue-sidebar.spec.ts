@@ -136,6 +136,81 @@ for (const width of [1440, 1024]) {
   });
 }
 
+test("desktop sidebar width is resizable, remembered, clamped, and keyboard accessible", async ({ page, baseURL }) => {
+  const projectPath = await seed(page, baseURL!);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(projectPath);
+  await issueLink(page, "Sidebar alpha").click();
+  await expect(issueEditor(page)).toBeVisible();
+  const resizer = page.getByRole("separator", { name: "Resize issue details" });
+  await expect(resizer).toHaveAttribute("aria-valuenow", "680");
+  expect((await sidebar(page).boundingBox())!.width).toBe(680);
+  expect((await sidebar(page).locator(".properties").boundingBox())!.height).toBeLessThan(160);
+  await issueEditor(page).fill("Draft survives resizing");
+  const box = (await resizer.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 100, box.y + 150, { steps: 10 });
+  await page.mouse.up();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "780");
+  expect((await sidebar(page).boundingBox())!.width).toBe(780);
+  await expect(issueEditor(page)).toContainText("Draft survives resizing");
+  await resizer.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(resizer).toHaveAttribute("aria-valuenow", "770");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(resizer).toHaveAttribute("aria-valuenow", "820");
+  await assertLayout(page, 1440);
+  await sidebar(page).getByRole("button", { name: "Save changes" }).click();
+  await expect(sidebar(page).getByText("Changes saved", { exact: true })).toBeVisible();
+  await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
+  await issueLink(page, "Sidebar beta").click();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "820");
+  await page.reload();
+  await issueLink(page, "Sidebar beta").click();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "820");
+  // A smaller desktop clamps the actual width, without overwriting the preference.
+  await page.setViewportSize({ width: 1024, height: 1000 });
+  await expect(resizer).toHaveAttribute("aria-valuenow", "494");
+  await assertLayout(page, 1024);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(resizer).toHaveAttribute("aria-valuenow", "820");
+  await resizer.focus();
+  await page.keyboard.press("Home");
+  await expect(resizer).toHaveAttribute("aria-valuenow", "420");
+  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await assertLayout(page, 1440);
+  await resizer.focus();
+  await page.keyboard.press("End");
+  await expect(resizer).toHaveAttribute("aria-valuenow", "880");
+  await resizer.dblclick();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "680");
+  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "680");
+  await assertLayout(page, 1440);
+  await page.screenshot({ path: "test-results/resizable-issue-sidebar.png" });
+});
+
+test("invalid or blocked browser storage does not break sidebar resizing", async ({ page, baseURL }) => {
+  const projectPath = await seed(page, baseURL!);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(projectPath);
+  await page.evaluate(() => localStorage.setItem("issue-tracker:issue-sidebar-width", "not-a-width"));
+  await page.reload();
+  await issueLink(page, "Sidebar alpha").click();
+  const resizer = page.getByRole("separator", { name: "Resize issue details" });
+  await expect(resizer).toHaveAttribute("aria-valuenow", "680");
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", { get() { throw new Error("Storage unavailable"); } });
+  });
+  await page.reload();
+  await issueLink(page, "Sidebar alpha").click();
+  await expect(resizer).toHaveAttribute("aria-valuenow", "680");
+  await resizer.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(resizer).toHaveAttribute("aria-valuenow", "690");
+});
+
 test("sidebar saves synchronize titles without affecting board lanes; cards switch without navigation", async ({
   page,
   baseURL,

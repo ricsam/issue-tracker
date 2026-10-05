@@ -52,7 +52,91 @@ async function fixture() {
     req(`${path}/board/issues`, "POST", { issueIds, lane });
   return { entry, req, project, path, get, set, create, add };
 }
-const defaults = { lanes: LANES.map((s) => s.value), cards: [] };
+const defaults = { lanes: LANES.map((s) => s.value), customLanes: [], cards: [] };
+const custom = (label = "Review") => ({ value: `custom_${crypto.randomUUID()}`, label });
+
+test("custom lanes persist, isolate projects, merge additively and hide populated lanes reversibly", async () => {
+  const f = await fixture();
+  const review = custom();
+  const testing = custom("Testing");
+  expect((await f.set({ lanes: [review.value, "todo"], customLanes: [{ ...review, label: " Review " }] })).status).toBe(200);
+  expect(await f.get()).toEqual({ lanes: ["todo", review.value], customLanes: [review], cards: [] });
+  const a = (await (await f.create()).json()).issue;
+  const b = (await (await f.create()).json()).issue;
+  expect((await f.add([a.id], review.value)).status).toBe(200);
+  expect((await f.add([b.id])).status).toBe(200);
+  const move = (lane: string) => f.req(`${f.path}/board/issues/${b.id}`, "PATCH", { lane });
+  expect((await move(review.value)).status).toBe(200);
+  expect((await f.set({ lanes: ["todo"], customLanes: [] })).status).toBe(200);
+  const hidden = await f.get();
+  expect(hidden.customLanes).toEqual([review]);
+  expect(hidden.cards).toEqual([a, b].map((issue) => ({ issueId: issue.id, lane: review.value })));
+  expect((await move(review.value)).status).toBe(400);
+  const c = (await (await f.create()).json()).issue;
+  expect((await f.add([c.id], review.value)).status).toBe(400);
+  expect((await move(custom().value)).status).toBe(400);
+  expect((await f.set({ lanes: [testing.value, review.value, "todo"], customLanes: [testing] })).status).toBe(200);
+  expect((await f.get()).lanes).toEqual(["todo", review.value, testing.value]);
+  expect((await f.add([c.id], review.value)).status).toBe(200);
+  const saved = await f.get();
+  f.entry.app.close();
+  f.entry.app = createApp({ dataDir: f.entry.dir });
+  expect(await f.get()).toEqual(saved);
+  const other = (await (await f.req("/api/projects", "POST", { name: "Other" })).json()).project;
+  const path = `/api/projects/${other.slug}`;
+  expect((await (await f.req(`${path}/board`)).json()).board).toEqual(defaults);
+  expect((await f.req(`${path}/board`, "PATCH", { lanes: [review.value] })).status).toBe(400);
+  const foreign = (await (await f.req(`${path}/issues`, "POST", { body: "Foreign" })).json()).issue;
+  expect((await f.req(`${path}/board/issues`, "POST", { issueIds: [foreign.id], lane: review.value })).status).toBe(400);
+  // Labels and IDs belong to the project, not a global namespace.
+  expect((await f.req(`${path}/board`, "PATCH", { lanes: [review.value], customLanes: [review] })).status).toBe(200);
+  expect(await f.get()).toEqual(saved);
+});
+
+test("custom definition validation is atomic and bounds the cumulative collection", async () => {
+  const f = await fixture();
+  const review = custom();
+  await f.set({ lanes: ["todo", review.value], customLanes: [review] });
+  const before = await f.get();
+  const duplicate = custom("Duplicate");
+  for (const customLanes of [
+    [{ ...review, label: "Renamed" }],
+    [custom("review")], [custom(" Todo ")], [custom("in PROGRESS")], [custom("Done")],
+    [duplicate, duplicate], [duplicate, custom(" duplicate ")],
+    [custom("")], [custom("   ")], [custom("x".repeat(61))],
+    [{ value: "custom_invalid", label: "Invalid" }],
+    [{ value: "todo", label: "Invalid" }],
+    [{ ...custom(), extra: true }],
+    Array.from({ length: 31 }, (_, i) => custom(`Lane ${i}`)),
+  ]) {
+    expect((await f.set({ lanes: ["todo"], customLanes })).status).toBe(400);
+    expect(await f.get()).toEqual(before);
+  }
+  expect((await f.set({ lanes: ["unknown"], customLanes: [custom("Never stored")] })).status).toBe(400);
+  expect(await f.get()).toEqual(before);
+  const rest = Array.from({ length: 29 }, (_, i) => custom(`Lane ${i}`));
+  expect((await f.set({ lanes: ["todo"], customLanes: rest })).status).toBe(200);
+  const full = await f.get();
+  expect(full.customLanes).toHaveLength(30);
+  expect((await f.set({ lanes: ["done"], customLanes: [custom("Overflow")] })).status).toBe(400);
+  expect(await f.get()).toEqual(full);
+  expect((await f.set({ lanes: [review.value], customLanes: full.customLanes })).status).toBe(200);
+});
+
+test("v4 migration retains default visibility and populated hidden lane placements", async () => {
+  const f = await fixture();
+  const issue = (await (await f.create()).json()).issue;
+  await f.add([issue.id], "done");
+  await f.set({ lanes: ["todo"] });
+  const before = await f.get();
+  f.entry.app.db.exec("ALTER TABLE project_boards DROP COLUMN customLanes; DELETE FROM migrations WHERE version=5;");
+  for (let run = 0; run < 2; run++) {
+    f.entry.app.close();
+    f.entry.app = createApp({ dataDir: f.entry.dir });
+    expect(await f.get()).toEqual(before);
+    expect(f.entry.app.db.query("SELECT COUNT(*) AS n FROM migrations WHERE version=5").get()).toEqual({ n: 1 });
+  }
+});
 
 test("explicit board defaults, auth/CSRF, member edits, canonical lanes and restart", async () => {
   const f = await fixture();
@@ -109,6 +193,7 @@ test("explicit board defaults, auth/CSRF, member edits, canonical lanes and rest
   expect(response.status).toBe(200);
   expect((await f.add([issue.id])).status).toBe(200);
   const saved = {
+    customLanes: [],
     lanes: ["todo", "done"],
     cards: [{ issueId: issue.id, lane: "todo" }],
   };
@@ -174,11 +259,8 @@ test("strict selection validation, atomic add, project isolation and database co
       .query("INSERT INTO board_issues VALUES (?,?,?)")
       .run(f.project.id, foreign.id, "todo"),
   ).toThrow();
-  expect(() =>
-    db
-      .query("INSERT INTO board_issues VALUES (?,?,?)")
-      .run(f.project.id, b.id, "backlog"),
-  ).toThrow();
+  // Arbitrary lanes are rejected by the API; the DB retains project/issue constraints.
+  expect((await f.add([b.id], "backlog")).status).toBe(400);
   db.exec(
     "CREATE TRIGGER reject_board BEFORE INSERT ON board_issues BEGIN SELECT RAISE(ABORT, 'test failure'); END;",
   );
@@ -269,7 +351,7 @@ test("forward migration preserves explicit selection, translates backlog, exclud
     ids.push(projectIds);
   }
   db.exec(
-    "DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards; DELETE FROM migrations WHERE version=4;",
+    "DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards; DELETE FROM migrations WHERE version>=4;",
   );
   db.query("INSERT INTO project_boards VALUES (?,?,?)").run(
     projects[0].id,
@@ -302,6 +384,7 @@ test("forward migration preserves explicit selection, translates backlog, exclud
       ),
     );
     expect(boards[0]).toEqual({
+      customLanes: [],
       lanes: ["todo", "done"],
       cards: [
         { issueId: ids[0]![0], lane: "todo" },
@@ -310,6 +393,7 @@ test("forward migration preserves explicit selection, translates backlog, exclud
     });
     for (const n of [1, 2])
       expect(boards[n]).toEqual({
+        customLanes: [],
         lanes: defaults.lanes,
         cards: ids[n]!.slice(1).map((issueId, i) => ({
           issueId,

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Plus, X } from "lucide-react";
 import { LANES, type BoardSettings } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
@@ -15,8 +16,23 @@ export function BoardSettingsDialog({
   onClose: () => void;
 }) {
   const [lanes, setLanes] = useState(settings.lanes);
+  const [customLanes, setCustomLanes] = useState(settings.customLanes);
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const definitions = [...LANES, ...customLanes];
+  const duplicate = definitions.some(
+    (lane) => lane.label.toLowerCase() === name.trim().toLowerCase(),
+  );
+
+  function createLane() {
+    if (!name.trim() || duplicate || customLanes.length >= 30 || busy) return;
+    const lane = { value: `custom_${crypto.randomUUID()}`, label: name.trim() };
+    setCustomLanes((current) => [...current, lane]);
+    setLanes((current) => [...current, lane.value]);
+    setName("");
+    setError("");
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -26,7 +42,7 @@ export function BoardSettingsDialog({
     try {
       const result = await api<{ board: BoardSettings }>(
         `/api/projects/${encodeURIComponent(slug)}/board`,
-        { method: "PATCH", body: JSON.stringify({ lanes }) },
+        { method: "PATCH", body: JSON.stringify({ lanes, customLanes }) },
       );
       onSaved(result.board);
       onClose();
@@ -39,52 +55,92 @@ export function BoardSettingsDialog({
 
   return (
     <Modal
-      title="Configure board"
-      description="Choose the lanes shown on this board. Changes are shared with your team."
+      title="Manage lanes"
+      description="Add, remove, or create lanes for this board. Changes are shared with your team."
       open
       onOpenChange={(open) => !open && !busy && onClose()}
       className="board-settings-dialog"
     >
       <form className="form-stack" onSubmit={save}>
         <fieldset disabled={busy} className="board-settings-fields">
-          <legend className="field-label">Visible lanes</legend>
-          <div className="lane-options">
-            {LANES.map((lane) => (
-              <label className="checkbox-option" key={lane.value}>
-                <input
-                  type="checkbox"
-                  checked={lanes.includes(lane.value)}
-                  onChange={(event) =>
-                    setLanes((current) =>
-                      event.target.checked
-                        ? [...current, lane.value]
-                        : current.filter((value) => value !== lane.value),
-                    )
-                  }
-                />
+          <legend className="field-label">Board lanes</legend>
+          <div className="lane-management-list">
+            {definitions.filter((lane) => lanes.includes(lane.value)).map((lane) => (
+              <div className="lane-management-row" key={lane.value}>
                 <span className={`lane-dot ${lane.value}`} />
-                {lane.label}
-              </label>
+                <span className="lane-name">{lane.label}</span>
+                <span className="muted lane-issue-count">
+                  {settings.cards.filter((card) => card.lane === lane.value).length} issues
+                </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Remove ${lane.label} lane`}
+                  disabled={lanes.length === 1}
+                  title={lanes.length === 1 ? "Keep at least one lane" : "Remove lane (keeps its issues)"}
+                  onClick={() => setLanes((current) => current.filter((value) => value !== lane.value))}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             ))}
           </div>
           <p className="settings-help muted">
-            Hiding a lane keeps its issues on the board. Show it again to move
-            or remove them. Use Add issues to bring work onto the board.
+            Removed lanes keep their issues and can be added back below. Keep at least one lane.
           </p>
-          {!lanes.length && (
-            <p className="error" role="alert">
-              Select at least one lane.
-            </p>
+          {definitions.some((lane) => !lanes.includes(lane.value)) && (
+            <section className="available-lanes" aria-label="Available lanes">
+              <h3 className="field-label">Add an existing lane</h3>
+              <div className="available-lane-buttons">
+                {definitions.filter((lane) => !lanes.includes(lane.value)).map((lane) => (
+                  <Button
+                    key={lane.value}
+                    type="button"
+                    variant="secondary"
+                    aria-label={`Add ${lane.label} lane`}
+                    onClick={() => setLanes((current) => [...current, lane.value])}
+                  >
+                    <Plus size={14} /> {lane.label}
+                  </Button>
+                ))}
+              </div>
+            </section>
           )}
+          <div>
+            <label htmlFor="new-lane-name">Create a new lane</label>
+            <div className="new-lane-form">
+              <input
+                id="new-lane-name"
+                placeholder="e.g. In review"
+                maxLength={60}
+                value={name}
+                disabled={customLanes.length >= 30}
+                onChange={(event) => setName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    createLane();
+                  }
+                }}
+                aria-invalid={duplicate || undefined}
+                aria-describedby={duplicate ? "lane-name-error" : undefined}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={createLane}
+                disabled={!name.trim() || duplicate || customLanes.length >= 30}
+              >
+                <Plus size={15} /> Create lane
+              </Button>
+            </div>
+            {duplicate && <p id="lane-name-error" className="settings-help" role="alert">A lane with this name already exists.</p>}
+            {customLanes.length >= 30 && <p className="settings-help muted">This board has reached the limit of 30 custom lanes.</p>}
+          </div>
         </fieldset>
         <ErrorNotice error={error} />
         <div className="form-actions">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy}
-            onClick={onClose}
-          >
+          <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
           <Button disabled={busy || !lanes.length}>

@@ -63,14 +63,19 @@ const issueFields = z
 const issueUpdateFields = issueFields
   .extend({ assigneeId: z.string().uuid().nullable() })
   .partial();
-const laneField = z.enum(["todo", "in_progress", "done"]);
+const laneField = z.string().min(1).max(100);
+const customLaneField = z.object({
+  value: z.string().regex(/^custom_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+  label: text(60),
+}).strict();
 const boardFields = z
   .object({
     lanes: z
       .array(laneField)
       .min(1)
-      .max(LANES.length)
+      .max(LANES.length + 30)
       .refine((values) => new Set(values).size === values.length),
+    customLanes: z.array(customLaneField).max(30).optional(),
   })
   .strict();
 const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b WHERE b.projectId=p.id AND b.lane != 'done') AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
@@ -170,8 +175,8 @@ export function createApp(options: AppOptions = {}) {
   };
   const board = (projectId: string): BoardSettings => {
     const row = db
-      .query("SELECT lanes FROM project_boards WHERE projectId=?")
-      .get(projectId) as { lanes: string } | null;
+      .query("SELECT lanes,customLanes FROM project_boards WHERE projectId=?")
+      .get(projectId) as { lanes: string; customLanes: string } | null;
     const cards = db
       .query(
         "SELECT b.issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY i.number",
@@ -179,8 +184,15 @@ export function createApp(options: AppOptions = {}) {
       .all(projectId) as BoardCard[];
     return {
       lanes: row ? JSON.parse(row.lanes) : LANES.map((s) => s.value),
+      customLanes: row ? JSON.parse(row.customLanes) : [],
       cards,
     };
+  };
+  const requireVisibleLane = (projectId: string, lane: string) => {
+    const state = board(projectId);
+    if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
+      fail(400, "Unknown lane");
+    if (!state.lanes.includes(lane)) fail(400, "Destination lane is hidden");
   };
   const validateAssignee = (value: string | null | undefined) => {
     if (value && !publicUser(value)) fail(400, "Unknown assignee");
@@ -457,12 +469,34 @@ export function createApp(options: AppOptions = {}) {
   app.patch("/api/projects/:slug/board", async (c) => {
     const p = project(c.req.param("slug"));
     const input = boardFields.parse(await json(c));
-    const lanes = LANES.map((s) => s.value).filter((l) =>
-      input.lanes.includes(l),
-    );
-    db.query(
-      `INSERT INTO project_boards VALUES (?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`,
-    ).run(p.id, JSON.stringify(lanes));
+    db.transaction(() => {
+      const customLanes = [...board(p.id).customLanes];
+      const seenIds = new Set<string>();
+      const seenLabels = new Set<string>();
+      for (const definition of input.customLanes ?? []) {
+        const label = definition.label.toLowerCase();
+        if (seenIds.has(definition.value) || seenLabels.has(label))
+          fail(400, "Duplicate custom lane");
+        seenIds.add(definition.value);
+        seenLabels.add(label);
+        const existing = customLanes.find((lane) => lane.value === definition.value);
+        if (existing) {
+          if (existing.label !== definition.label) fail(400, "Custom lanes cannot be renamed");
+          continue;
+        }
+        if ([...LANES, ...customLanes].some((lane) => lane.label.trim().toLowerCase() === label))
+          fail(400, "Duplicate lane label");
+        customLanes.push(definition);
+      }
+      if (customLanes.length > 30) fail(400, "Too many custom lanes");
+      const definitions = [...LANES, ...customLanes];
+      if (input.lanes.some((value) => !definitions.some((lane) => lane.value === value)))
+        fail(400, "Unknown lane");
+      const lanes = definitions.map((lane) => lane.value).filter((value) => input.lanes.includes(value));
+      db.query(
+        `INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,customLanes=excluded.customLanes`,
+      ).run(p.id, JSON.stringify(lanes), JSON.stringify(customLanes));
+    }).immediate();
     return c.json({ board: board(p.id) });
   });
   app.post("/api/projects/:slug/board/issues", async (c) => {
@@ -478,8 +512,7 @@ export function createApp(options: AppOptions = {}) {
       .strict()
       .parse(await json(c));
     db.transaction(() => {
-      if (!board(p.id).lanes.includes(input.lane))
-        fail(400, "Destination lane is hidden");
+      requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
         if (
           !db
@@ -521,8 +554,7 @@ export function createApp(options: AppOptions = {}) {
           .get(p.id, c.req.param("id"))
       )
         fail(404, "Board member not found");
-      if (!board(p.id).lanes.includes(lane))
-        fail(400, "Destination lane is hidden");
+      requireVisibleLane(p.id, lane);
       db.query(
         "UPDATE board_issues SET lane=? WHERE projectId=? AND issueId=?",
       ).run(lane, p.id, c.req.param("id"));

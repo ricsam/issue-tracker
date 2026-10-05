@@ -110,7 +110,7 @@ test("body-only and legacy writes, validation limits, metadata preservation and 
         .query("SELECT * FROM issues WHERE id=?")
         .get(issue.id) as any;
       app.db.exec(
-        "DELETE FROM migrations WHERE version IN (3,4); DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards;",
+        "DELETE FROM migrations WHERE version>=3; DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards;",
       );
       if (version === 1)
         app.db.exec(

@@ -40,6 +40,7 @@ import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { IssueDetails } from "./detail";
 import { useDesktopIssues } from "../lib/use-desktop-issues";
+import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
@@ -66,6 +67,10 @@ function ProjectIssues({ slug }: { slug: string }) {
   const opener = useRef<HTMLAnchorElement | null>(null);
   const detailSidebar = useRef<HTMLElement | null>(null);
   const collection = useRef<HTMLDivElement | null>(null);
+  const { width: sidebarWidth, resizing, separatorProps } = useIssueSidebarWidth(
+    detailSidebar,
+    desktop && !!selectedId,
+  );
   const onPendingChange = useCallback((value: boolean) => {
     pending.current = value;
   }, []);
@@ -109,13 +114,13 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [boardSettings, setBoardSettings] = useState<BoardSettings>({
     lanes: LANES.map((lane) => lane.value),
     cards: [],
+    customLanes: [],
   });
   const [configureBoard, setConfigureBoard] = useState(false);
   const [addToBoard, setAddToBoard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [laneFilter, setLaneFilter] = useState("all");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
@@ -191,7 +196,6 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   function boardSaved(settings: BoardSettings) {
     setBoardSettings(settings);
-    setLaneFilter("all");
     void refresh().catch((e) => setError(message(e)));
   }
   async function create(e: FormEvent<HTMLFormElement>) {
@@ -228,7 +232,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         <Button onClick={() => setRetry((v) => v + 1)}>Retry</Button>
       </>
     );
-  const lanes = LANES.filter((lane) =>
+  const lanes = [...LANES, ...boardSettings.customLanes].filter((lane) =>
     boardSettings.lanes.includes(lane.value),
   );
   const placements = new Map(
@@ -240,9 +244,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   ).length;
   const filtered = (board ? boardIssues : issues).filter(
     (i) =>
-      (!board ||
-        (boardSettings.lanes.includes(placements.get(i.id)!) &&
-          (laneFilter === "all" || placements.get(i.id) === laneFilter))) &&
+      (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
       `${i.title} ${i.number} ${i.labels.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -317,7 +319,10 @@ function ProjectIssues({ slug }: { slug: string }) {
     );
   }
   return (
-    <div className={`project-issues${selectedId ? " has-detail" : ""}`}>
+    <div
+      className={`project-issues${selectedId ? " has-detail" : ""}${resizing ? " is-resizing" : ""}`}
+      style={{ "--issue-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
       <div className="project-issues-content" ref={collection} tabIndex={-1}>
         <header className="page-heading">
           <div>
@@ -363,18 +368,6 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
           {board && (
             <>
-              <select
-                aria-label="Filter by lane"
-                value={laneFilter}
-                onChange={(e) => setLaneFilter(e.target.value)}
-              >
-                <option value="all">All lanes</option>
-                {lanes.map((lane) => (
-                  <option key={lane.value} value={lane.value}>
-                    {lane.label}
-                  </option>
-                ))}
-              </select>
               <Button disabled={!!saving} onClick={() => setAddToBoard(true)}>
                 <Plus size={15} /> Add issues
               </Button>
@@ -383,7 +376,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 disabled={!!saving}
                 onClick={() => setConfigureBoard(true)}
               >
-                <SlidersHorizontal size={15} /> Configure board
+                <SlidersHorizontal size={15} /> Manage lanes
               </Button>
             </>
           )}
@@ -406,8 +399,8 @@ function ProjectIssues({ slug }: { slug: string }) {
               )}
               {boardIssues.length > 0 && filtered.length === 0 && (
                 <p>
-                  No visible issues. Check your search, lane filter, or selected
-                  lanes.
+                  No visible issues. Check your search or restore a lane using
+                  Manage lanes.
                 </p>
               )}
             </div>
@@ -436,7 +429,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 >
                   <h2>
                     <span className={`lane-dot ${s.value}`} />
-                    {s.label}
+                    <span className="lane-name">{s.label}</span>
                     <span className="count">
                       {
                         filtered.filter((i) => placements.get(i.id) === s.value)
@@ -476,6 +469,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           ref={detailSidebar}
           tabIndex={-1}
         >
+          {desktop && <div className="issue-sidebar-resizer" {...separatorProps} />}
           <header className="issue-sidebar-header">
             <h2>Issue details</h2>
             <Link

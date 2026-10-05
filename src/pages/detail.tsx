@@ -187,8 +187,7 @@ export function IssueDetails({
               </label>
               <small className="muted">
                 Created {new Date(issue.createdAt).toLocaleDateString()}
-                <br />
-                by{" "}
+                {" · by "}
                 {users.find((u) => u.id === issue.authorId)?.name ||
                   "a teammate"}
               </small>

@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.3.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.4.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.4.0
+
+Version 0.4.0 adds project-specific custom board lanes and a resizable desktop issue panel. `BoardSettings` responses now include `customLanes`, and the board PATCH endpoint accepts optional new lane definitions; API clients must accept lane IDs other than `todo`, `in_progress`, and `done`. See [the API contract](api-contract.md).
+
+Migration v5 adds an empty custom-lane list to each board and rebuilds board membership storage without the default-only lane check. Existing lane visibility and card placements are preserved.
+
+Take a consistent `/data` backup before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** 0.3.0 cannot save board lane settings against the migrated schema and does not display cards in custom lanes. If recovery is necessary, stop the application and restore the pre-upgrade data backup together with the 0.3.0 image/chart and the same encryption-key Secret. Restoring that backup discards any writes made after it, so inspect and preserve newer data before recovery.
 
 ### Upgrading to 0.3.0
 

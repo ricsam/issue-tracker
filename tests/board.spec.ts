@@ -48,6 +48,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath + "/board");
+  await expect(page.getByLabel("Filter by lane")).toHaveCount(0);
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-card")).toHaveCount(0);
   await expect(page.getByText(/No work on the board yet/)).toBeVisible();
@@ -119,24 +120,18 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   ).toBeVisible();
   await add.getByRole("button", { name: "Cancel", exact: true }).click();
 
-  // Board configuration changes visibility, never membership or issue data.
-  await page.getByRole("button", { name: "Configure board" }).click();
-  const settings = page.getByRole("dialog", { name: "Configure board" });
+  // Removing lanes changes visibility, never membership or issue data.
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes" });
   const save = settings.getByRole("button", {
     name: "Save board",
     exact: true,
   });
-  await expect(settings.getByRole("checkbox")).toHaveCount(3);
-  await settings.getByRole("checkbox", { name: "Done", exact: true }).uncheck();
-  await settings
-    .getByRole("checkbox", { name: "In progress", exact: true })
-    .uncheck();
-  await settings.getByRole("checkbox", { name: "Todo", exact: true }).uncheck();
-  await expect(save).toBeDisabled();
-  await expect(settings.getByRole("alert")).toContainText(
-    "Select at least one lane",
-  );
-  await settings.getByRole("checkbox", { name: "Todo", exact: true }).check();
+  await expect(settings.locator(".lane-management-row")).toHaveCount(3);
+  await settings.getByRole("button", { name: "Remove Done lane", exact: true }).click();
+  await settings.getByRole("button", { name: "Remove In progress lane", exact: true }).click();
+  await expect(settings.getByRole("button", { name: "Remove Todo lane", exact: true })).toBeDisabled();
+  await expect(settings.getByText(/Keep at least one lane/)).toBeVisible();
   await page.route(`**${endpoint}`, async (route) => {
     if (route.request().method() === "PATCH") {
       await route.fulfill({
@@ -166,8 +161,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     add.getByLabel("Lane", { exact: true }).locator("option"),
   ).toHaveCount(1);
   await add.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("button", { name: "Configure board" }).click();
-  await settings.getByRole("checkbox", { name: "Done", exact: true }).check();
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Add Done lane", exact: true }).click();
   await save.click();
   await expect(page.locator(".board-card")).toHaveCount(2);
 
@@ -283,7 +278,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(
     done.getByRole("link", { name: /Keep this in the list only/ }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Configure board" }).click();
+  await page.getByRole("button", { name: "Manage lanes" }).click();
   expect(
     await settings.evaluate(
       (element) => element.scrollWidth <= element.clientWidth,
@@ -298,6 +293,77 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     path: "test-results/configured-board-desktop.png",
     fullPage: true,
   });
+
+  // Custom lanes can be created, used, removed, restored, and survive reloads.
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  const name = settings.getByLabel("Create a new lane");
+  const createLane = settings.getByRole("button", { name: "Create lane", exact: true });
+  await expect(createLane).toBeDisabled();
+  await name.fill("  TODO  ");
+  await expect(createLane).toBeDisabled();
+  await expect(settings.getByRole("alert")).toContainText("already exists");
+  await name.fill("Discarded lane");
+  await createLane.click();
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /^Discarded lane/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await name.fill("  In review  ");
+  await name.press("Enter");
+  await expect(settings.locator(".lane-management-row").filter({ hasText: "In review" })).toBeVisible();
+  await save.click();
+  // Extra lanes stay readable in a horizontally scrolling desktop board.
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Add In progress lane", exact: true }).click();
+  const longName = "Long".repeat(15);
+  await name.fill(longName);
+  await createLane.click();
+  await save.click();
+  await expect(page.locator(".board-column")).toHaveCount(5);
+  expect(await page.locator(".board").evaluate((element) => element.scrollWidth > element.clientWidth)).toBeTruthy();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  expect(await settings.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+  await settings.getByRole("button", { name: `Remove ${longName} lane`, exact: true }).click();
+  await settings.getByRole("button", { name: "Remove In progress lane", exact: true }).click();
+  expect(await settings.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+  await save.click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const review = page.locator(".board-column").filter({ has: page.getByRole("heading", { name: /^In review/ }) });
+  await expect(review).toBeVisible();
+  const customBoard = (await (await page.request.get(endpoint)).json()).board;
+  const customId = customBoard.customLanes.find((lane: { label: string }) => lane.label === "In review").value;
+  await plan.getByRole("combobox", { name: /Lane for issue/ }).selectOption(customId);
+  await expect(review.locator(".board-card")).toHaveCount(1);
+  await page.reload();
+  await expect(review.locator(".board-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Remove In review lane", exact: true }).click();
+  await save.click();
+  await expect(review).toHaveCount(0);
+  await expect(page.locator(".board-summary")).toContainText("1 issues in hidden lanes");
+  await page.reload();
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Add In review lane", exact: true }).click();
+  await save.click();
+  await expect(review.locator(".board-card")).toHaveCount(1);
+  // New work can be placed directly into custom lanes, including from mobile.
+  await page.request.post(issueEndpoint, { headers, data: { body: "Check custom lane" } });
+  await page.reload();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Add issues", exact: true }).click();
+  await add.getByRole("checkbox", { name: /Check custom lane/ }).check();
+  await add.getByLabel("Lane", { exact: true }).selectOption(customId);
+  await addButton.click();
+  await expect(review.locator(".board-card")).toHaveCount(2);
+  await review.getByRole("button", { name: "Remove issue #6 from board" }).click();
+  await expect(review.locator(".board-card")).toHaveCount(1);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await plan.dragTo(todo);
+  await expect(todo.getByRole("link", { name: /Plan the release/ })).toBeVisible();
+  await plan.dragTo(review);
+  await expect(review.locator(".board-card")).toHaveCount(1);
+  await page.screenshot({ path: "test-results/custom-lanes-desktop.png", fullPage: true });
 
   // New issues and other projects never become work automatically.
   expect(

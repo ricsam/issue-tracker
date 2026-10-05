@@ -1,101 +1,55 @@
 ---
 title: Board
-description: View project issues by status and move work forward with drag-and-drop or status menus.
+description: Organize work in default or custom lanes, add and remove cards, and resize the desktop issue panel.
 ---
 
-The board groups project issues into configurable lanes using the four built-in statuses.
-By default, it shows all current and future issues in all four lanes.
-Its saved issue selection and visible lanes are shared with everyone in the project, not personal preferences.
-It is another view of the issues shown in **List**, not a separate copy.
+The board contains work explicitly added from a project's issue list. New boards start with **Todo**, **In progress**, and **Done**, with no cards. Board lanes and placements are saved per project and shared with your team.
 
-## Open the board
+## Add work
 
-1. Open **Projects** and select a project.
-2. Select **Board** above the issue list.
-3. Review the cards in each status column.
-4. Select an issue title to open its Markdown body, properties, and discussion.
+1. Open a project and select **Board**.
+2. Select **Add issues**.
+3. Search or select issues, choose a destination lane, then select **Add to board**.
 
-Select **List** to return to the row-based view.
-You can create an issue from either view with **Create issue**.
-The initial status is the first visible lane when creating from the board, or **Backlog** when creating from the list; you can choose another status in the creation form.
-When the board uses an explicit issue selection, **Add to board** starts checked when creating from the board and unchecked when creating from the list.
-Checking it adds the new issue to that selection.
-In all-issues mode, new issues are included automatically and this checkbox is not shown.
+**Create issue** captures content and labels in the project list. It does not automatically add the issue to the board. Use **Add issues** when it is ready for work.
 
-## Configure issues and lanes
+The remove button on a card removes only its board placement. The issue, comments, and attachments remain available in **List** and can be added back later.
 
-Select **Configure board** to choose between all project issues (including future issues) and an explicit selection.
-An explicit selection may be empty; it does not automatically include future issues unless they are added to the board.
-Choose which built-in status lanes to show, keeping at least one visible, then save the configuration.
-These settings persist across visits and are shared by all authenticated collaborators.
+## Manage lanes
 
-Hiding a lane does not remove its selected issues or change their status.
-Show the lane again to see those cards, or change an issue's status to a visible lane.
-Board configuration never removes issues from the project list or changes project counts.
+Select **Manage lanes** to:
 
-## Understand the columns
+- Remove a visible lane using its remove button.
+- Restore a removed lane under **Add an existing lane**.
+- Enter a name under **Create a new lane**, then select **Create lane** (or press Enter).
 
-| Column | Suggested team convention |
-| --- | --- |
-| Backlog | Work captured for later consideration |
-| Todo | Work ready to be picked up |
-| In progress | Work currently being done |
-| Done | Work considered complete |
-
-These descriptions are suggested conventions, not enforced transition rules.
-Any issue can move directly to any of the four statuses.
-The current release does not provide custom columns or workflow rules.
-
-## Move a card
-
-Drag a card from its current column and drop it into the destination column.
-Threadline saves the new status and updates the board after a successful response.
-Moving within the same status does not change the issue.
-
-Alternatively, use the status menu on the card:
-
-1. Find the issue you want to update.
-2. Open its status menu.
-3. Choose **Backlog**, **Todo**, **In progress**, or **Done**.
-4. Wait for the update to finish before making another move.
-
-<Tip>
-  Use the status menu when dragging is inconvenient or when navigating with a keyboard.
-  The same immediate-save menu is available in the list view.
-</Tip>
-
-Status controls are disabled while a move is saving.
-If a move fails, the page displays an error rather than treating the move as saved.
-Check the error and retry once the connection or sign-in problem is resolved.
-
-## Focus the board
-
-Use **Search issues** to match a title, issue number, or label.
-Search is case-insensitive and matches derived display titles, not the full Markdown body or comments.
-Use **Filter by status** to limit the visible cards further.
-
-The result count and each column count reflect the filtered issues.
-An empty column therefore does not necessarily mean the project has no issues in that status.
-Clear the search and choose **All statuses** to see every matching card in the saved board configuration.
-If an issue is still missing, check the selected issues and visible lanes in **Configure board**, or open **List**.
-
-## Read a card
-
-Cards show the issue number and title, up to three labels, priority when set, and an assignee initial.
-The assignee indicator identifies the user by name on hover, or shows **Unassigned**.
-Open the issue to see all labels and edit its full properties.
-
-## Know what a move changes
-
-Moving a card changes its status, not its priority, assignee, or project.
-The board does not persist a manual card ranking within a column.
-Issues are loaded in issue-number order rather than sorted by priority.
-Marking an issue **Done** updates project progress but does not delete it.
+Select **Save board** to apply your changes, or **Cancel** to discard them. Keep at least one visible lane. Custom names must be unique, contain 1–60 characters, and differ from the built-in names; each project supports up to 30 custom lanes.
 
 <Note>
-  All authenticated users can move issues on every project's board.
-  Assignment and project organization do not create access restrictions.
+  Removing a lane hides it without deleting its issues or placements. Add it back to see those cards again. The board summary shows how many cards are in hidden lanes.
 </Note>
 
-For issue content and discussion, see [issues](/guides/issues).
-For the broader feature boundaries, see [current limitations](/admin/limitations).
+Default lanes appear first, followed by custom lanes in creation order. Wide boards scroll horizontally on desktop rather than squeezing the cards.
+
+## Move work
+
+Drag a card into another lane, or use its lane menu for keyboard and mobile access. Moves save immediately and do not change issue content, labels, or assignment. If a move fails, the page displays an error and keeps the previous placement.
+
+Cards stay ordered by issue number within each lane; manual ranking and workflow rules are not supported. Only the built-in **Done** lane counts as completed in project progress.
+
+## Read and edit an issue
+
+Select an issue title to open its body, properties, and discussion. On desktop, this opens a panel alongside the board or list without losing your search.
+
+- Drag the panel's left divider to resize it. Your browser remembers the width across visits.
+- Focus the divider and use Left/Right arrows to adjust it; Shift makes larger steps. Home/End select its size limits.
+- Double-click the divider to reset to the default width.
+- Use **Open issue in full page** for a dedicated page, or close the panel to return to the collection.
+
+The panel narrows automatically on smaller desktop screens while retaining your preferred width. On mobile, issues open in a full page instead.
+
+## Find a card
+
+**Search issues** matches titles, issue numbers, and labels, case-insensitively. Clear the search to see all cards in visible lanes. If work is missing, check **Manage lanes** for removed lanes, **Add issues** for unplaced work, or open **List** to see every project issue.
+
+All authenticated workspace members can collaborate on boards. For issue content and discussion, see [issues](/guides/issues).

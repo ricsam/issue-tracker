@@ -118,5 +118,25 @@ export function openDatabase(path: string) {
     }
     db.query("INSERT INTO migrations VALUES (4)").run();
   }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=5").get())
+      return;
+    // Add definitions without changing visibility or existing placements. Rebuild
+    // only the membership table to remove the old default-only lane CHECK.
+    db.exec(`
+      ALTER TABLE project_boards ADD COLUMN customLanes TEXT NOT NULL DEFAULT '[]';
+      CREATE TABLE board_issues_custom (
+        projectId TEXT NOT NULL REFERENCES projects(id),
+        issueId TEXT NOT NULL,
+        lane TEXT NOT NULL,
+        PRIMARY KEY(projectId,issueId),
+        FOREIGN KEY(projectId,issueId) REFERENCES issues(projectId,id) ON DELETE CASCADE
+      );
+      INSERT INTO board_issues_custom SELECT projectId,issueId,lane FROM board_issues;
+      DROP TABLE board_issues;
+      ALTER TABLE board_issues_custom RENAME TO board_issues;
+      INSERT INTO migrations VALUES (5);
+    `);
+  }).immediate();
   return db;
 }

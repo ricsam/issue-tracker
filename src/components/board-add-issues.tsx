@@ -75,7 +75,7 @@ export function BoardAddIssuesDialog({
               value={lane}
               onChange={(event) => setLane(event.target.value as Lane)}
             >
-              {LANES.filter((item) => settings.lanes.includes(item.value)).map(
+              {[...LANES, ...settings.customLanes].filter((item) => settings.lanes.includes(item.value)).map(
                 (item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}
