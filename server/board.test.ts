@@ -60,7 +60,7 @@ test("custom lanes persist, isolate projects, merge additively and hide populate
   const review = custom();
   const testing = custom("Testing");
   expect((await f.set({ lanes: [review.value, "todo"], customLanes: [{ ...review, label: " Review " }] })).status).toBe(200);
-  expect(await f.get()).toEqual({ lanes: ["todo", review.value], customLanes: [review], cards: [] });
+  expect(await f.get()).toEqual({ lanes: [review.value, "todo"], customLanes: [review], cards: [] });
   const a = (await (await f.create()).json()).issue;
   const b = (await (await f.create()).json()).issue;
   expect((await f.add([a.id], review.value)).status).toBe(200);
@@ -76,7 +76,7 @@ test("custom lanes persist, isolate projects, merge additively and hide populate
   expect((await f.add([c.id], review.value)).status).toBe(400);
   expect((await move(custom().value)).status).toBe(400);
   expect((await f.set({ lanes: [testing.value, review.value, "todo"], customLanes: [testing] })).status).toBe(200);
-  expect((await f.get()).lanes).toEqual(["todo", review.value, testing.value]);
+  expect((await f.get()).lanes).toEqual([testing.value, review.value, "todo"]);
   expect((await f.add([c.id], review.value)).status).toBe(200);
   const saved = await f.get();
   f.entry.app.close();
@@ -138,13 +138,14 @@ test("v4 migration retains default visibility and populated hidden lane placemen
   }
 });
 
-test("explicit board defaults, auth/CSRF, member edits, canonical lanes and restart", async () => {
+test("explicit board defaults, auth/CSRF, member edits, submitted lane order and restart", async () => {
   const f = await fixture();
   const issue = (await (await f.create()).json()).issue;
   expect(await f.get()).toEqual(defaults);
   for (const [suffix, method, body] of [
     ["", "GET", undefined],
     ["", "PATCH", { lanes: ["todo"] }],
+    ["/lanes/todo", "PATCH", { index: 1 }],
     ["/issues", "POST", { issueIds: [issue.id], lane: "todo" }],
     [`/issues/${issue.id}`, "PATCH", { lane: "done" }],
     [`/issues/${issue.id}`, "DELETE", undefined],
@@ -194,13 +195,86 @@ test("explicit board defaults, auth/CSRF, member edits, canonical lanes and rest
   expect((await f.add([issue.id])).status).toBe(200);
   const saved = {
     customLanes: [],
-    lanes: ["todo", "done"],
+    lanes: ["done", "todo"],
     cards: [{ issueId: issue.id, lane: "todo" }],
   };
   expect(await f.get()).toEqual(saved);
   f.entry.app.close();
   f.entry.app = createApp({ dataDir: f.entry.dir });
   expect(await f.get()).toEqual(saved);
+});
+
+test("lane moves reorder only visible lanes, against current state, atomically", async () => {
+  const f = await fixture();
+  const moveLane = (lane: string, body: unknown) =>
+    f.req(`${f.path}/board/lanes/${lane}`, "PATCH", body);
+  // A board without saved settings starts from the defaults.
+  const first = await moveLane("done", { index: 0 });
+  expect(first.status).toBe(200);
+  expect((await first.json()).board.lanes).toEqual(["done", "todo", "in_progress"]);
+  expect((await moveLane("done", { index: 0 })).status).toBe(200);
+  expect((await f.get()).lanes).toEqual(["done", "todo", "in_progress"]);
+  expect((await moveLane("done", { index: 1 })).status).toBe(200);
+  expect((await f.get()).lanes).toEqual(["todo", "done", "in_progress"]);
+  // Positions past the end place the lane last.
+  expect((await moveLane("todo", { index: 99 })).status).toBe(200);
+  expect((await f.get()).lanes).toEqual(["done", "in_progress", "todo"]);
+
+  const review = custom();
+  await f.set({ lanes: ["done", "in_progress", "todo", review.value], customLanes: [review] });
+  const a = (await (await f.create()).json()).issue;
+  const b = (await (await f.create()).json()).issue;
+  await f.add([a.id], review.value);
+  await f.add([b.id], "done");
+  expect((await moveLane(review.value, { index: 0 })).status).toBe(200);
+  const moved = await f.get();
+  expect(moved).toEqual({
+    lanes: [review.value, "done", "in_progress", "todo"],
+    customLanes: [review],
+    cards: [
+      { issueId: a.id, lane: review.value },
+      { issueId: b.id, lane: "done" },
+    ],
+  });
+  const openCount = (await (await f.req(f.path)).json()).project.openCount;
+
+  const other = (await (await f.req("/api/projects", "POST", { name: "Other" })).json()).project;
+  for (const [lane, body, status] of [
+    ["todo", {}, 400],
+    ["todo", { index: -1 }, 400],
+    ["todo", { index: 1.5 }, 400],
+    ["todo", { index: "1" }, 400],
+    ["todo", { index: null }, 400],
+    ["todo", { index: 1, lanes: ["todo"] }, 400],
+    ["backlog", { index: 0 }, 404],
+    [custom().value, { index: 0 }, 404],
+  ] as const) {
+    expect((await moveLane(lane, body)).status).toBe(status);
+    expect(await f.get()).toEqual(moved);
+  }
+  // Custom lanes belong to their project.
+  expect((await f.req(`/api/projects/${other.slug}/board/lanes/${review.value}`, "PATCH", { index: 0 })).status).toBe(404);
+
+  // A move applies to the latest lanes: it never restores a lane someone else hid.
+  const expectHidden = async (lane: string) => {
+    const before = await f.get();
+    const response = await moveLane(lane, { index: 0 });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("Lane is hidden");
+    expect(await f.get()).toEqual(before);
+  };
+  await f.set({ lanes: [review.value, "done", "todo"] });
+  await expectHidden("in_progress");
+  await f.set({ lanes: ["done", "todo"] });
+  await expectHidden(review.value);
+  expect((await moveLane("todo", { index: 0 })).status).toBe(200);
+  const final = await f.get();
+  expect(final).toEqual({ ...moved, lanes: ["todo", "done"] });
+  expect((await (await f.req(f.path)).json()).project.openCount).toBe(openCount);
+  f.entry.app.close();
+  f.entry.app = createApp({ dataDir: f.entry.dir });
+  expect(await f.get()).toEqual(final);
+  expect(await (await f.req(`/api/projects/${other.slug}/board`)).json()).toEqual({ board: defaults });
 });
 
 test("strict selection validation, atomic add, project isolation and database constraints", async () => {

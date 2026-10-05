@@ -22,6 +22,7 @@ import {
   prependLegacyTitle,
   replaceLeadingTitle,
 } from "../shared/issue-content";
+import { moveLaneTo } from "../shared/board";
 import { openDatabase } from "./db";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
@@ -492,10 +493,34 @@ export function createApp(options: AppOptions = {}) {
       const definitions = [...LANES, ...customLanes];
       if (input.lanes.some((value) => !definitions.some((lane) => lane.value === value)))
         fail(400, "Unknown lane");
-      const lanes = definitions.map((lane) => lane.value).filter((value) => input.lanes.includes(value));
+      // The submitted order is the board's display order.
       db.query(
         `INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,customLanes=excluded.customLanes`,
-      ).run(p.id, JSON.stringify(lanes), JSON.stringify(customLanes));
+      ).run(p.id, JSON.stringify(input.lanes), JSON.stringify(customLanes));
+    }).immediate();
+    return c.json({ board: board(p.id) });
+  });
+  app.patch("/api/projects/:slug/board/lanes/:lane", async (c) => {
+    const p = project(c.req.param("slug"));
+    const lane = c.req.param("lane");
+    const { index } = z
+      .object({ index: z.number().int().min(0) })
+      .strict()
+      .parse(await json(c));
+    db.transaction(() => {
+      // Move within the current state so concurrent visibility changes are kept;
+      // positions past the end place the lane last.
+      const state = board(p.id);
+      if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
+        fail(404, "Lane not found");
+      if (!state.lanes.includes(lane)) fail(400, "Lane is hidden");
+      db.query(
+        `INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`,
+      ).run(
+        p.id,
+        JSON.stringify(moveLaneTo(state.lanes, lane, index)),
+        JSON.stringify(state.customLanes),
+      );
     }).immediate();
     return c.json({ board: board(p.id) });
   });

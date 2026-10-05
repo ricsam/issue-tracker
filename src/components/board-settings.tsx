@@ -1,8 +1,22 @@
-import { useState, type FormEvent } from "react";
-import { Plus, X } from "lucide-react";
-import { LANES, type BoardSettings } from "../../shared/types";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import {
+  LANES,
+  type BoardLane,
+  type BoardSettings,
+  type Lane,
+} from "../../shared/types";
+import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
+
+type Direction = "up" | "down";
 
 export function BoardSettingsDialog({
   slug,
@@ -20,10 +34,36 @@ export function BoardSettingsDialog({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const idPrefix = useId();
+  const refocus = useRef<{ lane: Lane; direction: Direction } | null>(null);
   const definitions = [...LANES, ...customLanes];
+  const visible = orderedLanes(lanes, customLanes);
   const duplicate = definitions.some(
     (lane) => lane.label.toLowerCase() === name.trim().toLowerCase(),
   );
+  const moveId = (lane: Lane, direction: Direction) =>
+    `${idPrefix}-move-${direction}-${lane}`;
+
+  // Reordering can detach the focused button from the document, so keep
+  // keyboard focus on the moved lane's button. Edge buttons use aria-disabled
+  // rather than disabled so focus stays put and repeated presses are no-ops.
+  useLayoutEffect(() => {
+    const target = refocus.current;
+    if (!target) return;
+    refocus.current = null;
+    document.getElementById(moveId(target.lane, target.direction))?.focus();
+  });
+
+  function moveLane(lane: BoardLane, direction: Direction) {
+    const index = lanes.indexOf(lane.value) + (direction === "up" ? -1 : 1);
+    if (index < 0 || index >= lanes.length) return;
+    refocus.current = { lane: lane.value, direction };
+    setLanes(moveLaneTo(lanes, lane.value, index));
+    setAnnouncement(
+      `${lane.label} moved to position ${index + 1} of ${lanes.length}.`,
+    );
+  }
 
   function createLane() {
     if (!name.trim() || duplicate || customLanes.length >= 30 || busy) return;
@@ -56,7 +96,7 @@ export function BoardSettingsDialog({
   return (
     <Modal
       title="Manage lanes"
-      description="Add, remove, or create lanes for this board. Changes are shared with your team."
+      description="Reorder, add, remove, or create lanes for this board. Changes are shared with your team."
       open
       onOpenChange={(open) => !open && !busy && onClose()}
       className="board-settings-dialog"
@@ -64,13 +104,37 @@ export function BoardSettingsDialog({
       <form className="form-stack" onSubmit={save}>
         <fieldset disabled={busy} className="board-settings-fields">
           <legend className="field-label">Board lanes</legend>
-          <div className="lane-management-list">
-            {definitions.filter((lane) => lanes.includes(lane.value)).map((lane) => (
-              <div className="lane-management-row" key={lane.value}>
+          <ol className="lane-management-list">
+            {visible.map((lane, index) => (
+              <li className="lane-management-row" key={lane.value}>
                 <span className={`lane-dot ${lane.value}`} />
                 <span className="lane-name">{lane.label}</span>
                 <span className="muted lane-issue-count">
                   {settings.cards.filter((card) => card.lane === lane.value).length} issues
+                </span>
+                <span className="lane-order-buttons">
+                  <button
+                    type="button"
+                    id={moveId(lane.value, "up")}
+                    className="icon-button"
+                    aria-label={`Move ${lane.label} lane up`}
+                    title="Move up (further left on the board)"
+                    aria-disabled={index === 0 || undefined}
+                    onClick={() => moveLane(lane, "up")}
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    id={moveId(lane.value, "down")}
+                    className="icon-button"
+                    aria-label={`Move ${lane.label} lane down`}
+                    title="Move down (further right on the board)"
+                    aria-disabled={index === visible.length - 1 || undefined}
+                    onClick={() => moveLane(lane, "down")}
+                  >
+                    <ChevronDown size={16} />
+                  </button>
                 </span>
                 <button
                   type="button"
@@ -82,11 +146,16 @@ export function BoardSettingsDialog({
                 >
                   <X size={16} />
                 </button>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
+          <p className="sr-only" role="status">
+            {announcement}
+          </p>
           <p className="settings-help muted">
-            Removed lanes keep their issues and can be added back below. Keep at least one lane.
+            The board shows lanes left to right in this order. Removed lanes
+            keep their issues and can be added back below. Keep at least one
+            lane.
           </p>
           {definitions.some((lane) => !lanes.includes(lane.value)) && (
             <section className="available-lanes" aria-label="Available lanes">

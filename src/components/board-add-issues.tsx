@@ -1,11 +1,11 @@
 import { useId, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 import {
-  LANES,
   type BoardSettings,
   type Issue,
   type Lane,
 } from "../../shared/types";
+import { orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
@@ -75,7 +75,7 @@ export function BoardAddIssuesDialog({
               value={lane}
               onChange={(event) => setLane(event.target.value as Lane)}
             >
-              {[...LANES, ...settings.customLanes].filter((item) => settings.lanes.includes(item.value)).map(
+              {orderedLanes(settings.lanes, settings.customLanes).map(
                 (item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}

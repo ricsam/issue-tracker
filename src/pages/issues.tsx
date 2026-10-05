@@ -26,6 +26,7 @@ import {
   type Lane,
   type BoardSettings,
 } from "../../shared/types";
+import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { parseLabels, validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
@@ -50,6 +51,16 @@ function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
     !event.shiftKey &&
     !event.altKey
   );
+}
+
+// Lane drags carry their own type so columns can tell them apart from card drags.
+const LANE_DRAG_TYPE = "application/x-threadline-lane";
+
+interface LaneDrag {
+  lane: Lane;
+  target: Lane | null;
+  /** Set after the drag image is captured, so only the board copy is dimmed. */
+  lifted: boolean;
 }
 
 export function IssuesPage() {
@@ -118,6 +129,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   });
   const [configureBoard, setConfigureBoard] = useState(false);
   const [addToBoard, setAddToBoard] = useState(false);
+  const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -198,6 +210,28 @@ function ProjectIssues({ slug }: { slug: string }) {
     setBoardSettings(settings);
     void refresh().catch((e) => setError(message(e)));
   }
+  // Dropping a lane on another lane puts it in that lane's position.
+  async function reorderLane(lane: Lane, target: Lane) {
+    const previous = boardSettings;
+    const index = previous.lanes.indexOf(target);
+    if (saving || lane === target || index < 0 || !previous.lanes.includes(lane))
+      return;
+    setSaving(`lane:${lane}`);
+    setError("");
+    setBoardSettings({ ...previous, lanes: moveLaneTo(previous.lanes, lane, index) });
+    try {
+      const result = await api<{ board: BoardSettings }>(
+        `/api/projects/${encodeURIComponent(slug)}/board/lanes/${encodeURIComponent(lane)}`,
+        { method: "PATCH", body: JSON.stringify({ index }) },
+      );
+      setBoardSettings(result.board);
+    } catch (e) {
+      setBoardSettings(previous);
+      setError(message(e));
+    } finally {
+      setSaving(null);
+    }
+  }
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -232,9 +266,11 @@ function ProjectIssues({ slug }: { slug: string }) {
         <Button onClick={() => setRetry((v) => v + 1)}>Retry</Button>
       </>
     );
-  const lanes = [...LANES, ...boardSettings.customLanes].filter((lane) =>
-    boardSettings.lanes.includes(lane.value),
-  );
+  const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes);
+  const canReorderLanes = lanes.length > 1 && !saving;
+  const dragFrom = laneDrag
+    ? lanes.findIndex((lane) => lane.value === laneDrag.lane)
+    : -1;
   const placements = new Map(
     boardSettings.cards.map((card) => [card.issueId, card.lane]),
   );
@@ -405,46 +441,98 @@ function ProjectIssues({ slug }: { slug: string }) {
               )}
             </div>
             <p className="sr-only">
-              Drag issues between lanes, or use each issue’s lane menu.
+              Drag issues between lanes, or use each issue’s lane menu. Drag a
+              lane by its heading to reorder lanes, or use Manage lanes.
             </p>
             <div
               className="board"
               style={{ "--board-lanes": lanes.length } as CSSProperties}
             >
-              {lanes.map((s) => (
-                <section
-                  className="board-column"
-                  key={s.value}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const i = boardIssues.find(
-                      (i) => i.id === e.dataTransfer.getData("text/plain"),
-                    );
-                    if (i) void move(i, s.value);
-                  }}
-                >
-                  <h2>
-                    <span className={`lane-dot ${s.value}`} />
-                    <span className="lane-name">{s.label}</span>
-                    <span className="count">
-                      {
-                        filtered.filter((i) => placements.get(i.id) === s.value)
-                          .length
+              {lanes.map((s, index) => {
+                const drop =
+                  laneDrag?.target === s.value && dragFrom >= 0 && dragFrom !== index
+                    ? index < dragFrom
+                      ? " lane-drop-before"
+                      : " lane-drop-after"
+                    : "";
+                const cards = filtered.filter(
+                  (i) => placements.get(i.id) === s.value,
+                );
+                return (
+                  <section
+                    className={`board-column${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}`}
+                    key={s.value}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (laneDrag)
+                        setLaneDrag((current) =>
+                          current &&
+                          (current.target !== s.value || !current.lifted)
+                            ? { ...current, target: s.value, lifted: true }
+                            : current,
+                        );
+                    }}
+                    onDragLeave={(e) => {
+                      if (
+                        !laneDrag ||
+                        e.currentTarget.contains(e.relatedTarget as Node | null)
+                      )
+                        return;
+                      setLaneDrag((current) =>
+                        current?.target === s.value
+                          ? { ...current, target: null }
+                          : current,
+                      );
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (laneDrag) {
+                        setLaneDrag(null);
+                        void reorderLane(laneDrag.lane, s.value);
+                        return;
                       }
-                    </span>
-                  </h2>
-                  {filtered
-                    .filter((i) => placements.get(i.id) === s.value)
-                    .map(issueCard)}
-                  {!filtered.some((i) => placements.get(i.id) === s.value) && (
-                    <p className="column-empty">No issues here yet</p>
-                  )}
-                </section>
-              ))}
+                      const i = boardIssues.find(
+                        (i) => i.id === e.dataTransfer.getData("text/plain"),
+                      );
+                      if (i) void move(i, s.value);
+                    }}
+                  >
+                    <h2
+                      draggable={canReorderLanes}
+                      title={
+                        canReorderLanes ? "Drag to reorder lanes" : undefined
+                      }
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData(LANE_DRAG_TYPE, s.value);
+                        const column = e.currentTarget.parentElement;
+                        if (column) {
+                          const box = column.getBoundingClientRect();
+                          e.dataTransfer.setDragImage(
+                            column,
+                            e.clientX - box.left,
+                            e.clientY - box.top,
+                          );
+                        }
+                        setLaneDrag({ lane: s.value, target: null, lifted: false });
+                      }}
+                      onDragEnd={() => setLaneDrag(null)}
+                    >
+                      {lanes.length > 1 && (
+                        <GripVertical size={13} className="lane-grip" />
+                      )}
+                      <span className={`lane-dot ${s.value}`} />
+                      <span className="lane-name">{s.label}</span>
+                      <span className="count">{cards.length}</span>
+                    </h2>
+                    {cards.map(issueCard)}
+                    {!cards.length && (
+                      <p className="column-empty">No issues here yet</p>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           </>
         ) : filtered.length ? (

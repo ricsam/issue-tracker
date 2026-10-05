@@ -735,6 +735,38 @@ fieldset > small {
   font-size: 11px;
   margin: 2px 3px 17px;
 }
+.board-column h2[draggable="true"] {
+  cursor: grab;
+}
+.board-column h2[draggable="true"]:active {
+  cursor: grabbing;
+}
+.lane-grip {
+  flex-shrink: 0;
+  margin: 0 -3px 0 -4px;
+  color: #cbbbd9;
+  transition: color 0.12s;
+}
+.board-column h2[draggable="true"]:hover .lane-grip {
+  color: #9581aa;
+}
+.board-column h2:not([draggable="true"]) .lane-grip {
+  opacity: 0.4;
+}
+/* The lane being dragged, and an insertion edge on the lane it will replace. */
+.board-column.is-lane-dragging {
+  opacity: 0.45;
+}
+.board-column.lane-drop-before,
+.board-column.lane-drop-after {
+  background: #eee7f8;
+}
+.board-column.lane-drop-before {
+  box-shadow: inset 3px 0 #7050d9;
+}
+.board-column.lane-drop-after {
+  box-shadow: inset -3px 0 #7050d9;
+}
 .board-column h2 .count {
   margin-left: auto;
   background: #ede7f4;
@@ -829,6 +861,9 @@ fieldset > small {
   gap: 24px;
 }
 .lane-management-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   border: 1px solid #e9e3f0;
   border-radius: 8px;
 }
@@ -849,6 +884,18 @@ fieldset > small {
 .lane-issue-count {
   font-size: 11px;
   white-space: nowrap;
+}
+.lane-order-buttons {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+/* Focusable at the ends of the list, but visibly unavailable. */
+.lane-order-buttons .icon-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: transparent;
+  color: #787383;
 }
 .available-lane-buttons {
   display: flex;
@@ -1483,6 +1530,13 @@ fieldset > small {
   }
   .board-column {
     min-height: 140px;
+  }
+  /* Lanes stack vertically, so insertion edges are top and bottom. */
+  .board-column.lane-drop-before {
+    box-shadow: inset 0 3px #7050d9;
+  }
+  .board-column.lane-drop-after {
+    box-shadow: inset 0 -3px #7050d9;
   }
   .issue-fields {
     grid-template-columns: 1fr;

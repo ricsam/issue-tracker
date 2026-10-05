@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 test("issues are label-only; boards explicitly place, move and remove work in lanes", async ({
   page,
@@ -390,3 +391,206 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(add.getByText(/No issues yet/)).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("lanes reorder by dragging their headings or from Manage lanes, and the order is shared", async ({
+  page,
+  baseURL,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const headers = { Origin: baseURL! };
+  const { setupRequired } = await (
+    await page.request.get("/api/auth/status")
+  ).json();
+  const auth = await page.request.post(
+    setupRequired ? "/api/auth/setup" : "/api/auth/login",
+    {
+      headers,
+      data: {
+        ...(setupRequired ? { name: "Alex Morgan" } : {}),
+        email: "alex@example.test",
+        password: "local-browser-test-password",
+      },
+    },
+  );
+  expect(auth.ok()).toBeTruthy();
+  const { project } = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "Lane order" },
+    })
+  ).json();
+  const endpoint = `/api/projects/${project.slug}/board`;
+  const review = { value: `custom_${randomUUID()}`, label: "In review" };
+  expect(
+    (
+      await page.request.patch(endpoint, {
+        headers,
+        data: {
+          lanes: ["todo", "in_progress", "done", review.value],
+          customLanes: [review],
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  for (const [body, lane] of [
+    ["Draft the plan", "todo"],
+    ["Ship the release", "done"],
+  ]) {
+    const { issue } = await (
+      await page.request.post(`/api/projects/${project.slug}/issues`, {
+        headers,
+        data: { body },
+      })
+    ).json();
+    expect(
+      (
+        await page.request.post(`${endpoint}/issues`, {
+          headers,
+          data: { issueIds: [issue.id], lane },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+  const savedLanes = async () =>
+    (await (await page.request.get(endpoint)).json()).board.lanes;
+  const names = page.locator(".board-column h2 .lane-name");
+  const heading = (name: string) =>
+    page.getByRole("heading", { name: new RegExp(`^${name}\\s*\\d+$`) });
+  const column = (name: string) =>
+    page.locator(".board-column").filter({ has: heading(name) });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/projects/${project.slug}/board`);
+  await expect(names).toHaveText(["Todo", "In progress", "Done", "In review"]);
+
+  // Dropping a lane on another puts it in that lane's place; cards travel with it.
+  await heading("Done").dragTo(column("Todo"));
+  await expect(names).toHaveText(["Done", "Todo", "In progress", "In review"]);
+  await heading("Todo").dragTo(column("In review"));
+  await expect(names).toHaveText(["Done", "In progress", "In review", "Todo"]);
+  await expect(column("Done").getByRole("link", { name: /Ship the release/ })).toBeVisible();
+  await expect(column("Todo").getByRole("link", { name: /Draft the plan/ })).toBeVisible();
+  expect(await savedLanes()).toEqual(["done", "in_progress", review.value, "todo"]);
+  await page.reload();
+  await expect(names).toHaveText(["Done", "In progress", "In review", "Todo"]);
+  await expect(
+    page.getByRole("combobox", { name: /Lane for issue #1/ }).locator("option"),
+  ).toHaveText(["Done", "In progress", "In review", "Todo"]);
+
+  // While dragging, the lane is dimmed and its destination edge is marked.
+  await dragHeadingOver(page, heading("In review"), column("In progress"));
+  await expect(column("In review")).toHaveClass(/is-lane-dragging/);
+  await expect(column("In progress")).toHaveClass(/lane-drop-before/);
+  await page.screenshot({ path: "test-results/lane-drag-desktop.png" });
+  await dragHeadingOver(page, null, column("Todo"));
+  await expect(column("Todo")).toHaveClass(/lane-drop-after/);
+  await expect(column("In progress")).not.toHaveClass(/lane-drop/);
+  await page.mouse.up();
+  await expect(names).toHaveText(["Done", "In progress", "Todo", "In review"]);
+  await expect(page.locator(".is-lane-dragging, [class*=lane-drop]")).toHaveCount(0);
+
+  // A failed save restores the previous order and explains why.
+  await page.route(`**${endpoint}/lanes/**`, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Test lane move failed" }),
+    }),
+  );
+  await heading("In review").dragTo(column("Done"));
+  await expect(page.getByRole("alert")).toHaveText("Test lane move failed");
+  await expect(names).toHaveText(["Done", "In progress", "Todo", "In review"]);
+  await page.unroute(`**${endpoint}/lanes/**`);
+  expect(await savedLanes()).toEqual(["done", "in_progress", "todo", review.value]);
+
+  // Manage lanes lists lanes in board order, with keyboard-friendly move buttons.
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes" });
+  const rows = settings.locator(".lane-management-row .lane-name");
+  const save = settings.getByRole("button", { name: "Save board", exact: true });
+  await expect(rows).toHaveText(["Done", "In progress", "Todo", "In review"]);
+  await expect(settings.getByRole("listitem")).toHaveCount(4);
+  await expect(settings.getByRole("button", { name: "Move Done lane up" })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Move In review lane down" })).toBeDisabled();
+  const todoUp = settings.getByRole("button", { name: "Move Todo lane up" });
+  await todoUp.click();
+  await expect(rows).toHaveText(["Done", "Todo", "In progress", "In review"]);
+  await expect(todoUp).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(rows).toHaveText(["Todo", "Done", "In progress", "In review"]);
+  await expect(settings.getByRole("status")).toHaveText("Todo moved to position 1 of 4.");
+  // At the top the button stays focused but unavailable, so repeats are no-ops.
+  await expect(todoUp).toBeFocused();
+  await expect(todoUp).toBeDisabled();
+  await page.keyboard.press("Enter");
+  await expect(rows).toHaveText(["Todo", "Done", "In progress", "In review"]);
+  // Moving a row down re-inserts its element; focus stays with it.
+  const doneDown = settings.getByRole("button", { name: "Move Done lane down" });
+  await doneDown.click();
+  await expect(rows).toHaveText(["Todo", "In progress", "Done", "In review"]);
+  await expect(doneDown).toBeFocused();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Space");
+  await expect(rows).toHaveText(["Todo", "In progress", "In review", "Done"]);
+  await expect(doneDown).toBeFocused();
+  await expect(doneDown).toBeDisabled();
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(names).toHaveText(["Done", "In progress", "Todo", "In review"]);
+
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Move Todo lane up" }).click();
+  await settings.getByRole("button", { name: "Move Todo lane up" }).click();
+  await settings.getByRole("button", { name: "Remove In progress lane", exact: true }).click();
+  await expect(rows).toHaveText(["Todo", "Done", "In review"]);
+  await save.click();
+  await expect(settings).toBeHidden();
+  await expect(names).toHaveText(["Todo", "Done", "In review"]);
+  expect(await savedLanes()).toEqual(["todo", "done", review.value]);
+  // Restored lanes join at the end, where they can be moved again.
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  await settings.getByRole("button", { name: "Add In progress lane", exact: true }).click();
+  await expect(rows).toHaveText(["Todo", "Done", "In review", "In progress"]);
+  await settings.getByRole("button", { name: "Move In progress lane up" }).click();
+  await settings.getByRole("button", { name: "Move In progress lane up" }).click();
+  await save.click();
+  await expect(settings).toBeHidden();
+  await page.reload();
+  await expect(names).toHaveText(["Todo", "In progress", "Done", "In review"]);
+  await page.getByRole("button", { name: "Add issues", exact: true }).click();
+  const add = page.getByRole("dialog", { name: "Add issues to board" });
+  const addLane = add.getByLabel("Lane", { exact: true });
+  await expect(addLane).toHaveValue("todo");
+  await expect(addLane.locator("option")).toHaveText(["Todo", "In progress", "Done", "In review"]);
+  await add.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  // The move buttons fit on a phone, where lanes stack vertically.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Manage lanes" }).click();
+  expect(
+    await settings.evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBeTruthy();
+  for (const row of await settings.locator(".lane-management-row").all()) {
+    const box = (await row.boundingBox())!;
+    expect(box.height).toBeLessThan(60);
+  }
+  await page.screenshot({ path: "test-results/lane-order-mobile.png" });
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "test-results/lane-order-desktop.png", fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+// Hold a lane heading over a target without dropping it (null keeps dragging).
+async function dragHeadingOver(
+  page: Page,
+  source: Locator | null,
+  target: Locator,
+) {
+  if (source) {
+    const from = (await source.boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+  }
+  const to = (await target.boundingBox())!;
+  await page.mouse.move(to.x + to.width / 2, to.y + 120, { steps: 8 });
+}
