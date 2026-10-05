@@ -7,8 +7,16 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  CircleCheck,
+  CircleDot,
   Columns3,
   List,
   Plus,
@@ -40,6 +48,11 @@ import { RichEditor } from "../components/rich-editor";
 import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { IssueDetails } from "./detail";
+import {
+  ArchiveProjectButton,
+  ArchivedProjectNotice,
+  ClosedTag,
+} from "../components/lifecycle";
 import { useDesktopIssues } from "../lib/use-desktop-issues";
 import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
 
@@ -72,6 +85,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const { refresh, users } = useWorkspace();
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
+  const showClosed = useSearchParams()[0].get("state") === "closed";
   const desktop = useDesktopIssues();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pending = useRef(false);
@@ -266,8 +280,10 @@ function ProjectIssues({ slug }: { slug: string }) {
         <Button onClick={() => setRetry((v) => v + 1)}>Retry</Button>
       </>
     );
+  // Archived projects are read-only until restored.
+  const readOnly = !!project.archivedAt;
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes);
-  const canReorderLanes = lanes.length > 1 && !saving;
+  const canReorderLanes = lanes.length > 1 && !saving && !readOnly;
   const dragFrom = laneDrag
     ? lanes.findIndex((lane) => lane.value === laneDrag.lane)
     : -1;
@@ -278,7 +294,11 @@ function ProjectIssues({ slug }: { slug: string }) {
   const hiddenCount = boardIssues.filter(
     (issue) => !boardSettings.lanes.includes(placements.get(issue.id)!),
   ).length;
-  const filtered = (board ? boardIssues : issues).filter(
+  // Closed issues keep their board placement but leave the open list.
+  const openIssues = issues.filter((issue) => issue.state === "open");
+  const closedIssues = issues.filter((issue) => issue.state === "closed");
+  const listIssues = showClosed ? closedIssues : openIssues;
+  const filtered = (board ? boardIssues : listIssues).filter(
     (i) =>
       (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
       `${i.title} ${i.number} ${i.labels.join(" ")}`
@@ -289,8 +309,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     return (
       <article
         key={i.id}
-        className={`${board ? "board-card" : "issue-row"}${selectedId === i.id ? " is-selected" : ""}`}
-        draggable={board && !saving}
+        className={`${board ? "board-card" : "issue-row"}${selectedId === i.id ? " is-selected" : ""}${i.state === "closed" ? " is-closed" : ""}`}
+        draggable={board && !saving && !readOnly}
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", i.id);
           e.dataTransfer.effectAllowed = "move";
@@ -310,6 +330,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           <strong>{i.title}</strong>
         </Link>
         <div className="issue-meta">
+          {i.state === "closed" && <ClosedTag />}
           {i.labels.slice(0, 3).map((l) => (
             <span className="tag" key={l}>
               {l}
@@ -329,7 +350,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 aria-label={`Lane for issue #${i.number}: ${i.title}`}
                 className="compact-select"
                 value={placements.get(i.id)}
-                disabled={!!saving}
+                disabled={!!saving || readOnly}
                 onChange={(e) => void move(i, e.target.value as Lane)}
               >
                 {lanes.map((lane) => (
@@ -343,7 +364,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 className="icon-button"
                 aria-label={`Remove issue #${i.number} from board`}
                 title="Remove from board (keeps the issue)"
-                disabled={!!saving}
+                disabled={!!saving || readOnly}
                 onClick={() => void removeFromBoard(i)}
               >
                 <X size={15} />
@@ -368,17 +389,25 @@ function ProjectIssues({ slug }: { slug: string }) {
               {project.description || "Every step forward starts here."}
             </p>
           </div>
-          <Button
-            onClick={() => {
-              setBody("");
-              setCreateError("");
-              setOpen(true);
-            }}
-          >
-            <Plus size={16} />
-            Create issue
-          </Button>
+          {!readOnly && (
+            <div className="page-actions">
+              <ArchiveProjectButton project={project} onChange={setProject} />
+              <Button
+                onClick={() => {
+                  setBody("");
+                  setCreateError("");
+                  setOpen(true);
+                }}
+              >
+                <Plus size={16} />
+                Create issue
+              </Button>
+            </div>
+          )}
         </header>
+        {readOnly && (
+          <ArchivedProjectNotice project={project} onChange={setProject} />
+        )}
         <div className="filter-bar">
           <div className="view-toggle">
             <Link className={!board ? "active" : ""} to={`/projects/${slug}`}>
@@ -393,6 +422,27 @@ function ProjectIssues({ slug }: { slug: string }) {
               Board
             </Link>
           </div>
+          {!board && (
+            <nav className="view-toggle" aria-label="Issue state">
+              <Link
+                className={!showClosed ? "active" : ""}
+                aria-current={!showClosed ? "page" : undefined}
+                to={`/projects/${slug}`}
+              >
+                <CircleDot size={15} />
+                Open <span className="toggle-count">{openIssues.length}</span>
+              </Link>
+              <Link
+                className={showClosed ? "active" : ""}
+                aria-current={showClosed ? "page" : undefined}
+                to={`/projects/${slug}?state=closed`}
+              >
+                <CircleCheck size={15} />
+                Closed{" "}
+                <span className="toggle-count">{closedIssues.length}</span>
+              </Link>
+            </nav>
+          )}
           <div className="search-field">
             <Search size={16} />
             <input
@@ -404,12 +454,15 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
           {board && (
             <>
-              <Button disabled={!!saving} onClick={() => setAddToBoard(true)}>
+              <Button
+                disabled={!!saving || readOnly}
+                onClick={() => setAddToBoard(true)}
+              >
                 <Plus size={15} /> Add issues
               </Button>
               <Button
                 variant="secondary"
-                disabled={!!saving}
+                disabled={!!saving || readOnly}
                 onClick={() => setConfigureBoard(true)}
               >
                 <SlidersHorizontal size={15} /> Manage lanes
@@ -519,7 +572,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                       }}
                       onDragEnd={() => setLaneDrag(null)}
                     >
-                      {lanes.length > 1 && (
+                      {lanes.length > 1 && !readOnly && (
                         <GripVertical size={13} className="lane-grip" />
                       )}
                       <span className={`lane-dot ${s.value}`} />
@@ -540,11 +593,25 @@ function ProjectIssues({ slug }: { slug: string }) {
         ) : (
           <section className="empty-state compact">
             <Inbox size={32} />
-            <h2>{issues.length ? "No matching issues" : "A clean slate"}</h2>
+            <h2>
+              {!issues.length
+                ? "A clean slate"
+                : listIssues.length
+                  ? "No matching issues"
+                  : showClosed
+                    ? "No closed issues"
+                    : "No open issues"}
+            </h2>
             <p>
-              {issues.length
-                ? "Try a different search."
-                : "Create your first issue and start making progress."}
+              {!issues.length
+                ? readOnly
+                  ? "This archived project has no issues."
+                  : "Create your first issue and start making progress."
+                : listIssues.length
+                  ? "Try a different search."
+                  : showClosed
+                    ? "Closed issues will appear here."
+                    : "Every issue here is closed. Nice work."}
             </p>
           </section>
         )}

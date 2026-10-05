@@ -1,5 +1,6 @@
 export type Role = "admin" | "member";
 export type Lane = string;
+export type IssueState = "open" | "closed";
 export interface BoardLane {
   value: Lane;
   label: string;
@@ -17,6 +18,9 @@ export interface Project {
   name: string;
   description: string;
   createdAt: string;
+  /** Archived projects are hidden from navigation and read-only until restored. */
+  archivedAt: string | null;
+  archivedById: string | null;
   issueCount: number;
   openCount: number;
 }
@@ -38,6 +42,10 @@ export interface Issue {
   labels: string[];
   assigneeId: string | null;
   authorId: string;
+  /** Derived from closedAt; closing never changes board membership or lanes. */
+  state: IssueState;
+  closedAt: string | null;
+  closedById: string | null;
   createdAt: string;
   updatedAt: string;
 }

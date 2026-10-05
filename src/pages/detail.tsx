@@ -1,11 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MessageSquare, Save } from "lucide-react";
-import type { Issue, IssueDetail, Comment } from "../../shared/types";
+import {
+  Archive,
+  ArrowLeft,
+  CircleCheck,
+  MessageSquare,
+  RotateCcw,
+  Save,
+} from "lucide-react";
+import type {
+  Issue,
+  IssueDetail,
+  IssueState,
+  Comment,
+} from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { RichEditor } from "../components/rich-editor";
+import { Markdown } from "../components/markdown";
+import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
 import {
   parseLabels,
@@ -37,6 +51,7 @@ export function IssueDetails({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changingState, setChangingState] = useState(false);
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saved, setSaved] = useState("");
@@ -48,7 +63,7 @@ export function IssueDetails({
     (issue.body !== persisted.body ||
       issue.assigneeId !== persisted.assigneeId ||
       labels !== persisted.labels.join(", "));
-  const pending = dirty || !!comment.trim() || busy || posting;
+  const pending = dirty || !!comment.trim() || busy || posting || changingState;
   useEffect(() => {
     onPendingChange?.(pending);
     return () => onPendingChange?.(false);
@@ -107,6 +122,29 @@ export function IssueDetails({
       setBusy(false);
     }
   }
+  // Close/reopen immediately without saving or discarding other unsaved edits.
+  async function changeState(state: IssueState) {
+    setChangingState(true);
+    setError("");
+    setSaved("");
+    try {
+      const result = await api<{ issue: Issue }>(`/api/issues/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ state }),
+      });
+      const { closedAt, closedById, updatedAt } = result.issue;
+      const lifecycle = { state: result.issue.state, closedAt, closedById, updatedAt };
+      setIssue((v) => (v ? { ...v, ...lifecycle } : v));
+      setPersisted((v) => (v ? { ...v, ...lifecycle } : v));
+      onSaved?.(result.issue);
+      setSaved(state === "closed" ? "Issue closed" : "Issue reopened");
+      await refresh();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setChangingState(false);
+    }
+  }
   async function post(e: FormEvent) {
     e.preventDefault();
     if (!comment.trim()) return;
@@ -135,6 +173,9 @@ export function IssueDetails({
       </>
     );
   const project = projects.find((p) => p.id === issue.projectId);
+  const archived = !!project?.archivedAt;
+  const closed = issue.state === "closed";
+  const closer = users.find((u) => u.id === issue.closedById)?.name;
   return (
     <div className="detail-container">
       {!embedded && (
@@ -147,29 +188,71 @@ export function IssueDetails({
           <span>/</span>Issue #{issue.number}
         </Link>
       )}
+      {archived && (
+        <p className="read-only-note">
+          <Archive size={15} />
+          <span>
+            This issue belongs to an archived project and is read-only.{" "}
+            {!embedded && project && (
+              <Link to={`/projects/${project.slug}`}>
+                Restore the project to make changes.
+              </Link>
+            )}
+          </span>
+        </p>
+      )}
       <ErrorNotice error={error} />
       <form onSubmit={save} className="detail-form">
-        <fieldset disabled={busy}>
+        <fieldset
+          disabled={busy || changingState || archived}
+          className={archived ? "is-read-only" : undefined}
+        >
           <div className="detail-heading">
-            <span className="eyebrow">ISSUE #{issue.number}</span>
-            <div className="save-actions">
-              <span role="status" className="success">
-                {saved}
-              </span>
-              <Button disabled={busy}>
-                <Save size={15} />
-                {busy ? "Saving…" : "Save changes"}
-              </Button>
+            <div className="detail-title">
+              <span className="eyebrow">ISSUE #{issue.number}</span>
+              <IssueStateBadge state={issue.state} />
             </div>
+            {!archived && (
+              <div className="save-actions">
+                <span role="status" className="success">
+                  {saved}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy || changingState}
+                  onClick={() => void changeState(closed ? "open" : "closed")}
+                >
+                  {closed ? <RotateCcw size={15} /> : <CircleCheck size={15} />}
+                  {changingState
+                    ? closed
+                      ? "Reopening…"
+                      : "Closing…"
+                    : closed
+                      ? "Reopen issue"
+                      : "Close issue"}
+                </Button>
+                <Button disabled={busy || changingState}>
+                  <Save size={15} />
+                  {busy ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            )}
           </div>
           <div className="detail-grid">
             <section>
-              <RichEditor
-                value={issue.body}
-                onChange={(body) => update({ body })}
-                ariaLabel="Issue"
-                placeholder="What needs to happen? Just start writing…"
-              />
+              {archived ? (
+                <article className="issue-read-only" aria-label="Issue">
+                  <Markdown>{issue.body}</Markdown>
+                </article>
+              ) : (
+                <RichEditor
+                  value={issue.body}
+                  onChange={(body) => update({ body })}
+                  ariaLabel="Issue"
+                  placeholder="What needs to happen? Just start writing…"
+                />
+              )}
             </section>
             <aside className="properties">
               <h2>Properties</h2>
@@ -190,6 +273,12 @@ export function IssueDetails({
                 {" · by "}
                 {users.find((u) => u.id === issue.authorId)?.name ||
                   "a teammate"}
+                {issue.closedAt && (
+                  <span className="closed-meta">
+                    Closed {new Date(issue.closedAt).toLocaleDateString()}
+                    {closer && ` · by ${closer}`}
+                  </span>
+                )}
               </small>
             </aside>
           </div>
@@ -207,6 +296,7 @@ export function IssueDetails({
           <CommentItem
             key={c.id}
             comment={c}
+            readOnly={archived}
             onUpdate={(updated) =>
               setComments((v) =>
                 v.map((item) => (item.id === updated.id ? updated : item)),
@@ -217,22 +307,24 @@ export function IssueDetails({
             }
           />
         ))}
-        <form className="form-stack" onSubmit={post}>
-          <fieldset disabled={posting}>
-            <legend className="field-label">Add a comment</legend>
-            <RichEditor
-              value={comment}
-              onChange={setComment}
-              placeholder="Share an update or ask a question…"
-              minimal
-            />
-            <div className="form-actions">
-              <Button disabled={posting || !comment.trim()}>
-                {posting ? "Posting…" : "Post comment"}
-              </Button>
-            </div>
-          </fieldset>
-        </form>
+        {!archived && (
+          <form className="form-stack" onSubmit={post}>
+            <fieldset disabled={posting}>
+              <legend className="field-label">Add a comment</legend>
+              <RichEditor
+                value={comment}
+                onChange={setComment}
+                placeholder="Share an update or ask a question…"
+                minimal
+              />
+              <div className="form-actions">
+                <Button disabled={posting || !comment.trim()}>
+                  {posting ? "Posting…" : "Post comment"}
+                </Button>
+              </div>
+            </fieldset>
+          </form>
+        )}
       </section>
     </div>
   );

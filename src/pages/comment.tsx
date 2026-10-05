@@ -8,10 +8,13 @@ import { Markdown } from "../components/markdown";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
 export function CommentItem({
   comment,
+  readOnly = false,
   onUpdate,
   onDelete,
 }: {
   comment: Comment;
+  /** Archived projects keep comments visible but not editable. */
+  readOnly?: boolean;
   onUpdate: (comment: Comment) => void;
   onDelete: () => void;
 }) {
@@ -22,7 +25,8 @@ export function CommentItem({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const author = users.find((u) => u.id === comment.authorId);
-  const allowed = user.id === comment.authorId || user.role === "admin";
+  const allowed =
+    !readOnly && (user.id === comment.authorId || user.role === "admin");
   async function save() {
     setBusy(true);
     setError("");

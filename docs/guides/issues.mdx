@@ -3,7 +3,7 @@ title: Issues
 description: Create actionable issues, update their properties, and discuss work with your team.
 ---
 
-An issue holds one Markdown body, status, priority, labels, and one optional assignee.
+An issue holds one Markdown body, labels, one optional assignee, and an open or closed state.
 Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
 All authenticated users can read and update issues across all projects.
@@ -13,11 +13,10 @@ All authenticated users can read and update issues across all projects.
 1. Open the project that should contain the work.
 2. Select **Create issue** from either **List** or **Board**.
 3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
-4. Choose a status, priority, and assignee, and optionally enter comma-separated labels.
-5. If the board uses an explicit issue selection, review **Add to board**: it starts checked when creating from **Board**, and unchecked from **List**. Boards showing all issues include new issues automatically and do not show this checkbox.
-6. Select **Create issue** to save and open the issue detail page.
+4. Optionally enter comma-separated labels.
+5. Select **Create issue** to save and open the issue detail page.
 
-New issues default to **No priority** and **Unassigned**. The initial status is **Backlog** from the list, or the first visible lane from the board.
+New issues are open and **Unassigned**, and stay off the board until you [add them to it](/guides/board).
 The issue body must contain non-whitespace content; labels may be empty.
 Numbers are allocated within each project, not across the entire workspace.
 
@@ -27,8 +26,7 @@ Numbers are allocated within each project, not across the entire workspace.
 | --- | --- |
 | Issue body | Required Markdown; up to 101,000 characters |
 | Display title | Derived from the body; up to 300 characters |
-| Status | Backlog, Todo, In progress, Done |
-| Priority | No priority, Low, Medium, High, Urgent |
+| State | Open or Closed |
 | Assignee | One existing workspace user, or Unassigned |
 | Labels | Up to 30 entries, each up to 50 characters |
 
@@ -55,8 +53,8 @@ Wait for **Changes saved** before leaving the page.
 Edits on the detail page are not automatically saved.
 
 <Note>
-  The status menu on a list row or board card saves immediately.
-  On the issue detail page, status is saved with **Save changes**, like the other properties.
+  **Close issue** and **Reopen issue** save immediately.
+  They neither save nor discard other unsaved edits on the page.
 </Note>
 
 Use [rich text and Markdown](/guides/rich-text) for structured issue bodies.
@@ -67,14 +65,15 @@ Wait for an upload to finish before saving the surrounding content.
 
 Within a project, **Search issues** matches title text, issue numbers, and labels without case sensitivity.
 It does not search the full issue body or comments.
-Combine search with **Filter by status** to narrow the results.
-Clear the search and choose **All statuses** if an expected issue is missing.
+The list shows **Open** issues by default; select **Closed** to see closed ones.
+Search applies within the selected state, so check **Closed** if an expected issue is missing.
 
 ## Add to the discussion
 
 Write in **Add a comment**, then select **Post comment**.
 Comments must contain non-whitespace content and may be up to 100,000 characters.
 Posting a comment is separate from saving changes to the issue itself.
+Closed issues still accept comments.
 
 The comment author and administrators can select **Edit comment**, then **Save comment**.
 They can also select **Delete comment** and confirm with **Confirm delete**.
@@ -86,9 +85,16 @@ Other members can read the discussion and post their own comments, but cannot ed
   Deleting a comment does not remove its uploaded files.
 </Warning>
 
-## Finish or reopen work
+## Close or reopen an issue
 
-Set the issue to **Done** when the work is complete.
-It remains available in the project and still counts toward the total issue count.
-Choose another status to reopen it; there is no separate close or reopen action.
+Select **Close issue** in the issue details when the work is finished or no longer needed.
+The issue shows a **Closed** badge, records who closed it and when, and moves from **Open** to **Closed** in the list.
+It keeps its content and comments, can still be edited, and still counts toward the project's total issue count.
+Select **Reopen issue** to return it to the open list.
+
+Closing never changes the board: a closed issue keeps its lane, and its card shows a **Closed** tag.
+Move the card to **Done** or remove it from the board if you want it out of the way.
+**Add issues** offers only open issues.
 For a visual workflow, continue with [the board guide](/guides/board).
+
+Issues in an [archived project](/guides/projects#archive-a-project) are read-only, including their state, until the project is restored.

@@ -1035,9 +1035,118 @@ fieldset > small {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  /* Keep the heading actions clear of the editor and properties card. */
+  margin-bottom: 18px;
 }
 .detail-heading .eyebrow {
   margin: 0;
+}
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 3px 9px 3px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2f7a5f;
+  background: #e8f5ef;
+  border: 1px solid #cfe9dd;
+}
+.state-badge.closed {
+  color: #6447c4;
+  background: #f0ebfc;
+  border-color: #dfd5f7;
+}
+.closed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #6447c4;
+  background: #f0ebfc;
+  border-color: #dfd5f7;
+}
+.board-card.is-closed .issue-link strong {
+  color: #8a8496;
+}
+.closed-meta {
+  display: block;
+}
+.issue-read-only {
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: #fff;
+  padding: 18px 20px;
+  min-height: 120px;
+}
+fieldset.is-read-only:disabled {
+  opacity: 1;
+}
+.read-only-note {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+  color: #6f6680;
+  background: #f6f3f9;
+  border: 1px solid #ebe4f1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+}
+.read-only-note svg {
+  margin-top: 3px;
+}
+.read-only-note a {
+  color: #6447c4;
+  text-decoration: underline;
+}
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.archived-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #f6f3f9;
+  border: 1px solid #e6def1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+  color: #705a87;
+}
+.archived-notice > div {
+  flex: 1;
+  min-width: 0;
+}
+.archived-notice strong {
+  font-size: 13px;
+  color: #4f3d66;
+}
+.archived-notice p {
+  font-size: 12px;
+  margin-top: 2px;
+}
+.view-toggle .toggle-count {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.8;
+}
+.project-card.is-archived {
+  background: #fbfafd;
+}
+.project-card.is-archived .project-icon {
+  color: #8f86a0;
+  background: #f0edf4;
 }
 .save-actions {
   display: flex;
@@ -1563,6 +1672,23 @@ fieldset > small {
     gap: 19px;
   }
   .page-heading > .btn {
+    width: 100%;
+  }
+  .page-actions {
+    width: 100%;
+  }
+  .page-actions .btn {
+    flex: 1;
+  }
+  .archived-notice {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  /* Text keeps the first row beside the icon; the action wraps below it. */
+  .archived-notice > div {
+    flex-basis: calc(100% - 32px);
+  }
+  .archived-notice .btn {
     width: 100%;
   }
 }

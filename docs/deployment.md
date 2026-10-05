@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.4.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.5.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.5.0
+
+Version 0.5.0 adds closing and reopening issues, archiving and restoring projects, and lane reordering. `Issue` responses now include `state`, `closedAt`, and `closedById`, and `Project` responses include `archivedAt` and `archivedById`. Issue PATCH accepts `state`, the new `PATCH /api/projects/:slug` archives or restores a project, and issue, comment, and board writes in an archived project return 409. Board PATCH now stores lanes in the submitted order, and `PATCH /api/projects/:slug/board/lanes/:lane` moves one lane. See [the API contract](api-contract.md).
+
+Migration v6 adds nullable issue close and project archive columns, so existing issues stay open and projects stay active. Upgrading directly from 0.3.0 also runs migration v5, described below.
+
+Take a consistent `/data` backup before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** earlier versions cannot create issues or projects against the migrated schema. If recovery is necessary, stop the application and restore the pre-upgrade data backup together with the previous image/chart and the same encryption-key Secret. Restoring that backup discards any writes made after it, so inspect and preserve newer data before recovery.
 
 ### Upgrading to 0.4.0
 

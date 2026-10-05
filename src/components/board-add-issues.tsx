@@ -29,7 +29,10 @@ export function BoardAddIssuesDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const placed = new Set(settings.cards.map((card) => card.issueId));
-  const available = issues.filter((issue) => !placed.has(issue.id));
+  // Boards plan open work; a closed issue must be reopened before it is added.
+  const available = issues.filter(
+    (issue) => !placed.has(issue.id) && issue.state === "open",
+  );
   const matches = available.filter((issue) =>
     `${issue.number} ${issue.title} ${issue.labels.join(" ")}`
       .toLowerCase()
@@ -116,7 +119,8 @@ export function BoardAddIssuesDialog({
             </Button>
           </div>
           <p className="settings-help muted" role="status">
-            {selected.size} selected · {available.length} issues not on board
+            {selected.size} selected · {available.length} open issues not on
+            board
           </p>
           <div className="board-issue-options">
             {matches.map((issue) => (
@@ -146,9 +150,11 @@ export function BoardAddIssuesDialog({
               <p className="column-empty">
                 {available.length
                   ? "No matching issues. Try another search."
-                  : issues.length
-                    ? "All existing issues are already on the board."
-                    : "No issues yet. Create an issue first, then add it here."}
+                  : !issues.length
+                    ? "No issues yet. Create an issue first, then add it here."
+                    : issues.some((issue) => issue.state === "open")
+                      ? "All open issues are already on the board."
+                      : "No open issues to add. Reopen an issue to plan it again."}
               </p>
             )}
           </div>

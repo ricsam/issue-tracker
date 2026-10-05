@@ -147,6 +147,8 @@ function AppContent() {
         )}
       </main>
     );
+  // Archived projects stay in workspace data for links/details, not navigation.
+  const activeProjects = projects.filter((p) => !p.archivedAt);
   return (
     <WorkspaceContext.Provider
       value={{ user: auth.user, users, projects, refresh }}
@@ -191,10 +193,10 @@ function AppContent() {
               All projects
             </NavLink>
             <div className="nav-label">
-              PROJECTS <span>{projects.length}</span>
+              PROJECTS <span>{activeProjects.length}</span>
             </div>
             <div className="project-nav">
-              {projects.map((p) => (
+              {activeProjects.map((p) => (
                 <NavLink
                   key={p.id}
                   to={`/projects/${p.slug}`}
@@ -204,8 +206,12 @@ function AppContent() {
                   <span>{p.name}</span>
                 </NavLink>
               ))}
-              {!projects.length && (
-                <p className="sidebar-empty">Your projects will appear here.</p>
+              {!activeProjects.length && (
+                <p className="sidebar-empty">
+                  {projects.length
+                    ? "Archived projects are under All projects."
+                    : "Your projects will appear here."}
+                </p>
               )}
             </div>
           </nav>

@@ -3,7 +3,7 @@ title: Projects
 description: Organize shared work into projects and understand progress at a glance.
 ---
 
-Projects group related issues into a list and a status board.
+Projects group related issues into a list and a board.
 Use a project for a product, a team initiative, or a clearly scoped body of work.
 
 <Warning>
@@ -35,13 +35,10 @@ Recipients must sign in to access its data.
 
 ## Read the project overview
 
-Each project card shows its name, description, open issue count, and total issue count.
-The progress bar reflects the proportion of issues marked **Done**.
-A project with no issues has an empty progress bar.
-
-An issue is considered open when its status is **Backlog**, **Todo**, or **In progress**.
-Moving an issue to **Done** reduces the open count without deleting the issue.
-Moving it back to another status makes it open again.
+Each project card shows its name, description, unfinished board work, and total issue count.
+Unfinished work counts open issues on the board outside the built-in **Done** lane, including cards in hidden lanes.
+Closing an issue or moving its card to **Done** reduces that count without deleting anything.
+Issues that are not on the board count only toward the total.
 
 <Tip>
   Keep the description focused on the project's purpose.
@@ -54,20 +51,33 @@ Open a project card, then select **Create issue** to add the first task.
 Issues receive numbers within their project, so two projects can each contain an issue numbered `#1`.
 Include the project name or share the full issue URL when referring to a number.
 
-Use **List** for scanning titles and properties.
-Use **Board** to group issues by status. It initially includes all current and future project issues.
-Use **Configure board** to save a shared explicit issue selection and choose visible status lanes (at least one).
-Hidden-lane issues remain selected, and board settings do not affect the list or project counts.
-Both views offer title, number, and label search plus a status filter.
+Use **List** to scan **Open** or **Closed** issues.
+Use **Board** to plan selected work in lanes; see [the board guide](/guides/board).
+Both views offer title, number, and label search.
 Neither view creates a separate copy of the project's issues.
+
+## Archive a project
+
+Archive a project when its work is finished but you want to keep it for reference.
+
+1. Open the project.
+2. Select **Archive**, then confirm with **Archive project**.
+
+Archived projects leave the sidebar and the default project list.
+Find them under **All projects** by selecting **Archived**.
+They stay readable, including issues, comments, and the board, but are read-only: nobody can create or edit issues, close or reopen them, comment, or change the board.
+Open issues stay open; archiving does not close them.
+
+To work in the project again, open it and select **Restore project**.
+Any signed-in member can archive or restore a project.
 
 ## Plan for retained projects
 
-The current release has no project delete or archive action.
+The current release has no project delete action.
 It also does not expose an issue move between projects.
 Create projects deliberately rather than treating them as disposable folders.
 
-When work finishes, mark its issues **Done** and retain the project as a reference.
+When work finishes, close its issues and archive the project to keep it as a reference.
 Do not use project organization to separate information that different users must not see.
 Review [current limitations](/admin/limitations) before inviting a broader audience.
 
@@ -76,6 +86,6 @@ Review [current limitations](/admin/limitations) before inviting a broader audie
     Capture context, assign work, and keep discussion with the task.
   </Card>
   <Card title="Use the board" href="/guides/board">
-    Move work through the four built-in statuses.
+    Plan and move work through lanes.
   </Card>
 </CardGroup>

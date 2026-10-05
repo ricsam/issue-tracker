@@ -138,5 +138,26 @@ export function openDatabase(path: string) {
       INSERT INTO migrations VALUES (5);
     `);
   }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=6").get())
+      return;
+    // Additive lifecycle columns: NULL keeps every existing issue open and every
+    // project active. Each column is added only when missing, so replaying this
+    // version over a schema that already has them is safe.
+    const additions = [
+      ["issues", "closedAt", "TEXT"],
+      ["issues", "closedById", "TEXT REFERENCES users(id)"],
+      ["projects", "archivedAt", "TEXT"],
+      ["projects", "archivedById", "TEXT REFERENCES users(id)"],
+    ] as const;
+    for (const [table, column, definition] of additions) {
+      const columns = db.query(`PRAGMA table_info(${table})`).all() as {
+        name: string;
+      }[];
+      if (!columns.some((c) => c.name === column))
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+    db.query("INSERT INTO migrations VALUES (6)").run();
+  }).immediate();
   return db;
 }

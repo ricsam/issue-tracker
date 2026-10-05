@@ -62,8 +62,12 @@ const issueFields = z
   })
   .strict();
 const issueUpdateFields = issueFields
-  .extend({ assigneeId: z.string().uuid().nullable() })
+  .extend({
+    assigneeId: z.string().uuid().nullable(),
+    state: z.enum(["open", "closed"]),
+  })
   .partial();
+const projectUpdateFields = z.object({ archived: z.boolean() }).strict();
 const laneField = z.string().min(1).max(100);
 const customLaneField = z.object({
   value: z.string().regex(/^custom_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
@@ -79,7 +83,7 @@ const boardFields = z
     customLanes: z.array(customLaneField).max(30).optional(),
   })
   .strict();
-const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b WHERE b.projectId=p.id AND b.lane != 'done') AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
+const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
 
 export function createApp(options: AppOptions = {}) {
   const production =
@@ -162,17 +166,35 @@ export function createApp(options: AppOptions = {}) {
   const issue = (issueId: string): Issue => {
     const row = db
       .query(
-        "SELECT id,number,projectId,title,body,labels,assigneeId,authorId,createdAt,updatedAt FROM issues WHERE id=?",
+        "SELECT id,number,projectId,title,body,labels,assigneeId,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
     if (!row) return fail(404, "Issue not found");
-    return { ...row, labels: JSON.parse(row.labels) };
+    return {
+      ...row,
+      labels: JSON.parse(row.labels),
+      state: row.closedAt ? "closed" : "open",
+    };
   };
   const project = (slug: string) => {
     const row = db
       .query(`${projectSql} WHERE p.slug=? GROUP BY p.id`)
       .get(slug) as Project | null;
     return row ?? fail(404, "Project not found");
+  };
+  // Archived projects stay readable but reject content and board changes until restored.
+  const activeProject = (slug: string) => {
+    const p = project(slug);
+    if (p.archivedAt) fail(409, "Project is archived");
+    return p;
+  };
+  const activeIssue = (issueId: string) => {
+    const i = issue(issueId);
+    const { archivedAt } = db
+      .query("SELECT archivedAt FROM projects WHERE id=?")
+      .get(i.projectId) as { archivedAt: string | null };
+    if (archivedAt) fail(409, "Project is archived");
+    return i;
   };
   const board = (projectId: string): BoardSettings => {
     const row = db
@@ -452,23 +474,33 @@ export function createApp(options: AppOptions = {}) {
         .slice(0, 70) || "project") +
       "-" +
       randomBytes(4).toString("hex");
-    db.query("INSERT INTO projects VALUES (?,?,?,?,?)").run(
-      id(),
-      slug,
-      input.name,
-      input.description,
-      now(),
-    );
+    db.query(
+      "INSERT INTO projects (id,slug,name,description,createdAt) VALUES (?,?,?,?,?)",
+    ).run(id(), slug, input.name, input.description, now());
     return c.json({ project: project(slug) });
   });
   app.get("/api/projects/:slug", (c) =>
     c.json({ project: project(c.req.param("slug")) }),
   );
+  app.patch("/api/projects/:slug", async (c) => {
+    const p = project(c.req.param("slug"));
+    const { archived } = projectUpdateFields.parse(await json(c));
+    // Conditional writes keep repeated archive requests idempotent.
+    if (archived)
+      db.query(
+        "UPDATE projects SET archivedAt=?,archivedById=? WHERE id=? AND archivedAt IS NULL",
+      ).run(now(), c.get("user").id, p.id);
+    else
+      db.query(
+        "UPDATE projects SET archivedAt=NULL,archivedById=NULL WHERE id=?",
+      ).run(p.id);
+    return c.json({ project: project(p.slug) });
+  });
   app.get("/api/projects/:slug/board", (c) =>
     c.json({ board: board(project(c.req.param("slug")).id) }),
   );
   app.patch("/api/projects/:slug/board", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const input = boardFields.parse(await json(c));
     db.transaction(() => {
       const customLanes = [...board(p.id).customLanes];
@@ -501,7 +533,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.patch("/api/projects/:slug/board/lanes/:lane", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const lane = c.req.param("lane");
     const { index } = z
       .object({ index: z.number().int().min(0) })
@@ -525,7 +557,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.post("/api/projects/:slug/board/issues", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const input = z
       .object({
         issueIds: z
@@ -565,7 +597,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const { lane } = z
       .object({ lane: laneField })
       .strict()
@@ -587,7 +619,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.delete("/api/projects/:slug/board/issues/:id", (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const result = db
       .query("DELETE FROM board_issues WHERE projectId=? AND issueId=?")
       .run(p.id, c.req.param("id"));
@@ -602,7 +634,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ issues: rows.map((r) => issue(r.id)) });
   });
   app.post("/api/projects/:slug/issues", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"));
     const input = issueFields.parse(await json(c));
     const body =
       input.title === undefined
@@ -618,7 +650,9 @@ export function createApp(options: AppOptions = {}) {
           "SELECT COALESCE(MAX(number),0)+1 AS n FROM issues WHERE projectId=?",
         )
         .get(p.id) as { n: number };
-      db.query("INSERT INTO issues VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").run(
+      db.query(
+        "INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,assigneeId,authorId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+      ).run(
         uid,
         n.n,
         p.id,
@@ -644,7 +678,7 @@ export function createApp(options: AppOptions = {}) {
     }),
   );
   app.patch("/api/issues/:id", async (c) => {
-    const current = issue(c.req.param("id"));
+    const current = activeIssue(c.req.param("id"));
     const raw = await json(c);
     const parsed = issueUpdateFields.parse(raw);
     const input = Object.fromEntries(
@@ -672,20 +706,31 @@ export function createApp(options: AppOptions = {}) {
           : current.title,
       updatedAt: now(),
     };
-    db.query(
-      "UPDATE issues SET title=?,body=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
-    ).run(
-      merged.title,
-      merged.body,
-      JSON.stringify(merged.labels),
-      merged.assigneeId,
-      merged.updatedAt,
-      current.id,
-    );
+    db.transaction(() => {
+      db.query(
+        "UPDATE issues SET title=?,body=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
+      ).run(
+        merged.title,
+        merged.body,
+        JSON.stringify(merged.labels),
+        merged.assigneeId,
+        merged.updatedAt,
+        current.id,
+      );
+      // Closing an already closed issue keeps its original close time and closer.
+      if (input.state === "closed")
+        db.query(
+          "UPDATE issues SET closedAt=?,closedById=? WHERE id=? AND closedAt IS NULL",
+        ).run(merged.updatedAt, c.get("user").id, current.id);
+      else if (input.state === "open")
+        db.query(
+          "UPDATE issues SET closedAt=NULL,closedById=NULL WHERE id=?",
+        ).run(current.id);
+    })();
     return c.json({ issue: issue(current.id) });
   });
   app.post("/api/issues/:id/comments", async (c) => {
-    const i = issue(c.req.param("id"));
+    const i = activeIssue(c.req.param("id"));
     const { body } = z
       .object({ body: text(100000) })
       .strict()
@@ -717,6 +762,7 @@ export function createApp(options: AppOptions = {}) {
   };
   app.patch("/api/comments/:id", async (c) => {
     const row = ownedComment(c);
+    activeIssue(row.issueId);
     const { body } = z
       .object({ body: text(100000) })
       .strict()
@@ -734,6 +780,7 @@ export function createApp(options: AppOptions = {}) {
   });
   app.delete("/api/comments/:id", (c) => {
     const row = ownedComment(c);
+    activeIssue(row.issueId);
     db.query("DELETE FROM comments WHERE id=?").run(row.id);
     return c.json({ ok: true });
   });
