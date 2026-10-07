@@ -23,16 +23,16 @@ test("pagination, cross-page selection and hidden-row reconciliation", async ({ 
   await expect(pagination).toContainText("1–25 of 31");
   await expect(pagination).toContainText("Page 1 of 2");
   await page.getByRole("checkbox", { name: "Select issue #1", exact: true }).check();
-  await expect(page.getByRole("checkbox", { name: "Select all open issues on this page" })).toHaveJSProperty("indeterminate", true);
+  await expect(page.getByRole("checkbox", { name: "Select all issues on this page" })).toHaveJSProperty("indeterminate", true);
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(rows).toHaveCount(6);
   await page.getByRole("checkbox", { name: "Select issue #26", exact: true }).check();
   await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Previous page", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Select issue #1", exact: true })).toBeChecked();
-  await page.getByRole("checkbox", { name: "Select all open issues on this page" }).check();
+  await page.getByRole("checkbox", { name: "Select all issues on this page" }).check();
   await expect(page.getByText("26 selected", { exact: true })).toBeVisible();
-  await page.getByRole("checkbox", { name: "Select all open issues on this page" }).uncheck();
+  await page.getByRole("checkbox", { name: "Select all issues on this page" }).uncheck();
   await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await page.getByRole("button", { name: "Labels filters", exact: true }).click();
@@ -79,7 +79,8 @@ test("bulk close keeps failures selected, disables duplicate actions and clamps 
   await expect(page.getByRole("button", { name: "Closing…", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Clear selection" })).toBeDisabled();
   // Successful items can leave the list while another request is still pending.
-  await expect(page.getByRole("checkbox", { name: "Select all open issues on this page" })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Select all issues on this page" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Tag selected issues" })).toBeDisabled();
   release();
   await expect(page.locator(".issue-bulk-outcome")).toContainText("1 of 2 issues closed");
   await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
@@ -91,12 +92,14 @@ test("bulk close keeps failures selected, disables duplicate actions and clamps 
   await expect(page.getByRole("button", { name: "Close selected issues" })).toHaveCount(0);
 });
 
-test("archived and closed issues cannot be selected", async ({ page, baseURL }) => {
+test("closed issues can be selected for tagging but not closing; archived issues cannot be selected", async ({ page, baseURL }) => {
   const { project, ids, headers } = await seed(page, baseURL!, 2);
   expect((await page.request.patch(`/api/issues/${ids[0]}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
   await page.goto(`/projects/${project.slug}?state=closed`);
-  await expect(page.getByRole("checkbox", { name: "Select issue #1", exact: true })).toBeDisabled();
-  await expect(page.getByRole("checkbox", { name: "Select all open issues on this page" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: "Select issue #1", exact: true }).check();
+  await expect(page.getByRole("checkbox", { name: "Select all issues on this page" })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Close selected issues" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Tag selected issues" })).toBeEnabled();
   await page.goto(`/projects/${project.slug}`);
   await page.getByRole("checkbox", { name: "Select issue #2", exact: true }).check();
   await page.getByRole("button", { name: "Archive", exact: true }).click();

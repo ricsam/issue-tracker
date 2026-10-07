@@ -55,13 +55,15 @@ for (const width of [1440, 390]) {
     await dialog.getByRole("button", { name: "Add to board", exact: true }).click();
     await expect(dialog).toBeHidden();
 
-    const compact = page.getByRole("combobox", { name: /Lane for issue/ });
-    await expectChevron(compact, true);
-    await expect(compact).toHaveValue("in_progress");
-    await compact.screenshot({ path: testInfo.outputPath("compact-select.png") });
-    await compact.selectOption("done");
-    await expect(compact).toHaveValue("done");
-    await expect(page.locator(".board-column").filter({ has: compact })).toContainText("Done");
+    await expect(page.locator(".board-card select")).toHaveCount(0);
+    await page.getByRole("button", { name: "Board actions for issue #1" }).click();
+    const menu = page.getByRole("menu", { name: "Board actions for issue #1" });
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await menu.screenshot({ path: testInfo.outputPath("board-actions.png") });
+    await menu.getByRole("menuitem", { name: "Done", exact: true }).click();
+    await expect(page.locator(".board-column").filter({ has: page.getByRole("heading", { name: /^Done/ }) }).locator(".board-card")).toHaveCount(1);
 
     await page.goto(`/projects/${project.slug}`);
     await page.getByRole("button", { name: "Tagged users filters", exact: true }).click();

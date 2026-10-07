@@ -40,7 +40,8 @@ async function expectReset(page: Page) {
   await expect(editor(page)).toBeEmpty();
   await expect(editor(page)).toBeFocused();
   await expect(modal(page).getByRole("button", { name: "Write", exact: true })).toBeInViewport({ ratio: 1 });
-  await expect(modal(page).getByLabel("Labels", { exact: true })).toHaveValue("");
+  await expect(modal(page).getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
+  await expect(modal(page).getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(modal(page).getByLabel("Markdown source")).toHaveCount(0);
   await expect(modal(page).getByRole("button", { name: "Done", exact: true })).toBeVisible();
 }
@@ -48,9 +49,8 @@ async function expectReset(page: Page) {
 test("repeat creation resets preview, Markdown and undo history, then Done reveals the refreshed list", async ({ page, baseURL }) => {
   const { path } = await setup(page, baseURL!);
   await editor(page).fill("First creation");
-  await modal(page).getByLabel("Labels", { exact: true }).fill("design, enhancement");
   await modal(page).getByRole("button", { name: "Markdown", exact: true }).click();
-  await modal(page).getByLabel("Markdown source").fill("# First creation\n\n**First body**");
+  await modal(page).getByLabel("Markdown source").fill("# First creation\n\n**First body** #design #enhancement");
   await modal(page).getByRole("button", { name: "Preview", exact: true }).click();
   await submit(page).click();
   await expectReset(page);
@@ -90,14 +90,14 @@ test("View issue navigates immediately with an empty draft", async ({ page, base
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open created issue");
 });
 
-for (const draft of ["body", "labels"] as const) {
+for (const draft of ["body", "hashtag"] as const) {
   test(`View issue confirms before discarding a ${draft} draft`, async ({ page, baseURL }) => {
     const { path } = await setup(page, baseURL!);
     await editor(page).fill("Saved issue");
     await submit(page).click();
     await expectReset(page);
-    const field = draft === "body" ? editor(page) : modal(page).getByLabel("Labels", { exact: true });
-    await field.fill("Unsaved draft");
+    const field = editor(page);
+    await field.fill(draft === "body" ? "Unsaved draft" : "#unsaved");
     const link = modal(page).getByRole("link", { name: "View issue" });
     const href = await link.getAttribute("href");
     page.once("dialog", async (dialog) => {
@@ -106,8 +106,7 @@ for (const draft of ["body", "labels"] as const) {
     });
     await link.click();
     await expect(page).toHaveURL(path);
-    if (draft === "body") await expect(field).toContainText("Unsaved draft");
-    else await expect(field).toHaveValue("Unsaved draft");
+    await expect(field).toContainText(draft === "body" ? "Unsaved draft" : "#unsaved");
     page.once("dialog", async (dialog) => { await dialog.accept(); });
     await link.click();
     await expect(page).toHaveURL(href!);
@@ -116,8 +115,7 @@ for (const draft of ["body", "labels"] as const) {
 
 test("a rejected submission retains the entire draft and can be retried", async ({ page, baseURL }) => {
   const { endpoint } = await setup(page, baseURL!);
-  await editor(page).fill("Retained issue");
-  await modal(page).getByLabel("Labels", { exact: true }).fill("retry");
+  await editor(page).fill("Retained issue #retry");
   await modal(page).getByRole("button", { name: "Markdown", exact: true }).click();
   await page.route(`**${endpoint}`, async (route) => {
     if (route.request().method() === "POST") await route.fulfill({ status: 500, json: { error: "Creation deliberately failed" } });
@@ -126,7 +124,7 @@ test("a rejected submission retains the entire draft and can be retried", async 
   await submit(page).click();
   await expect(modal(page).getByText("Creation deliberately failed", { exact: true })).toBeVisible();
   await expect(modal(page).getByLabel("Markdown source")).toHaveValue(/Retained issue/);
-  await expect(modal(page).getByLabel("Labels", { exact: true })).toHaveValue("retry");
+  await expect(modal(page).getByLabel("Markdown source")).toHaveValue(/#retry/);
   await expect(status(page)).toBeEmpty();
   await page.unroute(`**${endpoint}`);
   await submit(page).click();
@@ -173,7 +171,6 @@ test("pending creation locks the draft and actions and only sends one request", 
     await expect(modal(page).getByRole("button", { name: "Done", exact: true })).toBeDisabled();
     await expect(modal(page).getByRole("link", { name: "View issue" })).toHaveAttribute("aria-disabled", "true");
     await expect(modal(page).locator("fieldset")).toHaveAttribute("inert", "");
-    await expect(modal(page).getByLabel("Labels", { exact: true })).toBeDisabled();
     await page.keyboard.press("Enter");
     await page.keyboard.press("Escape");
     await expect(modal(page)).toBeVisible();
@@ -204,16 +201,18 @@ test("mobile board creation exposes actions without overflow and never adds boar
   // Scrolling the fields must reveal labels without putting them under the actions.
   for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(size);
-    const labels = modal(page).getByLabel("Labels", { exact: true });
+    await editor(page).fill("Next draft #next-draft");
+    const labels = modal(page).getByText("#hashtags in your issue become labels automatically. Hashtags inside code are ignored.", { exact: true });
     await labels.scrollIntoViewIfNeeded();
-    await labels.fill("next-draft");
-    await expect(labels).toBeInViewport({ ratio: 1 });
+    // Chromium rounds scroll offsets to pixels; allow subpixel clipping of the
+    // paragraph box (the footer bound below still ensures no overlap).
+    await expect(labels).toBeInViewport({ ratio: 0.98 });
     const fieldBox = (await labels.boundingBox())!;
     const footerBox = (await modal(page).locator(".create-issue-footer").boundingBox())!;
     expect(fieldBox.y + fieldBox.height).toBeLessThanOrEqual(footerBox.y + 1);
     await expect(modal(page).getByRole("link", { name: "View issue" })).toBeInViewport();
     expect(await modal(page).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
-    await labels.fill("");
+    await editor(page).fill("");
   }
   await modal(page).getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(0);

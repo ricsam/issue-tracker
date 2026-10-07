@@ -150,7 +150,7 @@ test("desktop sidebar width is resizable, remembered, clamped, and keyboard acce
   const resizer = page.getByRole("separator", { name: "Resize issue details" });
   await expect(resizer).toHaveAttribute("aria-valuenow", "680");
   expect((await sidebar(page).boundingBox())!.width).toBe(680);
-  await expect(sidebar(page).getByRole("list", { name: "Tagged users" })).toBeVisible();
+  await expect(sidebar(page).getByRole("list", { name: "Tagged users" })).toHaveCount(0);
   await issueEditor(page).fill("Draft survives resizing");
   const box = (await resizer.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + 150);
@@ -266,9 +266,8 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
   await issueLink(page, "Sidebar beta").click();
   await expect(issueEditor(page)).toContainText("Sidebar beta");
   const betaCard = page.locator(".board-card.is-selected");
-  await betaCard
-    .getByRole("combobox", { name: /Lane for issue/ })
-    .selectOption("done");
+  await betaCard.getByRole("button", { name: /Board actions for issue/ }).click();
+  await page.getByRole("menuitem", { name: "Done", exact: true }).click();
   const done = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /^Done/ }) });
@@ -281,10 +280,8 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
   await page.screenshot({ path: "test-results/issue-sidebar-board.png" });
   // Moving in the board never loses detail edits or gets overwritten by their save.
   await issueEditor(page).fill("Keep this draft while moving");
-  await page
-    .locator(".board-card.is-selected")
-    .getByRole("combobox")
-    .selectOption("in_progress");
+  await page.locator(".board-card.is-selected").getByRole("button", { name: /Board actions for issue/ }).click();
+  await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
   const progress = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /^In progress/ }) });

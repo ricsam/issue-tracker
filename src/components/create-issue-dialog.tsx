@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { CircleCheck, X } from "lucide-react";
 import type { Issue, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { parseLabels, validateIssueBody } from "../lib/validation";
+import { validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
 import { RichEditor } from "./rich-editor";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
@@ -24,7 +24,6 @@ export function CreateIssueDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [body, setBody] = useState("");
-  const [labels, setLabels] = useState("");
   const [created, setCreated] = useState<Issue | null>(null);
   const [showNotice, setShowNotice] = useState(false);
   const fields = useRef<HTMLDivElement>(null);
@@ -46,13 +45,12 @@ export function CreateIssueDialog({
         `/api/projects/${encodeURIComponent(project.slug)}/issues`,
         {
           method: "POST",
-          body: JSON.stringify({ body, labels: parseLabels(labels) }),
+          body: JSON.stringify({ body }),
         },
       );
       setCreated(issue);
       setShowNotice(true);
       setBody("");
-      setLabels("");
       onCreated(issue);
     } catch (cause) {
       setError(message(cause));
@@ -77,7 +75,7 @@ export function CreateIssueDialog({
     )
       return;
     if (
-      ((body.trim() || labels.trim()) &&
+      (body.trim() &&
         !window.confirm("Discard the new issue draft and view the created issue?")) ||
       !canViewIssue()
     )
@@ -113,15 +111,7 @@ export function CreateIssueDialog({
                 its title on the board.
               </p>
             </div>
-            <label>
-              Labels
-              <input
-                name="labels"
-                placeholder="bug, design (comma-separated)"
-                value={labels}
-                onChange={(event) => setLabels(event.target.value)}
-              />
-            </label>
+            <p className="settings-help muted">#hashtags in your issue become labels automatically. Hashtags inside code are ignored.</p>
           </fieldset>
         </div>
         <div className="create-issue-footer">

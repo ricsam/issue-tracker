@@ -61,7 +61,7 @@ for (const mobile of [false, true]) test(`explicit mentions survive creation, so
   expect(result.issue.taggedUserIds).toEqual([id]);
   await expect(dialog.getByRole("link", { name: "View issue" })).toBeVisible();
   await dialog.getByRole("link", { name: "View issue" }).click();
-  await expect(page.getByText("Tagged users", { exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toHaveCount(0);
   await page.locator(".detail-form").getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.locator(".detail-form .editor-preview .mention-chip")).toHaveCount(2);
   await page.screenshot({ path: `test-results/mention-saved-preview-${mobile ? "mobile" : "desktop"}.png`, fullPage: true });
@@ -73,14 +73,13 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Comment association test" } })).json();
   await page.goto(`/issues/${issue.id}`);
   const input = page.getByRole("textbox", { name: "Issue", exact: true });
-  const draft = "Unsaved issue draft must survive every comment mutation";
+  const draft = "Unsaved issue draft must survive every comment mutation #unsaved-label";
   await input.fill(draft);
-  await page.getByLabel("Labels", { exact: true }).fill("unsaved-label");
   const tagged = page.getByRole("list", { name: "Tagged users", exact: true });
-  await expect(tagged).toContainText("No tagged users");
+  await expect(tagged).toHaveCount(0);
   const expectDraft = async () => {
     await expect(input).toHaveText(draft);
-    await expect(page.getByLabel("Labels", { exact: true })).toHaveValue("unsaved-label");
+    await expect(input).toContainText("#unsaved-label");
     const persisted = await (await page.request.get(`/api/issues/${issue.id}`)).json();
     expect(persisted.issue.body).toBe("Comment association test");
     expect(persisted.issue.labels).toEqual([]);
@@ -98,7 +97,7 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   expect(created.issue.taggedUserIds).toEqual([id]);
   const comment = page.locator("article.comment");
   await expect(comment.locator(".mention-chip")).toHaveText(`@${displayName}`);
-  await expect(tagged.getByRole("listitem")).toHaveText([displayName]);
+  await expect(tagged).toHaveCount(0);
   await expectDraft();
 
   await comment.getByRole("button", { name: "Edit comment", exact: true }).click();
@@ -109,7 +108,7 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   await comment.getByRole("button", { name: "Save comment", exact: true }).click();
   expect((await (await edited).json()).issue.taggedUserIds).toEqual([]);
   await expect(comment.locator(".mention-chip")).toHaveCount(0);
-  await expect(tagged).toContainText("No tagged users");
+  await expect(tagged).toHaveCount(0);
   await expectDraft();
 
   // Add the mention back via actual source autocomplete, then remove by deleting the comment.
@@ -118,13 +117,13 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   await source.fill("Restored @alex");
   await comment.getByRole("option").filter({ hasText: "alex@example.test" }).click();
   await comment.getByRole("button", { name: "Save comment", exact: true }).click();
-  await expect(tagged.getByRole("listitem")).toHaveText([displayName]);
+  await expect(tagged).toHaveCount(0);
   await expectDraft();
   await comment.getByRole("button", { name: "Delete comment", exact: true }).click();
   const deleted = page.waitForResponse(response => response.url().endsWith(`/api/comments/${created.comment.id}`) && response.request().method() === "DELETE");
   await page.getByRole("dialog").getByRole("button", { name: "Confirm delete", exact: true }).click();
   expect((await (await deleted).json()).issue.taggedUserIds).toEqual([]);
   await expect(comment).toHaveCount(0);
-  await expect(tagged).toContainText("No tagged users");
+  await expect(tagged).toHaveCount(0);
   await expectDraft();
 });

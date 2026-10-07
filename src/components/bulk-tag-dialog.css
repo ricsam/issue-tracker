@@ -1,0 +1,6 @@
+.bulk-tag-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.bulk-tag-options { max-height: 300px; overflow: auto; display: grid; gap: 6px; }
+.bulk-tag-option { display: flex; align-items: center; gap: 12px; padding: 8px; cursor: pointer; }
+.bulk-tag-option input { width: auto; flex: 0 0 auto; }
+.bulk-tag-option span { min-width: 0; overflow-wrap: anywhere; }
+.bulk-tag-option small { display: block; }

@@ -52,14 +52,13 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`/issues/${issues[0]!.id}`);
 
-  // The heading actions keep clear space above the editor and properties card.
+  // Metadata stays inline; heading actions keep clear space above the editor.
   const save = page.getByRole("button", { name: "Save changes", exact: true });
   const properties = page.locator(".properties");
   await expect(save).toBeVisible();
   const saveBox = (await save.boundingBox())!;
-  const propertiesBox = (await properties.boundingBox())!;
-  const editorBox = (await page.locator(".detail-grid .rich-editor").boundingBox())!;
-  expect(propertiesBox.y - (saveBox.y + saveBox.height)).toBeGreaterThanOrEqual(12);
+  await expect(properties).toHaveCount(0);
+  const editorBox = (await page.locator(".issue-detail-body .rich-editor").boundingBox())!;
   expect(editorBox.y - (saveBox.y + saveBox.height)).toBeGreaterThanOrEqual(12);
 
   await expect(page.locator(".detail-heading .state-badge")).toHaveText("Open");
@@ -70,7 +69,8 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await page.getByRole("button", { name: "Close issue", exact: true }).click();
   await expect(page.locator(".detail-heading .state-badge")).toHaveText("Closed");
   await expect(page.getByText("Issue closed", { exact: true })).toBeVisible();
-  await expect(page.locator(".closed-meta")).toContainText("Alex Morgan");
+  await expect(page.locator(".issue-created-meta")).toContainText("Closed");
+  await expect(page.locator(".issue-created-meta")).toContainText("Alex Morgan");
   // Closing saved only the state; the unsaved draft is still pending.
   await expect(editor).toContainText("Draft kept.");
   let saved = (await (await page.request.get(`/api/issues/${issues[0]!.id}`)).json()).issue;
@@ -174,7 +174,8 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(page.locator(".board-card")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Add issues", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Manage lanes" })).toBeDisabled();
-  await expect(page.getByRole("combobox", { name: /Lane for issue #1/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Board actions for issue #1", exact: true })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Select issue #1", exact: true })).toBeDisabled();
   await expect(page.locator(".board-card").first()).toHaveAttribute("draggable", "false");
   await expect(page.locator(".board-column h2").first()).toHaveAttribute("draggable", "false");
 

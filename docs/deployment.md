@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.7.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.8.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.8.0
+
+Version 0.8.0 adds card kebab menus, board selection and bulk moves/removals (including dragging a selection), table Up/Down navigation and Shift range selection, bulk user tagging, and a cleaner issue view with a top breadcrumb and no separate properties/tag lists or empty discussion message.
+
+Labels now come from hashtags in the saved issue body, not a separate form field. Code and links are excluded, comments do not contribute labels, and escaped Markdown hashes count semantically. Legacy API `labels` writes remain additive compatibility input converted into body hashtags. `POST /api/projects/:slug/issues/tag` atomically adds missing body mentions while preserving original content; repeat requests are idempotent. See [the API contract](api-contract.md).
+
+Migration v8 runs once transactionally, adding missing legacy-label hashtags while preserving original content, stored titles, timestamps, lifecycle history, comments, and board placements. Extended `#[percent-encoded-label]` syntax preserves spaces and punctuation. Back up `/data`, preserve the encryption-key Secret, and verify the matching published image before upgrading. Avoid automatic Helm rollback across migrations: older releases do not maintain body-derived labels. If recovery is needed, stop the application and restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately first.
 
 ### Upgrading to 0.7.0
 

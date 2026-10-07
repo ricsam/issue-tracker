@@ -22,9 +22,10 @@ import {
   prependLegacyTitle,
   replaceLeadingTitle,
 } from "../shared/issue-content";
+import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { moveLaneTo } from "../shared/board";
 import { openDatabase, syncIssueTaggedUsers } from "./db";
-import { extractMentionUserIds } from "../shared/mentions";
+import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
 
@@ -217,6 +218,12 @@ export function createApp(options: AppOptions = {}) {
     if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
       fail(400, "Unknown lane");
     if (!state.lanes.includes(lane)) fail(400, "Destination lane is hidden");
+  };
+  const bodyLabels = (body: string) => {
+    const labels = extractIssueLabels(body);
+    if (labels.length > 30 || labels.some((label) => label.length > 50))
+      fail(400, "Use at most 30 hashtags, each at most 50 characters");
+    return labels;
   };
   const validateMentions = (body: string) => {
     for (const userId of extractMentionUserIds(body))
@@ -558,6 +565,27 @@ export function createApp(options: AppOptions = {}) {
     }).immediate();
     return c.json({ board: board(p.id) });
   });
+  app.post("/api/projects/:slug/issues/tag", async (c) => {
+    const ids = z.array(z.string().uuid()).min(1).max(1000)
+      .refine((values) => new Set(values).size === values.length);
+    const input = z.object({ issueIds: ids, userIds: ids }).strict().parse(await json(c));
+    const issues = db.transaction(() => {
+      const p = activeProject(c.req.param("slug"));
+      const users = input.userIds.map((userId) => publicUser(userId) ?? fail(400, "Unknown mentioned user"));
+      return input.issueIds.map((issueId) => {
+        const current = issue(issueId);
+        if (current.projectId !== p.id) fail(400, "Unknown project issue");
+        const body = appendIssueMentions(current.body, current.title, users);
+        if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Tagged issue exceeds body length limit");
+        if (body !== current.body) {
+          db.query("UPDATE issues SET body=?,labels=?,updatedAt=? WHERE id=?").run(body, JSON.stringify(bodyLabels(body)), now(), issueId);
+          syncIssueTaggedUsers(db, issueId);
+        }
+        return issue(issueId);
+      });
+    }).immediate();
+    return c.json({ issues });
+  });
   app.post("/api/projects/:slug/board/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const input = z
@@ -638,10 +666,8 @@ export function createApp(options: AppOptions = {}) {
   app.post("/api/projects/:slug/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const input = issueFields.parse(await json(c));
-    const body =
-      input.title === undefined
-        ? input.body
-        : prependLegacyTitle(input.title, input.body);
+    const originalBody = input.title === undefined ? input.body : prependLegacyTitle(input.title, input.body);
+    const body = appendIssueLabels(originalBody, deriveIssueTitle(originalBody), input.labels);
     if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
       fail(400, "Invalid issue body");
     const uid = id();
@@ -660,11 +686,11 @@ export function createApp(options: AppOptions = {}) {
         uid,
         n.n,
         p.id,
-        deriveIssueTitle(body),
+        deriveIssueTitle(originalBody),
         body,
         "backlog", // Archived legacy columns; not active issue state.
         "none",
-        JSON.stringify(input.labels),
+        JSON.stringify(bodyLabels(body)),
         c.get("user").id,
         time,
         time,
@@ -689,13 +715,14 @@ export function createApp(options: AppOptions = {}) {
       Object.entries(parsed).filter(([key]) => Object.hasOwn(raw, key)),
     ) as z.infer<typeof issueUpdateFields>;
     if (!Object.keys(input).length) return fail(400, "No changes");
-    const body =
+    const originalBody =
       input.title === undefined
         ? (input.body ?? current.body)
         : input.body === undefined
           ? replaceLeadingTitle(input.title, current.body)
           : prependLegacyTitle(input.title, input.body);
-    if (input.body !== undefined || input.title !== undefined) {
+    const body = appendIssueLabels(originalBody, current.title, input.labels ?? []);
+    if (input.body !== undefined || input.title !== undefined || input.labels !== undefined) {
       if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
         fail(400, "Invalid issue body");
     }
@@ -703,9 +730,10 @@ export function createApp(options: AppOptions = {}) {
       ...current,
       ...input,
       body,
+      labels: body !== current.body ? bodyLabels(body) : current.labels,
       title:
         input.body !== undefined || input.title !== undefined
-          ? deriveIssueTitle(body)
+          ? deriveIssueTitle(originalBody)
           : current.title,
       updatedAt: now(),
     };
@@ -731,7 +759,7 @@ export function createApp(options: AppOptions = {}) {
         db.query(
           "UPDATE issues SET closedAt=NULL,closedById=NULL WHERE id=?",
         ).run(current.id);
-      if (input.body !== undefined || input.title !== undefined)
+      if (body !== current.body)
         syncIssueTaggedUsers(db, current.id);
     }).immediate();
     return c.json({ issue: issue(current.id) });

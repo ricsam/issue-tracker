@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "re
 import { Link, useParams } from "react-router-dom";
 import {
   Archive,
-  ArrowLeft,
   CircleCheck,
   MessageSquare,
   RotateCcw,
@@ -15,6 +14,7 @@ import type {
   Comment,
 } from "../../shared/types";
 import { api, message } from "../lib/api";
+import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { RichEditor } from "../components/rich-editor";
@@ -22,12 +22,12 @@ import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
 import {
-  parseLabels,
   validateBody,
   validateIssueBody,
 } from "../lib/validation";
 
 import "./issue-loading.css";
+import "./issue-detail.css";
 
 export function DetailPage() {
   const { id } = useParams();
@@ -134,12 +134,13 @@ function IssueDetailForm({
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saved, setSaved] = useState("");
-  const [labels, setLabels] = useState(initialDetail.issue.labels.join(", "));
-  const dirty =
-    !!issue &&
-    !!persisted &&
-    (issue.body !== persisted.body ||
-      labels !== persisted.labels.join(", "));
+  const setBreadcrumb = useIssueBreadcrumb();
+  useEffect(() => {
+    if (embedded) return;
+    setBreadcrumb(persisted);
+    return () => setBreadcrumb(null);
+  }, [embedded, persisted, setBreadcrumb]);
+  const dirty = issue.body !== persisted.body;
   const pending = dirty || !!comment.trim() || busy || posting || changingState;
   useEffect(() => {
     onPendingChange?.(pending);
@@ -162,12 +163,10 @@ function IssueDetailForm({
         method: "PATCH",
         body: JSON.stringify({
           body,
-          labels: parseLabels(labels),
         }),
       });
       setIssue(result.issue);
       setPersisted(result.issue);
-      setLabels(result.issue.labels.join(", "));
       onSaved?.(result.issue);
       setSaved("Changes saved");
       await refresh();
@@ -232,16 +231,6 @@ function IssueDetailForm({
   const closer = users.find((u) => u.id === issue.closedById)?.name;
   return (
     <div className="detail-container">
-      {!embedded && (
-        <Link
-          className="back-link"
-          to={project ? `/projects/${project.slug}` : "/projects"}
-        >
-          <ArrowLeft size={16} />
-          {project?.name || "Projects"}
-          <span>/</span>Issue #{issue.number}
-        </Link>
-      )}
       {archived && (
         <p className="read-only-note">
           <Archive size={15} />
@@ -265,6 +254,11 @@ function IssueDetailForm({
             <div className="detail-title">
               <span className="eyebrow">ISSUE #{issue.number}</span>
               <IssueStateBadge state={issue.state} />
+              <small className="issue-created-meta muted">
+                Created <time dateTime={issue.createdAt}>{new Date(issue.createdAt).toLocaleDateString()}</time>
+                {" · by "}{users.find((u) => u.id === issue.authorId)?.name || "a teammate"}
+                {issue.closedAt && <> · Closed {new Date(issue.closedAt).toLocaleDateString()}{closer && ` by ${closer}`}</>}
+              </small>
             </div>
             {!archived && (
               <div className="save-actions">
@@ -293,8 +287,7 @@ function IssueDetailForm({
               </div>
             )}
           </div>
-          <div className="detail-grid">
-            <section>
+          <div className="issue-detail-body">
               {archived ? (
                 <article className="issue-read-only" aria-label="Issue">
                   <Markdown mentionUsers={users}>{issue.body}</Markdown>
@@ -308,53 +301,15 @@ function IssueDetailForm({
                   placeholder="What needs to happen? Just start writing…"
                 />
               )}
-            </section>
-            <aside className="properties">
-              <h2>Properties</h2>
-              <div className="tagged-users-field">
-                <span>Tagged users</span>
-                <div className="tagged-users" role="list" aria-label="Tagged users">
-                  {issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => {
-                    const user = users.find((candidate) => candidate.id === id);
-                    return <span role="listitem" className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>;
-                  }) : <span className="muted">No tagged users</span>}
-                </div>
-              </div>
-              <label>
-                Labels
-                <input
-                  value={labels}
-                  onChange={(e) => {
-                    setLabels(e.target.value);
-                    setSaved("");
-                  }}
-                  placeholder="Comma-separated labels"
-                />
-              </label>
-              <small className="muted">
-                Created {new Date(issue.createdAt).toLocaleDateString()}
-                {" · by "}
-                {users.find((u) => u.id === issue.authorId)?.name ||
-                  "a teammate"}
-                {issue.closedAt && (
-                  <span className="closed-meta">
-                    Closed {new Date(issue.closedAt).toLocaleDateString()}
-                    {closer && ` · by ${closer}`}
-                  </span>
-                )}
-              </small>
-            </aside>
+            {!archived && <p className="settings-help muted">#hashtags outside code become labels automatically.</p>}
           </div>
         </fieldset>
       </form>
       <section className="comments">
-        <h2>
+        {comments.length > 0 && <h2>
           <MessageSquare size={18} /> Discussion{" "}
           <span className="count">{comments.length}</span>
-        </h2>
-        {!comments.length && (
-          <p className="muted">No comments yet. Start the conversation.</p>
-        )}
+        </h2>}
         {comments.map((c) => (
           <CommentItem
             key={c.id}
@@ -374,7 +329,7 @@ function IssueDetailForm({
         {!archived && (
           <form className="form-stack" onSubmit={post}>
             <fieldset disabled={posting}>
-              <legend className="field-label">Add a comment</legend>
+              <legend className="sr-only">Add a comment</legend>
               <RichEditor
                 value={comment}
                 onChange={setComment}

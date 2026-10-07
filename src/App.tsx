@@ -25,9 +25,10 @@ import {
   X,
   ChevronRight,
 } from "lucide-react";
-import type { AuthStatus, Project, User } from "../shared/types";
+import type { AuthStatus, Issue, Project, User } from "../shared/types";
 import { api, AUTH_EXPIRED_EVENT, message } from "./lib/api";
 import { WorkspaceContext } from "./lib/workspace";
+import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { Button, ErrorNotice, Loading } from "./components/ui/primitives";
 import { AuthPage } from "./pages/auth";
 import { ProjectsPage } from "./pages/projects";
@@ -48,6 +49,7 @@ function AppContent() {
   const [error, setError] = useState("");
   const [mobile, setMobile] = useState(false);
   const location = useLocation();
+  const [breadcrumbIssue, setBreadcrumbIssue] = useState<Issue | null>(null);
   const recheckingAuth = useRef(false);
   const reload = useCallback(async () => {
     setError("");
@@ -149,10 +151,14 @@ function AppContent() {
     );
   // Archived projects stay in workspace data for links/details, not navigation.
   const activeProjects = projects.filter((p) => !p.archivedAt);
+  const issueRoute = location.pathname.startsWith("/issues/");
+  const currentIssue = issueRoute && location.pathname === `/issues/${breadcrumbIssue?.id}` ? breadcrumbIssue : null;
+  const breadcrumbProject = currentIssue ? projects.find((p) => p.id === currentIssue.projectId) : null;
   return (
     <WorkspaceContext.Provider
       value={{ user: auth.user, users, projects, refresh }}
     >
+      <IssueBreadcrumbContext.Provider value={setBreadcrumbIssue}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -252,15 +258,19 @@ function AppContent() {
             >
               <Menu size={20} />
             </button>
-            <span className="muted">Workspace</span>
-            <ChevronRight size={14} />
-            <strong>
-              {location.pathname === "/admin"
-                ? "Administration"
-                : location.pathname.startsWith("/issues/")
-                  ? "Issue details"
-                  : "Projects"}
-            </strong>
+            <nav className="main-breadcrumbs" aria-label="Breadcrumb">
+              <span className="muted">Workspace</span>
+              <ChevronRight size={14} aria-hidden="true" />
+              {issueRoute ? <>
+                <Link to="/projects">Projects</Link>
+                <ChevronRight size={14} aria-hidden="true" />
+                {breadcrumbProject && <>
+                  <Link className="breadcrumb-project" to={`/projects/${breadcrumbProject.slug}`} title={breadcrumbProject.name}>{breadcrumbProject.name}</Link>
+                  <ChevronRight size={14} aria-hidden="true" />
+                </>}
+                <strong aria-current="page">{currentIssue ? `Issue #${currentIssue.number}` : "Issue details"}</strong>
+              </> : <strong aria-current="page">{location.pathname === "/admin" ? "Administration" : "Projects"}</strong>}
+            </nav>
             <span className="topbar-right">
               <span className="online-dot" />
               Shared with your team
@@ -292,6 +302,7 @@ function AppContent() {
           </main>
         </div>
       </div>
+      </IssueBreadcrumbContext.Provider>
     </WorkspaceContext.Provider>
   );
 }

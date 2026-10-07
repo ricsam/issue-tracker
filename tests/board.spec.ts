@@ -107,9 +107,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     .filter({ hasText: "Plan the release" });
   await plan.dragTo(progress);
   await expect(progress.locator(".board-card")).toHaveCount(1);
-  await plan
-    .getByRole("combobox", { name: /Lane for issue/ })
-    .selectOption("done");
+  await plan.getByRole("button", { name: /Board actions for issue/ }).click();
+  await page.getByRole("menuitem", { name: "Done", exact: true }).click();
   await expect(done.locator(".board-card")).toHaveCount(1);
   await page.reload();
   await expect(done.locator(".board-card")).toHaveCount(1);
@@ -190,8 +189,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   ).toBeDisabled();
   expect((await create.boundingBox())!.width).toBe(960);
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(260);
-  await editor.fill("Ship a simpler issue editor");
-  await create.getByLabel("Labels", { exact: true }).fill("design, idea");
+  await editor.fill("Ship a simpler issue editor\n\n#design #idea");
   await page.screenshot({ path: "test-results/create-issue-desktop.png" });
   await create
     .getByRole("button", { name: "Create issue", exact: true })
@@ -200,9 +198,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await create.getByRole("link", { name: "View issue" }).click();
   await expect(page).toHaveURL(/\/issues\//);
   const issueUrl = page.url();
-  await expect(page.getByLabel("Labels", { exact: true })).toHaveValue(
-    "design, idea",
-  );
+  await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("#design #idea");
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Priority", { exact: true })).toHaveCount(0);
   await page.goto(projectPath + "/board");
@@ -233,9 +229,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   ).toBeVisible();
 
   // Remove only the board placement; re-adding chooses a fresh lane.
-  await plan
-    .getByRole("button", { name: "Remove issue #1 from board" })
-    .click();
+  await plan.getByRole("button", { name: /Board actions for issue/ }).click();
+  await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(page.locator(".board-card")).toHaveCount(2);
   await page.getByRole("link", { name: "List", exact: true }).click();
   await expect(page.locator(".issue-row")).toHaveCount(4);
@@ -337,7 +332,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(review).toBeVisible();
   const customBoard = (await (await page.request.get(endpoint)).json()).board;
   const customId = customBoard.customLanes.find((lane: { label: string }) => lane.label === "In review").value;
-  await plan.getByRole("combobox", { name: /Lane for issue/ }).selectOption(customId);
+  await plan.getByRole("button", { name: /Board actions for issue/ }).click();
+  await page.getByRole("menuitem", { name: "In review", exact: true }).click();
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.reload();
   await expect(review.locator(".board-card")).toHaveCount(1);
@@ -360,7 +356,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await add.getByLabel("Lane", { exact: true }).selectOption(customId);
   await addButton.click();
   await expect(review.locator(".board-card")).toHaveCount(2);
-  await review.getByRole("button", { name: "Remove issue #6 from board" }).click();
+  await review.getByRole("button", { name: "Board actions for issue #6" }).click();
+  await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await plan.dragTo(todo);
@@ -476,9 +473,9 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
   expect(await savedLanes()).toEqual(["done", "in_progress", review.value, "todo"]);
   await page.reload();
   await expect(names).toHaveText(["Done", "In progress", "In review", "Todo"]);
-  await expect(
-    page.getByRole("combobox", { name: /Lane for issue #1/ }).locator("option"),
-  ).toHaveText(["Done", "In progress", "In review", "Todo"]);
+  await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Done", "In progress", "In review", "Todo (current lane)", "Remove from board"]);
+  await page.keyboard.press("Escape");
 
   // While dragging, the lane is dimmed and its destination edge is marked.
   await dragHeadingOver(page, heading("In review"), column("In progress"));

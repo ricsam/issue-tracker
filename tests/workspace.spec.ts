@@ -60,7 +60,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await modal
     .getByLabel("Markdown source")
     .fill(
-      "# Improve the onboarding experience\n\n## A better first impression\n\n**Small steps**, meaningful progress.\n\n- [ ] Welcome message\n- [ ] Project checklist\n",
+      "# Improve the onboarding experience\n\n## A better first impression\n\n**Small steps**, meaningful progress.\n\n- [ ] Welcome message\n- [ ] Project checklist\n\n#design #enhancement\n",
     );
   await modal.getByRole("button", { name: "Write", exact: true }).click();
   await expect(
@@ -79,7 +79,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     modal.getByRole("img", { name: "design (v1).png" }),
   ).toBeVisible();
   await expect(modal.getByRole("combobox")).toHaveCount(0);
-  await modal.getByLabel("Labels", { exact: true }).fill("design, enhancement");
+  await expect(editor).toContainText("#design #enhancement");
   await modal
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
@@ -87,7 +87,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(page).toHaveURL(projectUrl);
   await expect(editor).toBeEmpty();
   await expect(editor).toBeFocused();
-  await expect(modal.getByLabel("Labels", { exact: true })).toHaveValue("");
+  await expect(modal.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   await modal.getByRole("link", { name: "View issue", exact: true }).click();
   await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
   await expect(
@@ -98,7 +98,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     page.getByRole("combobox", { name: "Priority", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Assignee", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   const commentEditor = page.locator(".comments .rich-editor");

@@ -11,9 +11,9 @@ The board contains work explicitly added from a project's issue list. New boards
 2. Select **Add issues**.
 3. Search or select issues, choose a destination lane, then select **Add to board**.
 
-**Create issue** captures content and labels in the project list. It does not automatically add the issue to the board. Use **Add issues** when it is ready for work. Only open issues are offered; reopen a closed issue to plan it again.
+**Create issue** captures Markdown content, with labels derived from body hashtags, in the project list. It does not automatically add the issue to the board. Use **Add issues** when it is ready for work. Only open issues are offered; reopen a closed issue to plan it again.
 
-The remove button on a card removes only its board placement. The issue, comments, and attachments remain available in **List** and can be added back later.
+Use the card's kebab menu beside its drag handle to remove only its board placement. The issue, comments, and attachments remain available in **List** and can be added back later.
 
 ## Manage lanes
 
@@ -40,7 +40,9 @@ To reorder with a keyboard or on a touch screen, use the move buttons in **Manag
 
 ## Move work
 
-Drag a card into another lane, or use its lane menu for keyboard and mobile access. Moves save immediately and do not change issue content, labels, or tagged users. If a move fails, the page displays an error and keeps the previous placement.
+Drag a card into another lane, or choose a lane from its kebab menu for keyboard and mobile access. Moves save immediately and do not change issue content, labels, or tagged users.
+
+Select cards with checkboxes or Shift-click, then use the selection toolbar or a selected card's menu to move or remove the selection. Dragging a selected card moves the whole selection. Failed operations remain selected for retry; successful operations are kept. Changing search or hiding lanes removes hidden cards from the selection. Removing cards never deletes their issues.
 
 Cards stay ordered by issue number within each lane; manual ranking and workflow rules are not supported. Only the built-in **Done** lane counts as completed in project progress.
 
@@ -50,7 +52,7 @@ The board of an [archived project](/guides/projects#archive-a-project) is read-o
 
 ## Read and edit an issue
 
-Select an issue title to open its body, properties, and discussion. On desktop, this opens a panel alongside the board or list without losing your search.
+Select an issue title to open its body and discussion. Mentions and hashtags stay in the content rather than a separate properties card or tag list. On desktop, this opens a panel alongside the board or list without losing your search.
 
 - Drag the panel's left divider to resize it. Your browser remembers the width across visits.
 - Focus the divider and use Left/Right arrows to adjust it; Shift makes larger steps. Home/End select its size limits.

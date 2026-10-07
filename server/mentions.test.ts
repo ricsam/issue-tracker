@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { createApp } from "./app";
 import { extractMentionUserIds, mentionMarkdown, mentionUserId } from "../shared/mentions";
 
+import { ISSUE_BODY_MAX_LENGTH } from "../shared/issue-content";
+
 const owned: { dir: string; app: ReturnType<typeof createApp> }[] = [];
 afterEach(() => {
   for (const e of owned.splice(0)) {
@@ -33,6 +35,61 @@ async function fixture() {
   const create = async (body = "Issue") => (await (await req(`${path}/issues`, "POST", { body })).json()).issue;
   return { entry, req, admin, member, memberCookie, path, create };
 }
+
+test("bulk tagging preserves latest content, lifecycle, labels and comments and retries idempotently", async () => {
+  const f = await fixture();
+  const a = await f.create("# Original\n\nKeep **formatting** and `code`.");
+  const b = await f.create("# Fenced\n\n```md\nunfinished");
+  const c = (await (await f.req(`/api/issues/${a.id}/comments`, "POST", { body: mentionMarkdown(f.admin) })).json()).comment;
+  const before = (await (await f.req(`/api/issues/${a.id}`, "PATCH", { body: a.body + "\nLatest edit", labels: ["keep"], state: "closed" })).json()).issue;
+  const payload = { issueIds: [a.id, b.id], userIds: [f.member.id] };
+  const response = await f.req(`${f.path}/issues/tag`, "POST", payload, f.memberCookie);
+  expect(response.status).toBe(200);
+  const { issues } = await response.json();
+  expect(issues[0]).toMatchObject({ ...before, body: before.body + "\n\n" + mentionMarkdown(f.member) + "\n", updatedAt: issues[0].updatedAt, taggedUserIds: [f.admin.id, f.member.id].sort() });
+  expect(issues[1].body).toContain("```md\nunfinished");
+  expect(issues[1].title).toBe(b.title);
+  expect(extractMentionUserIds(issues[1].body)).toEqual([f.member.id]);
+  expect((await (await f.req(`/api/issues/${a.id}`)).json()).comments).toEqual([c]);
+  expect(await (await f.req(`${f.path}/issues/tag`, "POST", payload)).json()).toEqual({ issues });
+});
+
+test("bulk tagging rolls back all targets on invalid IDs, size, archive or storage failure", async () => {
+  const f = await fixture();
+  const a = await f.create("# Safe\n\nOriginal");
+  const full = await f.create("x".repeat(ISSUE_BODY_MAX_LENGTH));
+  const other = (await (await f.req("/api/projects", "POST", { name: "Other" })).json()).project;
+  const foreign = (await (await f.req(`/api/projects/${other.slug}/issues`, "POST", { body: "Foreign" })).json()).issue;
+  const tag = (issueIds: string[], userIds = [f.member.id]) => f.req(`${f.path}/issues/tag`, "POST", { issueIds, userIds });
+  for (const target of [full.id, foreign.id, crypto.randomUUID()]) {
+    expect((await tag([a.id, target])).status).toBe(target === full.id || target === foreign.id ? 400 : 404);
+    expect((await (await f.req(`/api/issues/${a.id}`)).json()).issue).toEqual(a);
+  }
+  expect((await tag([a.id], [crypto.randomUUID()])).status).toBe(400);
+  for (const input of [{ issueIds: [], userIds: [f.member.id] }, { issueIds: [a.id], userIds: [] }, { issueIds: [a.id, a.id], userIds: [f.member.id] }, { issueIds: [a.id], userIds: ["bad"] }])
+    expect((await f.req(`${f.path}/issues/tag`, "POST", input)).status).toBe(400);
+  expect((await f.req(`${f.path}/issues/tag`, "POST", { issueIds: [a.id], userIds: [f.member.id] }, "")).status).toBe(401);
+  expect((await f.req(`${f.path}/issues/tag`, "POST", { issueIds: [a.id], userIds: [f.member.id] }, f.memberCookie, "https://evil.example")).status).toBe(403);
+  const b = await f.create("Second");
+  f.entry.app.db.exec(`CREATE TRIGGER reject_bulk_tags BEFORE INSERT ON issue_tagged_users WHEN NEW.issueId='${b.id}' BEGIN SELECT RAISE(ABORT, 'forced failure'); END;`);
+  expect((await tag([a.id, b.id])).status).toBe(409);
+  expect((await (await f.req(`/api/issues/${a.id}`)).json()).issue).toEqual(a);
+  expect((await (await f.req(`/api/issues/${b.id}`)).json()).issue).toEqual(b);
+  await f.req(f.path, "PATCH", { archived: true });
+  expect((await tag([a.id])).status).toBe(409);
+  expect((await (await f.req(`/api/issues/${a.id}`)).json()).issue).toEqual(a);
+});
+
+test("bulk tagging handles unclosed HTML and fences without changing existing bytes", async () => {
+  const f = await fixture();
+  for (const body of ["```\ncode", "Title\n=====\n\n~~~\ncode", "# Title\n\n<!-- unfinished", "# Title\n\n<script>\nunclosed", "# Title\n\n```\n" + mentionMarkdown(f.member)]) {
+    const i = await f.create(body);
+    const result = await (await f.req(`${f.path}/issues/tag`, "POST", { issueIds: [i.id], userIds: [f.member.id, f.admin.id] })).json();
+    expect(result.issues[0].title).toBe(i.title);
+    expect(extractMentionUserIds(result.issues[0].body)).toEqual([f.member.id, f.admin.id].sort());
+    expect(result.issues[0].body).toContain(body.startsWith("# Title") ? body.slice("# Title\n".length) : body);
+  }
+});
 
 test("Markdown AST recognizes only actual mention links and safely escapes names", () => {
   const id = crypto.randomUUID();

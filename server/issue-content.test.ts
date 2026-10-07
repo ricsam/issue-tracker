@@ -78,7 +78,7 @@ test("body-only and legacy writes, validation limits, metadata preservation and 
     expect(issue.body).toBe("# New \\[literal\\]\n\nDescription");
     expect(issue.title).toBe("New [literal]");
     response = await patch({ labels: ["done"] });
-    expect((await response.json()).issue.body).toBe(issue.body);
+    expect((await response.json()).issue.body).toBe(issue.body + "\n\n\\#done\n");
     response = await patch({ body: "Plain replacement" });
     issue = (await response.json()).issue;
     expect(issue.title).toBe("Plain replacement");

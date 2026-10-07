@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { extractMentionUserIds } from "../shared/mentions";
 import { deriveIssueTitle, prependLegacyTitle } from "../shared/issue-content";
 
@@ -179,6 +180,17 @@ export function openDatabase(path: string) {
     for (const { id } of db.query("SELECT id FROM issues").all() as { id: string }[])
       syncIssueTaggedUsers(db, id);
     db.query("INSERT INTO migrations VALUES (7)").run();
+  }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=8").get()) return;
+    const rows = db.query("SELECT id,title,body,labels FROM issues").all() as { id: string; title: string; body: string; labels: string }[];
+    for (const row of rows) {
+      // Migration does not truncate historical text or enforce new-write limits.
+      const body = appendIssueLabels(row.body, row.title, JSON.parse(row.labels));
+      db.query("UPDATE issues SET body=?,labels=? WHERE id=?").run(body, JSON.stringify(extractIssueLabels(body)), row.id);
+      syncIssueTaggedUsers(db, row.id);
+    }
+    db.query("INSERT INTO migrations VALUES (8)").run();
   }).immediate();
   return db;
 }

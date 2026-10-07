@@ -13,6 +13,101 @@ test.beforeAll(async ({ request, baseURL }) => {
 });
 test.beforeEach(async ({ context }) => { await context.addCookies(session.cookies); });
 
+test("table keyboard navigation and reversible ranges cross pages without conflating detail and selection", async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const headers = { Origin: baseURL! };
+  const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Navigation ${randomUUID()}` } })).json();
+  for (let index = 1; index <= 12; index++) {
+    const response = await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: `Item ${String(index).padStart(2, "0")}` } });
+    expect(response.ok()).toBeTruthy();
+  }
+  await page.goto(`/projects/${project.slug}`);
+  const table = page.getByRole("table");
+  const links = table.locator("tbody .issue-link");
+  const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
+  await page.getByLabel("Rows per page").selectOption("10");
+  await links.first().click();
+  await expect(links.first()).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(links.first()).toBeFocused();
+  await expect(sidebar).toContainText("Item 01");
+  await page.keyboard.press("ArrowDown");
+  await expect(links.nth(1)).toBeFocused();
+  await expect(sidebar).toContainText("Item 02");
+  await expect(table.locator("tbody input:checked")).toHaveCount(0);
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(links.nth(2)).toBeFocused();
+  await expect(table.locator("tbody input:checked")).toHaveCount(2);
+  await expect(sidebar).toContainText("Item 02");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(table.locator("tbody input:checked")).toHaveCount(3);
+  await page.keyboard.press("Shift+ArrowUp");
+  await expect(table.locator("tbody input:checked")).toHaveCount(2);
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await table.getByLabel("Select issue #9", { exact: true }).check();
+  await table.getByLabel("Select issue #10", { exact: true }).click({ modifiers: ["Shift"] });
+  await expect(table.locator("tbody input:checked")).toHaveCount(2);
+  await expect(links.nth(9)).toBeFocused();
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+  await expect(links.first()).toBeFocused();
+  await expect(page.getByText("3 selected", { exact: true })).toBeVisible();
+  await expect(sidebar).toContainText("Item 02");
+  await page.keyboard.press("ArrowDown");
+  await expect(links.last()).toBeFocused();
+  await expect(sidebar).toContainText("Item 12");
+  await expect(page.getByText("3 selected", { exact: true })).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await expect(links.last()).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByText("Page 1 of 2", { exact: true })).toBeVisible();
+  await expect(links.last()).toBeFocused();
+
+  // Sorting invalidates the old range anchor; a first Shift-click starts anew.
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await table.getByLabel("Select issue #9", { exact: true }).check();
+  await table.getByRole("button", { name: "Sort by issue", exact: true }).click();
+  await table.getByRole("button", { name: "Sort by issue", exact: true }).click();
+  await links.first().click({ modifiers: ["Shift"] });
+  await expect(table.locator("tbody input:checked")).toHaveCount(2);
+  await expect(sidebar).toContainText("Item 10");
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await table.getByLabel("Select issue #12", { exact: true }).check();
+  const cell = table.locator("tbody tr").nth(2).locator("td").last();
+  await cell.scrollIntoViewIfNeeded();
+  const box = (await cell.boundingBox())!;
+  // The row-wide link intentionally overlays metadata; exercise a real click there.
+  await page.keyboard.down("Shift");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.up("Shift");
+  await expect(table.locator("tbody input:checked")).toHaveCount(3);
+  await expect(sidebar).toContainText("Item 10");
+
+  // Inputs and popovers retain their own keyboard behavior.
+  await table.getByRole("button", { name: "Issue filters", exact: true }).click();
+  const filter = table.getByLabel("Filter by issue", { exact: true });
+  await filter.fill("Item 0");
+  await page.keyboard.press("ArrowDown");
+  await expect(filter).toBeFocused();
+  await expect(sidebar).toContainText("Item 10");
+  await page.keyboard.press("Escape");
+  await links.first().focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(links.nth(1)).toBeFocused();
+  await expect(sidebar).toContainText("Item 08");
+  await sidebar.getByRole("textbox", { name: "Issue", exact: true }).fill("Keep this keyboard draft");
+  await links.nth(1).focus();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.keyboard.press("ArrowDown");
+  await expect(links.nth(1)).toBeFocused();
+  await expect(sidebar).toContainText("Keep this keyboard draft");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.keyboard.press("ArrowDown");
+  await expect(links.nth(2)).toBeFocused();
+  await expect(sidebar).toContainText("Item 07");
+});
+
 for (const width of [1440, 390]) {
   test(`issue table sorts and combines column filters without page overflow at ${width}px`, async ({ page, baseURL }) => {
     const headers = { Origin: baseURL! };
@@ -121,7 +216,7 @@ for (const width of [1440, 390]) {
       await discussion.getByRole("button", { name: "Markdown", exact: true }).click();
       await discussion.getByLabel("Markdown source").fill(`Review with [@Alex Morgan](mention:${alex.id})`);
       await discussion.getByRole("button", { name: "Post comment", exact: true }).click();
-      await expect(sidebar.getByRole("list", { name: "Tagged users" })).toContainText("Alex Morgan");
+      await expect(discussion.locator(".comment .mention-chip")).toContainText("Alex Morgan");
       await expect(titles).toHaveText(["Beta"]);
       await sidebar.getByRole("button", { name: "Close issue details" }).click();
       await page.getByRole("button", { name: "Clear column filters" }).click();
