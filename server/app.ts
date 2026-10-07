@@ -23,7 +23,8 @@ import {
   replaceLeadingTitle,
 } from "../shared/issue-content";
 import { moveLaneTo } from "../shared/board";
-import { openDatabase } from "./db";
+import { openDatabase, syncIssueTaggedUsers } from "./db";
+import { extractMentionUserIds } from "../shared/mentions";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
 
@@ -173,6 +174,7 @@ export function createApp(options: AppOptions = {}) {
     return {
       ...row,
       labels: JSON.parse(row.labels),
+      taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
       state: row.closedAt ? "closed" : "open",
     };
   };
@@ -219,6 +221,10 @@ export function createApp(options: AppOptions = {}) {
   };
   const validateAssignee = (value: string | null | undefined) => {
     if (value && !publicUser(value)) fail(400, "Unknown assignee");
+  };
+  const validateMentions = (body: string) => {
+    for (const userId of extractMentionUserIds(body))
+      if (!publicUser(userId)) fail(400, "Unknown mentioned user");
   };
   const limits = new Map<string, { count: number; expires: number }>();
   app.onError((err, c) => {
@@ -645,6 +651,8 @@ export function createApp(options: AppOptions = {}) {
     const uid = id();
     const time = now();
     db.transaction(() => {
+      activeProject(p.slug);
+      validateMentions(body);
       const n = db
         .query(
           "SELECT COALESCE(MAX(number),0)+1 AS n FROM issues WHERE projectId=?",
@@ -666,6 +674,7 @@ export function createApp(options: AppOptions = {}) {
         time,
         time,
       );
+      syncIssueTaggedUsers(db, uid);
     }).immediate();
     return c.json({ issue: issue(uid) });
   });
@@ -707,6 +716,9 @@ export function createApp(options: AppOptions = {}) {
       updatedAt: now(),
     };
     db.transaction(() => {
+      activeIssue(current.id);
+      if (input.body !== undefined) validateMentions(body);
+      else if (input.title !== undefined) validateMentions(input.title);
       db.query(
         "UPDATE issues SET title=?,body=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
       ).run(
@@ -726,7 +738,9 @@ export function createApp(options: AppOptions = {}) {
         db.query(
           "UPDATE issues SET closedAt=NULL,closedById=NULL WHERE id=?",
         ).run(current.id);
-    })();
+      if (input.body !== undefined || input.title !== undefined)
+        syncIssueTaggedUsers(db, current.id);
+    }).immediate();
     return c.json({ issue: issue(current.id) });
   });
   app.post("/api/issues/:id/comments", async (c) => {
@@ -737,18 +751,19 @@ export function createApp(options: AppOptions = {}) {
       .parse(await json(c));
     const uid = id(),
       time = now();
-    db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)").run(
-      uid,
-      i.id,
-      c.get("user").id,
-      body,
-      time,
-      time,
-    );
+    db.transaction(() => {
+      activeIssue(i.id);
+      validateMentions(body);
+      db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)").run(
+        uid, i.id, c.get("user").id, body, time, time,
+      );
+      syncIssueTaggedUsers(db, i.id);
+    }).immediate();
     return c.json({
       comment: db
         .query("SELECT * FROM comments WHERE id=?")
         .get(uid) as Comment,
+      issue: issue(i.id),
     });
   });
   const ownedComment = (c: any) => {
@@ -767,22 +782,28 @@ export function createApp(options: AppOptions = {}) {
       .object({ body: text(100000) })
       .strict()
       .parse(await json(c));
-    db.query("UPDATE comments SET body=?,updatedAt=? WHERE id=?").run(
-      body,
-      now(),
-      row.id,
-    );
+    db.transaction(() => {
+      activeIssue(row.issueId);
+      validateMentions(body);
+      db.query("UPDATE comments SET body=?,updatedAt=? WHERE id=?").run(body, now(), row.id);
+      syncIssueTaggedUsers(db, row.issueId);
+    }).immediate();
     return c.json({
       comment: db
         .query("SELECT * FROM comments WHERE id=?")
         .get(row.id) as Comment,
+      issue: issue(row.issueId),
     });
   });
   app.delete("/api/comments/:id", (c) => {
     const row = ownedComment(c);
     activeIssue(row.issueId);
-    db.query("DELETE FROM comments WHERE id=?").run(row.id);
-    return c.json({ ok: true });
+    db.transaction(() => {
+      activeIssue(row.issueId);
+      db.query("DELETE FROM comments WHERE id=?").run(row.id);
+      syncIssueTaggedUsers(db, row.issueId);
+    }).immediate();
+    return c.json({ ok: true, issue: issue(row.issueId) });
   });
   app.post("/api/uploads", async (c) => {
     let form: FormData;

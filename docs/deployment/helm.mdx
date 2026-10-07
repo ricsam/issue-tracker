@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.1.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.6.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,14 +15,14 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.1.0` is listed before installing. The public repository index and `issue-tracker-0.1.0.tgz` archive are live; pinning the version keeps later chart releases from changing this install.
+Verify `0.6.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.6.0 adds the issue table and user mentions; its v7 database migration preserves existing content while adding user associations. Back up `/data` and retain the encryption key before upgrading. Earlier application versions do not maintain the new associations, so avoid automatic rollback across the migration.
 
 ## Choose the image
 
-CI publishes `ghcr.io/ricsam/issue-tracker:main` and `sha-...` tags after verification succeeds. The public, verified release image includes `sha-9a2ab31`; `main` is also public but moves with successful CI. The chart intentionally has **no default tag** and does not use its `appVersion` as an image tag.
+CI publishes `ghcr.io/ricsam/issue-tracker:main` and `sha-...` tags after verification succeeds. Choose the `sha-...` image matching the chart release's source commit after its CI succeeds; `main` moves with successful CI. The chart intentionally has **no default tag** and does not use its `appVersion` as an image tag.
 
 ```sh
-export IMAGE_TAG='sha-9a2ab31'
+export IMAGE_TAG='<published-sha-tag-matching-the-release>'
 docker manifest inspect "ghcr.io/ricsam/issue-tracker:$IMAGE_TAG" >/dev/null
 ```
 
@@ -43,7 +43,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.1.0 --namespace issue-tracker \
+  --version 0.6.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -61,7 +61,7 @@ Keep all deployment-specific values in one non-secret file, for example `product
 
 ```yaml
 image:
-  tag: sha-9a2ab31 # main is available but moves with successful CI.
+  tag: "<published-sha-tag-matching-the-release>" # Use the same tag as IMAGE_TAG.
 baseUrl: https://issues.example.com
 existingSecret: issue-tracker-settings
 persistence:
@@ -83,9 +83,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.6.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.6.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

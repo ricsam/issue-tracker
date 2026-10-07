@@ -83,6 +83,12 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await modal
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
+  await expect(modal.getByRole("status")).toContainText(/Issue #\d+ created\./);
+  await expect(page).toHaveURL(projectUrl);
+  await expect(editor).toBeEmpty();
+  await expect(editor).toBeFocused();
+  await expect(modal.getByLabel("Labels", { exact: true })).toHaveValue("");
+  await modal.getByRole("link", { name: "View issue", exact: true }).click();
   await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
   await expect(
     page.getByRole("textbox", { name: "Issue", exact: true }),

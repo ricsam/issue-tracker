@@ -1,4 +1,5 @@
 .rich-editor {
+  min-width: 0;
   border: 1px solid var(--border, #e4e4e7);
   border-radius: 10px;
   background: var(--background, #fff);
@@ -268,4 +269,36 @@
 .editor-image {
   display: inline-block;
   max-width: 100%;
+}
+/* In-flow popup remains inside dialog focus/scroll boundaries, never a clipped portal. */
+.mention-picker {
+  border-top: 1px solid #ddd6fe;
+  background: #fff;
+  max-height: min(240px, 35dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-width: 0;
+}
+.mention-picker-help, .mention-empty {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #71717a;
+}
+.mention-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.mention-option span { color: #71717a; font-size: 11px; }
+.mention-option[aria-selected="true"], .mention-option:hover { background: #ede9fe; }
+.mention-chip, .markdown-content a[href^="mention:"] {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-radius: 5px;
+  padding: 1px 4px;
+  text-decoration: none;
+  box-decoration-break: clone;
 }

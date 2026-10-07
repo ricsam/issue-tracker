@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
-async function seed(page: Page, baseURL: string) {
-  const headers = { Origin: baseURL };
-  const { setupRequired } = await (
-    await page.request.get("/api/auth/status")
-  ).json();
-  const auth = await page.request.post(
+let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
+test.beforeAll(async ({ request, baseURL }) => {
+  const headers = { Origin: baseURL! };
+  const { setupRequired } = await (await request.get("/api/auth/status")).json();
+  const auth = await request.post(
     setupRequired ? "/api/auth/setup" : "/api/auth/login",
     {
       headers,
@@ -18,6 +17,12 @@ async function seed(page: Page, baseURL: string) {
     },
   );
   expect(auth.ok()).toBeTruthy();
+  session = await request.storageState();
+});
+test.beforeEach(async ({ context }) => { await context.addCookies(session.cookies); });
+
+async function seed(page: Page, baseURL: string) {
+  const headers = { Origin: baseURL };
   const response = await page.request.post("/api/projects", {
     headers,
     data: { name: `Sidebar ${randomUUID()}` },
@@ -103,7 +108,7 @@ for (const width of [1440, 1024]) {
     await expect(page).toHaveURL(projectPath);
     await expect(issueEditor(page)).toContainText("Sidebar alpha");
     await expect(alpha).toHaveAttribute("aria-current", "true");
-    await expect(page.locator("article.issue-row.is-selected")).toHaveCount(1);
+    await expect(page.locator("tr.issue-row.is-selected")).toHaveCount(1);
     await expect(
       sidebar(page).getByRole("link", { name: "Open issue in full page" }),
     ).toHaveAttribute("href", (await alpha.getAttribute("href"))!);
@@ -145,7 +150,7 @@ test("desktop sidebar width is resizable, remembered, clamped, and keyboard acce
   const resizer = page.getByRole("separator", { name: "Resize issue details" });
   await expect(resizer).toHaveAttribute("aria-valuenow", "680");
   expect((await sidebar(page).boundingBox())!.width).toBe(680);
-  expect((await sidebar(page).locator(".properties").boundingBox())!.height).toBeLessThan(160);
+  await expect(sidebar(page).getByRole("list", { name: "Tagged users" })).toBeVisible();
   await issueEditor(page).fill("Draft survives resizing");
   const box = (await resizer.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + 150);
@@ -475,7 +480,7 @@ test("rapid selection ignores stale responses and failed details can retry witho
 });
 
 for (const width of [1440, 1024, 390]) {
-  test(`the whole label-only list row opens an issue at ${width}px`, async ({
+  test(`table row metadata and keyboard links open an issue at ${width}px`, async ({
     page,
     baseURL,
   }) => {
@@ -488,17 +493,15 @@ for (const width of [1440, 1024, 390]) {
     const issuePath = (await alpha.getByRole("link").getAttribute("href"))!;
     await expect(alpha.getByRole("combobox")).toHaveCount(0);
 
-    // All of these are outside the original title link: padding and metadata.
-    for (const target of ["top-left", "bottom-right", "avatar"] as const) {
-      await alpha.scrollIntoViewIfNeeded();
-      const box = (await alpha.boundingBox())!;
-      const avatar = (await alpha.locator(".avatar").boundingBox())!;
-      const point =
-        target === "avatar"
-          ? { x: avatar.x + avatar.width / 2, y: avatar.y + avatar.height / 2 }
-          : target === "top-left"
-            ? { x: box.x + 5, y: box.y + 5 }
-            : { x: box.x + box.width - 5, y: box.y + box.height - 5 };
+    await expect(alpha.locator(".avatar")).toHaveCount(0);
+    // The number cell and padding still activate the real, full-row link.
+    for (const target of ["padding", "number"] as const) {
+      const cell = alpha.locator("td").first();
+      await cell.scrollIntoViewIfNeeded();
+      const box = (await cell.boundingBox())!;
+      const point = target === "number"
+        ? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        : { x: box.x + 5, y: box.y + 5 };
       await page.mouse.click(point.x, point.y);
       if (width >= 1024) {
         await expect(page).toHaveURL(projectPath);

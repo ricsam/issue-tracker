@@ -1,5 +1,15 @@
 import { Database } from "bun:sqlite";
+import { extractMentionUserIds } from "../shared/mentions";
 import { deriveIssueTitle, prependLegacyTitle } from "../shared/issue-content";
+
+/** Called inside the content write transaction; historical unknown IDs are ignored. */
+export function syncIssueTaggedUsers(db: Database, issueId: string) {
+  const bodies = db.query("SELECT body FROM issues WHERE id=? UNION ALL SELECT body FROM comments WHERE issueId=?").all(issueId, issueId) as { body: string }[];
+  const ids = new Set(bodies.flatMap(({ body }) => extractMentionUserIds(body)));
+  db.query("DELETE FROM issue_tagged_users WHERE issueId=?").run(issueId);
+  for (const userId of ids)
+    db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
+}
 
 export function openDatabase(path: string) {
   const db = new Database(path, { create: true, strict: true });
@@ -158,6 +168,17 @@ export function openDatabase(path: string) {
         db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
     db.query("INSERT INTO migrations VALUES (6)").run();
+  }).immediate();
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=7").get()) return;
+    db.exec(`CREATE TABLE IF NOT EXISTS issue_tagged_users (
+      issueId TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+      userId TEXT NOT NULL REFERENCES users(id),
+      PRIMARY KEY(issueId,userId)
+    );`);
+    for (const { id } of db.query("SELECT id FROM issues").all() as { id: string }[])
+      syncIssueTaggedUsers(db, id);
+    db.query("INSERT INTO migrations VALUES (7)").run();
   }).immediate();
   return db;
 }

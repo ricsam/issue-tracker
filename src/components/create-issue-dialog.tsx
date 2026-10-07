@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { Link } from "react-router-dom";
+import { CircleCheck, X } from "lucide-react";
+import type { Issue, Project } from "../../shared/types";
+import { api, message } from "../lib/api";
+import { parseLabels, validateIssueBody } from "../lib/validation";
+import { useWorkspace } from "../lib/workspace";
+import { RichEditor } from "./rich-editor";
+import { Button, ErrorNotice, Modal } from "./ui/primitives";
+
+export function CreateIssueDialog({
+  project,
+  onCreated,
+  onClose,
+  canViewIssue,
+}: {
+  project: Project;
+  onCreated: (issue: Issue) => void;
+  onClose: () => void;
+  canViewIssue: () => boolean;
+}) {
+  const { users } = useWorkspace();
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [body, setBody] = useState("");
+  const [labels, setLabels] = useState("");
+  const [created, setCreated] = useState<Issue | null>(null);
+  const [showNotice, setShowNotice] = useState(false);
+  const fields = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Autofocus can scroll just the editable surface into view; keep its tabs
+    // and formatting controls visible at the start of each fresh draft too.
+    fields.current?.scrollTo({ top: 0 });
+  }, [created]);
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      validateIssueBody(body);
+      const { issue } = await api<{ issue: Issue }>(
+        `/api/projects/${encodeURIComponent(project.slug)}/issues`,
+        {
+          method: "POST",
+          body: JSON.stringify({ body, labels: parseLabels(labels) }),
+        },
+      );
+      setCreated(issue);
+      setShowNotice(true);
+      setBody("");
+      setLabels("");
+      onCreated(issue);
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
+
+  function viewIssue(event: MouseEvent<HTMLAnchorElement>) {
+    if (submitting.current) {
+      event.preventDefault();
+      return;
+    }
+    // New-tab/modifier clicks leave the current draft in place.
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    if (
+      ((body.trim() || labels.trim()) &&
+        !window.confirm("Discard the new issue draft and view the created issue?")) ||
+      !canViewIssue()
+    )
+      event.preventDefault();
+  }
+
+  return (
+    <Modal
+      className="create-issue-dialog"
+      title="Create issue"
+      description={`Add an issue to ${project.name}. Place it on the board later when it’s ready for work.`}
+      open
+      onOpenChange={(open) => !open && !submitting.current && onClose()}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+    >
+      <form onSubmit={create} className="create-issue-form" aria-busy={busy}>
+        <div ref={fields} className="create-issue-fields">
+          <fieldset disabled={busy} inert={busy} className="form-stack">
+            <div>
+              <RichEditor
+                // A fresh editor clears undo history, attachments and preview/source mode,
+                // and autofocuses the next draft, not just its Markdown value.
+                key={created?.id || "first-draft"}
+                value={body}
+                onChange={setBody}
+                mentionUsers={users}
+                ariaLabel="Issue"
+                autoFocus
+                placeholder="What needs to happen? Just start writing…"
+              />
+              <p className="settings-help muted">
+                Write your issue in one place. A heading or the first line becomes
+                its title on the board.
+              </p>
+            </div>
+            <label>
+              Labels
+              <input
+                name="labels"
+                placeholder="bug, design (comma-separated)"
+                value={labels}
+                onChange={(event) => setLabels(event.target.value)}
+              />
+            </label>
+          </fieldset>
+        </div>
+        <div className="create-issue-footer">
+          <ErrorNotice error={error} />
+          {/* Inside the dialog's focus trap, persistent and reachable while writing again. */}
+          <div role="status" aria-atomic="true">
+            {created && showNotice && (
+              <div className="issue-created-notice">
+                <CircleCheck size={20} aria-hidden="true" />
+                <div className="issue-created-message">
+                  <strong>Issue #{created.number} created.</strong>
+                  <span>Ready for another.</span>
+                </div>
+                <Link
+                  to={`/issues/${created.id}`}
+                  onClick={viewIssue}
+                  aria-disabled={busy || undefined}
+                  tabIndex={busy ? -1 : undefined}
+                >
+                  View issue
+                </Link>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Dismiss notification"
+                  disabled={busy}
+                  onClick={() => setShowNotice(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="form-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onClose}
+              disabled={busy}
+            >
+              {created ? "Done" : "Cancel"}
+            </Button>
+            <Button disabled={busy || !body.trim()}>
+              {busy ? "Creating…" : "Create issue"}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}

@@ -196,6 +196,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await create
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
+  await expect(create.getByRole("status")).toContainText("Issue #4 created.");
+  await create.getByRole("link", { name: "View issue" }).click();
   await expect(page).toHaveURL(/\/issues\//);
   const issueUrl = page.url();
   await expect(page.getByLabel("Labels", { exact: true })).toHaveValue(
@@ -265,8 +267,9 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await create
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/issues\//);
-  await page.goto(projectPath + "/board");
+  await expect(create.getByRole("status")).toContainText("Issue #5 created.");
+  await create.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page).toHaveURL(projectPath + "/board");
   await expect(page.locator(".board-card")).toHaveCount(3);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   expect(

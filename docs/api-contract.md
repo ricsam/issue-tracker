@@ -28,9 +28,9 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | DELETE | `/api/projects/:slug/board/issues/:id` | No body → `{board:BoardSettings}`; remove membership only |
 | GET | `/api/issues/:id` | `IssueDetail` |
 | PATCH | `/api/issues/:id` | `{title?,body?,labels?,assigneeId?,state?}` → `{issue:Issue}`; signed-in workspace collaboration |
-| POST | `/api/issues/:id/comments` | `{body}` → `{comment:Comment}` |
-| PATCH | `/api/comments/:id` | `{body}` → `{comment:Comment}`; author/admin only |
-| DELETE | `/api/comments/:id` | `{ok:true}`; author/admin only |
+| POST | `/api/issues/:id/comments` | `{body}` → `{comment:Comment,issue:Issue}` |
+| PATCH | `/api/comments/:id` | `{body}` → `{comment:Comment,issue:Issue}`; author/admin only |
+| DELETE | `/api/comments/:id` | `{ok:true,issue:Issue}`; author/admin only |
 | POST | `/api/uploads` | Multipart field `file` → `{attachment:Attachment}`; max 10 MiB, authenticated access |
 | GET | `/api/uploads/:id/:name` | Authenticated download; raster images inline, other files forced attachment with nosniff and restrictive CSP |
 | GET | `/healthz`, `/readyz` | Public minimal probes |
@@ -51,8 +51,10 @@ SQLite migration v5 adds `project_boards.customLanes` (default `[]`) and transac
 
 SQLite migration v6 adds nullable `issues.closedAt`, `issues.closedById`, `projects.archivedAt` and `projects.archivedById` (user references), so existing issues stay open and projects stay active. It is transactional and version-gated, adds only missing columns, and never resets existing values. Inserts name their columns because the tables grew.
 
+`Issue.taggedUserIds` is a sorted, deduplicated array of user UUIDs derived from actual Markdown mention links (`[@Display Name](mention:UUID)`) across the saved issue and its comments. No role/source metadata or notifications are attached. Plain text, code examples, and images are not mentions; real reference links are supported. New content referring to an unknown valid user UUID returns 400 atomically. Mention edits/deletes recalculate the union in the content-write transaction; removing the last reference removes the association. Comment mutation responses include the updated issue so clients can refresh associations without replacing unsaved issue drafts. Migration v7 creates `issue_tagged_users(issueId,userId)` with a composite primary key and foreign keys, backfilling known IDs only while preserving content and timestamps.
+
 Comment bodies require non-whitespace content and remain limited to 100000 characters. Issue creation uses one autofocus Markdown editor, with no separate title field.
 
 UI uses URL routes `/projects` (`?view=archived` lists archived projects), `/projects/:slug` (`?state=closed` lists closed issues), `/projects/:slug/board`, `/issues/:id`, `/admin`. Auth status gates all application screens. Login/setup rendered when status says unauthenticated.
 
-Editor component contract: `RichEditor({value:string,onChange:(markdown:string)=>void,placeholder?:string,minimal?:boolean,ariaLabel?:string,autoFocus?:boolean})`, exported from `src/components/rich-editor.tsx`. Markdown renderer `Markdown({children:string})` from `src/components/markdown.tsx`. Editors own uploads via `/api/uploads`. UI shared API helper `api<T>(path, RequestInit?)` in `src/lib/api.ts`; credentials same-origin; throws Error with API message. Editor may use api or fetch independently.
+Editor component contract: `RichEditor({value:string,onChange:(markdown:string)=>void,placeholder?:string,minimal?:boolean,ariaLabel?:string,autoFocus?:boolean,mentionUsers?:User[]})`, exported from `src/components/rich-editor.tsx`. Markdown renderer `Markdown({children:string,mentionUsers?:User[]})` from `src/components/markdown.tsx`. Editors own uploads via `/api/uploads`. UI shared API helper `api<T>(path, RequestInit?)` in `src/lib/api.ts`; credentials same-origin; throws Error with API message. Editor may use api or fetch independently.

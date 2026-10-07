@@ -104,7 +104,7 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await panel.getByRole("button", { name: "Reopen issue", exact: true }).click();
   await expect(panel.locator(".state-badge")).toHaveText("Open");
   await expect(page.locator(".issue-row")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "No closed issues" })).toBeVisible();
+  await expect(page.getByRole("table").getByText("No issues in this view.")).toBeVisible();
   await expect(state.getByRole("link", { name: /Open/ })).toContainText("2");
   await panel.getByRole("button", { name: "Close issue details", exact: true }).click();
 

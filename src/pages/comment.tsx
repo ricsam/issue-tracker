@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Comment } from "../../shared/types";
+import type { Comment, Issue } from "../../shared/types";
 import { useWorkspace } from "../lib/workspace";
 import { api, message } from "../lib/api";
 import { validateBody } from "../lib/validation";
@@ -11,12 +11,14 @@ export function CommentItem({
   readOnly = false,
   onUpdate,
   onDelete,
+  onIssueChange,
 }: {
   comment: Comment;
   /** Archived projects keep comments visible but not editable. */
   readOnly?: boolean;
   onUpdate: (comment: Comment) => void;
   onDelete: () => void;
+  onIssueChange: (issue: Issue) => void;
 }) {
   const { user, users } = useWorkspace();
   const [editing, setEditing] = useState(false);
@@ -32,11 +34,12 @@ export function CommentItem({
     setError("");
     try {
       validateBody(body);
-      const result = await api<{ comment: Comment }>(
+      const result = await api<{ comment: Comment; issue: Issue }>(
         `/api/comments/${comment.id}`,
         { method: "PATCH", body: JSON.stringify({ body }) },
       );
       onUpdate(result.comment);
+      onIssueChange(result.issue);
       setEditing(false);
     } catch (e) {
       setError(message(e));
@@ -48,8 +51,9 @@ export function CommentItem({
     setBusy(true);
     setError("");
     try {
-      await api(`/api/comments/${comment.id}`, { method: "DELETE" });
+      const result = await api<{ issue: Issue }>(`/api/comments/${comment.id}`, { method: "DELETE" });
       onDelete();
+      onIssueChange(result.issue);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -72,6 +76,7 @@ export function CommentItem({
             <RichEditor
               value={body}
               onChange={setBody}
+              mentionUsers={users}
               minimal
               placeholder="Edit comment…"
             />
@@ -93,7 +98,7 @@ export function CommentItem({
           </>
         ) : (
           <>
-            <Markdown>{comment.body}</Markdown>
+            <Markdown mentionUsers={users}>{comment.body}</Markdown>
             {allowed && (
               <div className="form-actions">
                 <Button

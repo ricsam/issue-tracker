@@ -145,6 +145,12 @@ export function IssueDetails({
       setChangingState(false);
     }
   }
+  function commentIssueChanged(updated: Issue) {
+    // Comment mentions update associations without replacing an unsaved issue draft.
+    setIssue((current) => current ? { ...current, taggedUserIds: updated.taggedUserIds } : current);
+    setPersisted((current) => current ? { ...current, taggedUserIds: updated.taggedUserIds } : current);
+    onSaved?.(updated);
+  }
   async function post(e: FormEvent) {
     e.preventDefault();
     if (!comment.trim()) return;
@@ -152,11 +158,12 @@ export function IssueDetails({
     setError("");
     try {
       validateBody(comment);
-      const result = await api<{ comment: Comment }>(
+      const result = await api<{ comment: Comment; issue: Issue }>(
         `/api/issues/${id}/comments`,
         { method: "POST", body: JSON.stringify({ body: comment }) },
       );
       setComments((v) => [...v, result.comment]);
+      commentIssueChanged(result.issue);
       setComment("");
     } catch (e) {
       setError(message(e));
@@ -243,12 +250,13 @@ export function IssueDetails({
             <section>
               {archived ? (
                 <article className="issue-read-only" aria-label="Issue">
-                  <Markdown>{issue.body}</Markdown>
+                  <Markdown mentionUsers={users}>{issue.body}</Markdown>
                 </article>
               ) : (
                 <RichEditor
                   value={issue.body}
                   onChange={(body) => update({ body })}
+                  mentionUsers={users}
                   ariaLabel="Issue"
                   placeholder="What needs to happen? Just start writing…"
                 />
@@ -257,6 +265,15 @@ export function IssueDetails({
             <aside className="properties">
               <h2>Properties</h2>
               <IssueFields issue={issue} onChange={update} />
+              <div className="tagged-users-field">
+                <span>Tagged users</span>
+                <div className="tagged-users" role="list" aria-label="Tagged users">
+                  {issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => {
+                    const user = users.find((candidate) => candidate.id === id);
+                    return <span role="listitem" className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>;
+                  }) : <span className="muted">No tagged users</span>}
+                </div>
+              </div>
               <label>
                 Labels
                 <input
@@ -297,6 +314,7 @@ export function IssueDetails({
             key={c.id}
             comment={c}
             readOnly={archived}
+            onIssueChange={commentIssueChanged}
             onUpdate={(updated) =>
               setComments((v) =>
                 v.map((item) => (item.id === updated.id ? updated : item)),
@@ -314,6 +332,7 @@ export function IssueDetails({
               <RichEditor
                 value={comment}
                 onChange={setComment}
+                mentionUsers={users}
                 placeholder="Share an update or ask a question…"
                 minimal
               />

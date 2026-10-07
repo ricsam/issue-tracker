@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type FormEvent,
   type MouseEvent,
 } from "react";
 import {
@@ -21,7 +20,6 @@ import {
   List,
   Plus,
   Search,
-  Inbox,
   GripVertical,
   SlidersHorizontal,
   Maximize2,
@@ -36,15 +34,11 @@ import {
 } from "../../shared/types";
 import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
-import { parseLabels, validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
-import {
-  Button,
-  ErrorNotice,
-  Loading,
-  Modal,
-} from "../components/ui/primitives";
-import { RichEditor } from "../components/rich-editor";
+import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
+import { CreateIssueDialog } from "../components/create-issue-dialog";
+import { IssueTable } from "../components/issue-table";
+import { initialIssueTableState, issueTableRows } from "../lib/issue-table";
 import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { IssueDetails } from "./detail";
@@ -147,11 +141,9 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [createError, setCreateError] = useState("");
-  const [body, setBody] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
@@ -246,31 +238,15 @@ function ProjectIssues({ slug }: { slug: string }) {
       setSaving(null);
     }
   }
-  async function create(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
-    setCreateError("");
-    const data = new FormData(e.currentTarget);
-    try {
-      validateIssueBody(body);
-      const { issue } = await api<{ issue: Issue }>(
-        `/api/projects/${encodeURIComponent(slug || "")}/issues`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            body,
-            labels: parseLabels(String(data.get("labels") || "")),
-          }),
-        },
-      );
-      await refresh();
-      setOpen(false);
-      navigate(`/issues/${issue.id}`);
-    } catch (e) {
-      setCreateError(message(e));
-    } finally {
-      setBusy(false);
-    }
+  function issueCreated(issue: Issue) {
+    // Creation is already committed. A workspace refresh failure must not invite
+    // a duplicate submission or prevent the next draft from being started.
+    setIssues((current) => [...current, issue]);
+    void refresh().catch((e) =>
+      setError(
+        `Issue #${issue.number} was created, but workspace counts could not refresh: ${message(e)}`,
+      ),
+    );
   }
   if (loading) return <Loading />;
   if (!project)
@@ -298,18 +274,20 @@ function ProjectIssues({ slug }: { slug: string }) {
   const openIssues = issues.filter((issue) => issue.state === "open");
   const closedIssues = issues.filter((issue) => issue.state === "closed");
   const listIssues = showClosed ? closedIssues : openIssues;
-  const filtered = (board ? boardIssues : listIssues).filter(
+  const searched = (board ? boardIssues : listIssues).filter(
     (i) =>
       (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
-      `${i.title} ${i.number} ${i.labels.join(" ")}`
+      `${i.title} ${i.number} ${i.labels.join(" ")} ${users.filter((user) => i.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+  const filtered = board ? searched : issueTableRows(searched, users, tableState);
   function issueCard(i: Issue) {
+    const assignee = users.find((user) => user.id === i.assigneeId);
     return (
       <article
         key={i.id}
-        className={`${board ? "board-card" : "issue-row"}${selectedId === i.id ? " is-selected" : ""}${i.state === "closed" ? " is-closed" : ""}`}
+        className={`board-card${selectedId === i.id ? " is-selected" : ""}${i.state === "closed" ? " is-closed" : ""}`}
         draggable={board && !saving && !readOnly}
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", i.id);
@@ -336,14 +314,11 @@ function ProjectIssues({ slug }: { slug: string }) {
               {l}
             </span>
           ))}
-          <span
-            className="avatar small"
-            title={
-              users.find((u) => u.id === i.assigneeId)?.name || "Unassigned"
-            }
-          >
-            {users.find((u) => u.id === i.assigneeId)?.name.slice(0, 1) || "–"}
-          </span>
+          {assignee && (
+            <span className="avatar small" title={`Assigned to ${assignee.name}`}>
+              {assignee.name.slice(0, 1)}
+            </span>
+          )}
           {board && (
             <>
               <select
@@ -392,13 +367,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           {!readOnly && (
             <div className="page-actions">
               <ArchiveProjectButton project={project} onChange={setProject} />
-              <Button
-                onClick={() => {
-                  setBody("");
-                  setCreateError("");
-                  setOpen(true);
-                }}
-              >
+              <Button onClick={() => setOpen(true)}>
                 <Plus size={16} />
                 Create issue
               </Button>
@@ -588,32 +557,17 @@ function ProjectIssues({ slug }: { slug: string }) {
               })}
             </div>
           </>
-        ) : filtered.length ? (
-          <div className="issue-list">{filtered.map(issueCard)}</div>
         ) : (
-          <section className="empty-state compact">
-            <Inbox size={32} />
-            <h2>
-              {!issues.length
-                ? "A clean slate"
-                : listIssues.length
-                  ? "No matching issues"
-                  : showClosed
-                    ? "No closed issues"
-                    : "No open issues"}
-            </h2>
-            <p>
-              {!issues.length
-                ? readOnly
-                  ? "This archived project has no issues."
-                  : "Create your first issue and start making progress."
-                : listIssues.length
-                  ? "Try a different search."
-                  : showClosed
-                    ? "Closed issues will appear here."
-                    : "Every issue here is closed. Nice work."}
-            </p>
-          </section>
+          <IssueTable
+            issues={filtered}
+            allIssues={listIssues}
+            users={users}
+            state={tableState}
+            onChange={setTableState}
+            selectedId={selectedId}
+            controls={desktop && selectedId ? "issue-detail-sidebar" : undefined}
+            onOpen={openDetails}
+          />
         )}
       </div>
       {selectedId && (
@@ -681,48 +635,14 @@ function ProjectIssues({ slug }: { slug: string }) {
           onClose={() => setAddToBoard(false)}
         />
       )}
-      <Modal
-        className="create-issue-dialog"
-        title="Create issue"
-        description={`Add an issue to ${project.name}. Place it on the board later when it’s ready for work.`}
-        open={open}
-        onOpenChange={(v) => !busy && setOpen(v)}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-      >
-        <form onSubmit={create} className="form-stack">
-          <div>
-            <RichEditor
-              value={body}
-              onChange={setBody}
-              ariaLabel="Issue"
-              autoFocus
-              placeholder="What needs to happen? Just start writing…"
-            />
-            <p className="settings-help muted">
-              Write your issue in one place. A heading or the first line becomes
-              its title on the board.
-            </p>
-          </div>
-          <label>
-            Labels
-            <input name="labels" placeholder="bug, design (comma-separated)" />
-          </label>
-          <ErrorNotice error={createError} />
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setOpen(false)}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-            <Button disabled={busy || !body.trim()}>
-              {busy ? "Creating…" : "Create issue"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {open && (
+        <CreateIssueDialog
+          project={project}
+          onCreated={issueCreated}
+          onClose={() => setOpen(false)}
+          canViewIssue={canLeaveDetails}
+        />
+      )}
     </div>
   );
 }

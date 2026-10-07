@@ -59,15 +59,19 @@ import {
   Paperclip,
   Loader2,
 } from "lucide-react";
-import type { Attachment } from "../../shared/types";
+import { mentionUserId } from "../../shared/mentions";
+import { MentionLinkNode, mentionLinkReplacement } from "./mention-link-node";
+import { MENTION_TRANSFORMER } from "./mention-transformer";
+import { MentionAutocomplete } from "./mention-autocomplete";
+import type { Attachment, User } from "../../shared/types";
 import { IMAGE_TRANSFORMER, ImageNode } from "./image-node";
 import { Markdown } from "./markdown";
 import "./editor.css";
 
-const transformers = [IMAGE_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
+const transformers = [MENTION_TRANSFORMER, IMAGE_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
 type Mode = "write" | "markdown" | "preview";
 function validLink(url: string) {
-  return /^(https?:\/\/|mailto:|\/api\/uploads\/)/i.test(url);
+  return !!mentionUserId(url) || /^(https?:\/\/|mailto:|\/api\/uploads\/)/i.test(url);
 }
 
 function Tool({
@@ -103,6 +107,7 @@ function EditorContents({
   minimal,
   ariaLabel,
   autoFocus,
+  mentionUsers,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -110,6 +115,7 @@ function EditorContents({
   minimal: boolean;
   ariaLabel: string;
   autoFocus: boolean;
+  mentionUsers: User[];
 }) {
   const [editor] = useLexicalComposerContext();
   const [mode, setMode] = useState<Mode>("write");
@@ -124,7 +130,7 @@ function EditorContents({
     if (value !== last.current) {
       last.current = value;
       editor.update(() => $convertFromMarkdownString(value, transformers), {
-        tag: "external",
+        tag: ["external", "skip-dom-selection"],
       });
     }
   }, [editor, value]);
@@ -214,6 +220,10 @@ function EditorContents({
     <div
       className="rich-editor"
       aria-busy={uploading}
+      onClickCapture={(event) => {
+        const link = (event.target as Element).closest?.('a[href^="mention:"]');
+        if (link) event.preventDefault();
+      }}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("Files")) e.preventDefault();
       }}
@@ -354,7 +364,7 @@ function EditorContents({
       {mode === "preview" && (
         <div className="editor-preview">
           {value ? (
-            <Markdown>{value}</Markdown>
+            <Markdown mentionUsers={mentionUsers}>{value}</Markdown>
           ) : (
             <span className="text-muted-foreground">
               Nothing to preview yet.
@@ -362,6 +372,7 @@ function EditorContents({
           )}
         </div>
       )}
+      <MentionAutocomplete users={mentionUsers} mode={mode} source={source} onChange={onChange} />
       {autoFocus && <AutoFocusPlugin defaultSelection="rootStart" />}
       <HistoryPlugin />
       <ListPlugin />
@@ -402,6 +413,7 @@ export function RichEditor({
   minimal = false,
   ariaLabel = placeholder,
   autoFocus = false,
+  mentionUsers = [],
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -409,6 +421,7 @@ export function RichEditor({
   minimal?: boolean;
   ariaLabel?: string;
   autoFocus?: boolean;
+  mentionUsers?: User[];
 }) {
   return (
     <LexicalComposer
@@ -421,6 +434,8 @@ export function RichEditor({
           ListNode,
           ListItemNode,
           LinkNode,
+          MentionLinkNode,
+          mentionLinkReplacement,
           ImageNode,
         ],
         editorState: () => $convertFromMarkdownString(value, transformers),
@@ -457,6 +472,7 @@ export function RichEditor({
         minimal={minimal}
         ariaLabel={ariaLabel}
         autoFocus={autoFocus}
+        mentionUsers={mentionUsers}
       />
     </LexicalComposer>
   );

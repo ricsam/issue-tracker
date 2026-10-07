@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.5.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.6.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.6.0
+
+Version 0.6.0 adds the sortable, per-column-filterable issue table, `@` mentions in issues and comments, and repeat issue creation with a persistent **View issue** confirmation. Unassigned avatar placeholders are removed. `Issue` responses add `taggedUserIds`, a deduplicated union of the users mentioned in saved issue content and comments; comment mutation responses include the updated `issue`. Tagging records no role or relationship type and sends no notifications. See [the API contract](api-contract.md).
+
+Migration v7 adds and backfills `issue_tagged_users` without modifying existing issue/comment content, timestamps, assignments, or board placements. Removing the last mention removes the association. Earlier application versions do not maintain this table, so running them against an upgraded database can leave associations stale after later re-upgrade.
+
+Take a consistent `/data` backup before upgrading and preserve the encryption-key Secret. Avoid automatic Helm rollback (`--atomic`) across migrations. If recovery is necessary, stop the application and restore the pre-upgrade data backup with its matching image/chart, preserving any newer writes separately first. Upgrading from versions older than 0.5.0 also runs the migrations documented below.
 
 ### Upgrading to 0.5.0
 
