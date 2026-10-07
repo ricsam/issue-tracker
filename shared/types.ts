@@ -40,7 +40,6 @@ export interface Issue {
   title: string;
   body: string;
   labels: string[];
-  assigneeId: string | null;
   taggedUserIds: string[];
   authorId: string;
   /** Derived from closedAt; closing never changes board membership or lanes. */

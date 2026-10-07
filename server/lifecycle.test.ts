@@ -86,7 +86,6 @@ test("issues close and reopen with attribution, keep content and board placement
     body: issue.body,
     title: issue.title,
     labels: issue.labels,
-    assigneeId: null,
   });
   expect(Date.parse(closed.closedAt)).not.toBeNaN();
   expect(closed.closedAt).toBe(closed.updatedAt);

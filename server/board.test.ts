@@ -347,7 +347,7 @@ test("lanes independent from issue edits; hidden cards retained; removing member
   const issue = (await (await f.create({ labels: ["bug"] })).json()).issue;
   expect(issue).not.toHaveProperty("status");
   expect(issue).not.toHaveProperty("priority");
-  expect(issue.assigneeId).toBeNull();
+  expect(issue).not.toHaveProperty("assigneeId");
   for (const extra of [
     { status: "todo" },
     { priority: "high" },
@@ -359,6 +359,7 @@ test("lanes independent from issue edits; hidden cards retained; removing member
   for (const extra of [
     { status: "todo" },
     { priority: "high" },
+    { assigneeId: issue.authorId },
     { lane: "done" },
   ])
     expect(
@@ -373,7 +374,6 @@ test("lanes independent from issue edits; hidden cards retained; removing member
   await f.req(`/api/issues/${issue.id}`, "PATCH", {
     body: "Stale editor save",
     labels: ["new"],
-    assigneeId: issue.authorId,
   });
   expect((await f.get()).cards).toEqual([{ issueId: issue.id, lane: "done" }]);
   expect((await (await f.req(f.path)).json()).project.openCount).toBe(0);

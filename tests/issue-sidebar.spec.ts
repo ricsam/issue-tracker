@@ -428,10 +428,13 @@ test("rapid selection ignores stale responses and failed details can retry witho
   const alphaGate = new Promise<void>((resolve) => {
     releaseAlpha = resolve;
   });
+  let alphaFinished!: () => void;
+  const alphaDone = new Promise<void>((resolve) => { alphaFinished = resolve; });
   await page.route(`**/api${alphaPath}`, async (route) => {
     const response = await route.fetch();
     await alphaGate;
     await route.fulfill({ response });
+    alphaFinished();
   });
   let failBeta = true;
   await page.route(`**/api${betaPath}`, async (route) => {
@@ -446,13 +449,13 @@ test("rapid selection ignores stale responses and failed details can retry witho
   await issueLink(page, "Sidebar alpha").click();
   await expect(sidebar(page).getByRole("status")).toBeVisible();
   await issueLink(page, "Sidebar beta").click();
-  await expect(sidebar(page).getByRole("alert")).toHaveText(
+  await expect(sidebar(page).getByRole("alert")).toContainText(
     "Could not load this issue",
   );
-  const alphaResponse = page.waitForResponse(`**/api${alphaPath}`);
+  // The superseded fetch is aborted; finishing its route must not change UI.
   releaseAlpha();
-  await alphaResponse;
-  await expect(sidebar(page).getByRole("alert")).toHaveText(
+  await alphaDone;
+  await expect(sidebar(page).getByRole("alert")).toContainText(
     "Could not load this issue",
   );
   await expect(issueEditor(page)).toHaveCount(0);
@@ -462,6 +465,8 @@ test("rapid selection ignores stale responses and failed details can retry witho
     .click();
   await expect(issueEditor(page)).toContainText("Sidebar beta");
   await expect(page).toHaveURL(projectPath);
+  await page.unroute(`**/api${alphaPath}`);
+  await page.unroute(`**/api${betaPath}`);
   // Keyboard activation is a normal selection; modified clicks retain native links.
   await sidebar(page)
     .getByRole("button", { name: "Close issue details" })
@@ -496,7 +501,7 @@ for (const width of [1440, 1024, 390]) {
     await expect(alpha.locator(".avatar")).toHaveCount(0);
     // The number cell and padding still activate the real, full-row link.
     for (const target of ["padding", "number"] as const) {
-      const cell = alpha.locator("td").first();
+      const cell = alpha.locator("td.issue-number");
       await cell.scrollIntoViewIfNeeded();
       const box = (await cell.boundingBox())!;
       const point = target === "number"

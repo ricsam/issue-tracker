@@ -1,0 +1,50 @@
+.issue-detail-loader {
+  position: relative;
+  min-width: 0;
+}
+.issue-detail-content {
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+.issue-detail-content.is-stale {
+  opacity: 0.5;
+  transition-delay: 150ms;
+}
+.issue-load-progress {
+  position: sticky;
+  top: -24px;
+  height: 3px;
+  margin-bottom: -3px;
+  overflow: hidden;
+  z-index: 6;
+  opacity: 0;
+  background: #ece5fb;
+  animation: issue-progress-appear 120ms ease 150ms forwards;
+}
+.issue-load-progress::after {
+  content: "";
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: #7050d9;
+  animation: issue-progress-travel 1.1s ease-in-out infinite;
+}
+.issue-load-error {
+  margin-bottom: 20px;
+}
+.issue-load-error p {
+  margin-bottom: 12px;
+}
+@keyframes issue-progress-appear {
+  to { opacity: 1; }
+}
+@keyframes issue-progress-travel {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(390%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .issue-detail-content { transition: none; }
+  .issue-load-progress { opacity: 1; }
+  .issue-load-progress,
+  .issue-load-progress::after { animation: none; }
+}

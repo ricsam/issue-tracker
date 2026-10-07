@@ -1148,15 +1148,6 @@ fieldset > small {
 .field-label {
   margin-bottom: 9px;
 }
-.issue-fields {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-.issue-fields select {
-  font-size: 12px;
-  padding: 9px 36px 9px 7px;
-}
 .back-link {
   display: flex;
   align-items: center;
@@ -1324,11 +1315,6 @@ fieldset.is-read-only:disabled {
 }
 .properties h2 {
   font-size: 12px;
-}
-.properties .issue-fields {
-  grid-template-columns: 1fr;
-  gap: 8px;
-  min-width: 0;
 }
 .properties label {
   font-size: 11px;
@@ -1718,10 +1704,6 @@ fieldset.is-read-only:disabled {
   .detail-grid {
     grid-template-columns: 1fr;
   }
-  .properties .issue-fields {
-    grid-template-columns: 1fr;
-    gap: 7px;
-  }
   .detail-heading {
     align-items: center;
   }
@@ -1751,9 +1733,6 @@ fieldset.is-read-only:disabled {
   .dialog-content {
     padding: 23px;
   }
-  .issue-fields {
-    gap: 8px;
-  }
   .settings-card {
     padding: 20px;
   }
@@ -1781,12 +1760,6 @@ fieldset.is-read-only:disabled {
   }
   .board-column.lane-drop-after {
     box-shadow: inset 0 -3px #7050d9;
-  }
-  .issue-fields {
-    grid-template-columns: 1fr;
-  }
-  .properties .issue-fields {
-    grid-template-columns: 1fr;
   }
   .detail-heading {
     flex-wrap: wrap;

@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.6.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.7.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.6.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.6.0 adds the issue table and user mentions; its v7 database migration preserves existing content while adding user associations. Back up `/data` and retain the encryption key before upgrading. Earlier application versions do not maintain the new associations, so avoid automatic rollback across the migration.
+Verify `0.7.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.7.0 adds pagination, compact column filters, bulk closing, and smoother issue-detail loading. It removes `assigneeId` from issue responses and rejects it in create/PATCH requests; update API clients before upgrading. Legacy assignment data is retained, and no new database migration is added. Back up `/data` and retain the encryption key before upgrading. Upgrades from versions older than 0.6.0 still run earlier migrations, including v7 user associations; avoid automatic rollback across those migrations.
 
 ## Choose the image
 
@@ -43,7 +43,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.6.0 --namespace issue-tracker \
+  --version 0.7.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -83,9 +83,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.6.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.7.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.6.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.7.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

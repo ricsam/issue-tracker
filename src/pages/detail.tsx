@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Archive,
@@ -26,69 +26,125 @@ import {
   validateBody,
   validateIssueBody,
 } from "../lib/validation";
-import { IssueFields } from "../components/issue-fields";
+
+import "./issue-loading.css";
 
 export function DetailPage() {
   const { id } = useParams();
-  return <IssueDetails key={id} id={id || ""} />;
+  return <IssueDetails id={id || ""} />;
 }
 
-export function IssueDetails({
-  id,
-  embedded = false,
-  onSaved,
-  onPendingChange,
-}: {
+type IssueDetailsProps = {
   id: string;
   embedded?: boolean;
   onSaved?: (issue: Issue) => void;
   onPendingChange?: (pending: boolean) => void;
-}) {
+};
+
+/** Keep the last editor mounted until the next request resolves. Deferring just
+ * the id would not defer effect-based network loading (there is no Suspense data
+ * source here). Only a successful response replaces the keyed editor/draft. */
+export function IssueDetails(props: IssueDetailsProps) {
+  const { id } = props;
+  const [detail, setDetail] = useState<IssueDetail | null>(null);
+  const [request, setRequest] = useState<{ id: string; error: string } | null>(null);
+  const [retry, setRetry] = useState(0);
+  const content = useRef<HTMLDivElement>(null);
+  const current = detail?.issue.id === id;
+  const error = request?.id === id ? request.error : "";
+  const loading = !current && !error;
+  const stale = !!detail && !current;
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setRequest(null);
+    // A rapid switch back to the still-mounted issue needs no new request.
+    if (detail?.issue.id === id) return;
+    api<IssueDetail>(`/api/issues/${id}`, { signal: controller.signal })
+      .then((result) => {
+        if (active) {
+          setDetail(result);
+          setRequest({ id, error: "" });
+        }
+      })
+      .catch((cause) => {
+        if (active) setRequest({ id, error: message(cause) });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [id, retry]);
+
+  useLayoutEffect(() => {
+    // Reset the panel scroll only when the new issue is actually ready, not
+    // while the previous content is still being displayed.
+    content.current?.closest(".issue-detail-scroll")?.scrollTo({ top: 0 });
+  }, [detail?.issue.id]);
+
+  return (
+    <div className="issue-detail-loader" aria-busy={loading}>
+      {detail && loading && (
+        <div className="issue-load-progress" role="status" aria-label="Loading issue">
+          <span className="sr-only">Loading issue…</span>
+        </div>
+      )}
+      {error && (
+        <div className="issue-load-error">
+          <ErrorNotice error={`Could not load the selected issue: ${error}`} />
+          {stale && <p className="muted">The previous issue is shown below. Select another issue or retry.</p>}
+          <Button onClick={() => { setRequest(null); setRetry((value) => value + 1); }}>Retry</Button>
+        </div>
+      )}
+      {!detail && loading && <Loading />}
+      <div
+        ref={content}
+        className={`issue-detail-content${stale ? " is-stale" : ""}`}
+        inert={stale}
+      >
+        {detail && (
+          <IssueDetailForm
+            {...props}
+            key={detail.issue.id}
+            id={detail.issue.id}
+            initialDetail={detail}
+            onPendingChange={current ? props.onPendingChange : undefined}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IssueDetailForm({
+  id,
+  embedded = false,
+  onSaved,
+  onPendingChange,
+  initialDetail,
+}: IssueDetailsProps & { initialDetail: IssueDetail }) {
   const { users, projects, refresh } = useWorkspace();
-  const [issue, setIssue] = useState<Issue | null>(null);
-  const [persisted, setPersisted] = useState<Issue | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [issue, setIssue] = useState<Issue>(initialDetail.issue);
+  const [persisted, setPersisted] = useState<Issue>(initialDetail.issue);
+  const [comments, setComments] = useState<Comment[]>(initialDetail.comments);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [changingState, setChangingState] = useState(false);
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saved, setSaved] = useState("");
-  const [labels, setLabels] = useState("");
-  const [retry, setRetry] = useState(0);
+  const [labels, setLabels] = useState(initialDetail.issue.labels.join(", "));
   const dirty =
     !!issue &&
     !!persisted &&
     (issue.body !== persisted.body ||
-      issue.assigneeId !== persisted.assigneeId ||
       labels !== persisted.labels.join(", "));
   const pending = dirty || !!comment.trim() || busy || posting || changingState;
   useEffect(() => {
     onPendingChange?.(pending);
     return () => onPendingChange?.(false);
   }, [pending, onPendingChange]);
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError("");
-    setSaved("");
-    api<IssueDetail>(`/api/issues/${id}`)
-      .then((d) => {
-        if (active) {
-          setIssue(d.issue);
-          setPersisted(d.issue);
-          setLabels(d.issue.labels.join(", "));
-          setComments(d.comments);
-          setComment("");
-        }
-      })
-      .catch((e) => active && setError(message(e)))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, [id, retry]);
   function update(p: Partial<Issue>) {
     setIssue((v) => (v ? { ...v, ...p } : v));
     setSaved("");
@@ -100,13 +156,12 @@ export function IssueDetails({
     setError("");
     setSaved("");
     try {
-      const { body, assigneeId } = issue;
+      const { body } = issue;
       validateIssueBody(body);
       const result = await api<{ issue: Issue }>(`/api/issues/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
           body,
-          assigneeId,
           labels: parseLabels(labels),
         }),
       });
@@ -171,14 +226,6 @@ export function IssueDetails({
       setPosting(false);
     }
   }
-  if (loading) return <Loading />;
-  if (!issue)
-    return (
-      <>
-        <ErrorNotice error={error} />
-        <Button onClick={() => setRetry((v) => v + 1)}>Retry</Button>
-      </>
-    );
   const project = projects.find((p) => p.id === issue.projectId);
   const archived = !!project?.archivedAt;
   const closed = issue.state === "closed";
@@ -264,7 +311,6 @@ export function IssueDetails({
             </section>
             <aside className="properties">
               <h2>Properties</h2>
-              <IssueFields issue={issue} onChange={update} />
               <div className="tagged-users-field">
                 <span>Tagged users</span>
                 <div className="tagged-users" role="list" aria-label="Tagged users">

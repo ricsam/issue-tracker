@@ -56,7 +56,7 @@ test("union is deduped across issue and comments, stable through rename and remo
   expect(c1.issue.taggedUserIds).toEqual(both);
   const c2 = await (await f.req(`${ip}/comments`, "POST", { body: b })).json();
   f.entry.app.db.query("UPDATE users SET name=? WHERE id=?").run("Renamed", f.member.id);
-  expect((await (await f.req(ip, "PATCH", { body: "No mentions", assigneeId: f.member.id })).json()).issue.taggedUserIds).toEqual(both);
+  expect((await (await f.req(ip, "PATCH", { body: "No mentions" })).json()).issue.taggedUserIds).toEqual(both);
   expect((await (await f.req(`/api/comments/${c1.comment.id}`, "PATCH", { body: "Removed" })).json()).issue.taggedUserIds).toEqual([f.member.id]);
   expect((await (await f.req(`${f.path}/issues`)).json()).issues[0].taggedUserIds).toEqual([f.member.id]);
   expect(await (await f.req(`/api/comments/${c2.comment.id}`, "DELETE")).json()).toMatchObject({ ok: true, issue: { taggedUserIds: [] } });

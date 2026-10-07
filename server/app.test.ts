@@ -131,6 +131,33 @@ test("every private endpoint rejects anonymous requests", async () => {
   ])
     expect((await request(app, path!, method!)).status).toBe(401);
 });
+test("assignment is absent from every issue response and rejects writes without erasing legacy data", async () => {
+  const { app } = fixture();
+  const cookie = await setup(app);
+  const { project } = await (await request(app, "/api/projects", "POST", { name: "No assignees" }, cookie)).json();
+  const path = `/api/projects/${project.slug}/issues`;
+  const { issue } = await (await request(app, path, "POST", { body: "Keep content" }, cookie)).json();
+  expect(issue).not.toHaveProperty("assigneeId");
+  // Simulate an existing assigned issue from a previous release, without data loss.
+  app.db.query("UPDATE issues SET assigneeId=? WHERE id=?").run(issue.authorId, issue.id);
+  const detailPath = `/api/issues/${issue.id}`;
+  for (const assigneeId of [null, issue.authorId, crypto.randomUUID()]) {
+    expect((await request(app, path, "POST", { body: "Rejected", assigneeId }, cookie)).status).toBe(400);
+    expect((await request(app, detailPath, "PATCH", { assigneeId, body: "Rejected", state: "closed" }, cookie)).status).toBe(400);
+  }
+  const detail = (await (await request(app, detailPath, "GET", undefined, cookie)).json()).issue;
+  expect(detail).toMatchObject({ body: "Keep content", state: "open", taggedUserIds: [] });
+  expect(detail).not.toHaveProperty("assigneeId");
+  const list = (await (await request(app, path, "GET", undefined, cookie)).json()).issues;
+  expect(list).toHaveLength(1);
+  expect(list[0]).not.toHaveProperty("assigneeId");
+  const saved = (await (await request(app, detailPath, "PATCH", { labels: ["kept"] }, cookie)).json()).issue;
+  expect(saved).not.toHaveProperty("assigneeId");
+  const comment = await (await request(app, `${detailPath}/comments`, "POST", { body: "Discussion" }, cookie)).json();
+  expect(comment.issue).not.toHaveProperty("assigneeId");
+  expect(app.db.query("SELECT assigneeId FROM issues WHERE id=?").get(issue.id)).toEqual({ assigneeId: issue.authorId });
+});
+
 test("projects issues comments collaboration, author/admin permissions and restart persistence", async () => {
   const { app, dir } = fixture();
   const cookie = await setup(app);
@@ -175,13 +202,13 @@ test("projects issues comments collaboration, author/admin permissions and resta
       app,
       `/api/issues/${issue.id}`,
       "PATCH",
-      { assigneeId: member.user.id, labels: ["bug"] },
+      { labels: ["bug"] },
       mc,
     )
   ).json();
   expect(updated.issue).not.toHaveProperty("status");
   expect(updated.issue.title).toBe("One");
-  expect(updated.issue.assigneeId).toBe(member.user.id);
+  expect(updated.issue).not.toHaveProperty("assigneeId");
   const titleOnly = await (
     await request(
       app,
@@ -193,7 +220,7 @@ test("projects issues comments collaboration, author/admin permissions and resta
   ).json();
   expect(titleOnly.issue).not.toHaveProperty("status");
   expect(titleOnly.issue.labels).toEqual(["bug"]);
-  expect(titleOnly.issue.assigneeId).toBe(member.user.id);
+  expect(titleOnly.issue).not.toHaveProperty("assigneeId");
   expect(
     (
       await request(

@@ -64,7 +64,6 @@ const issueFields = z
   .strict();
 const issueUpdateFields = issueFields
   .extend({
-    assigneeId: z.string().uuid().nullable(),
     state: z.enum(["open", "closed"]),
   })
   .partial();
@@ -167,7 +166,7 @@ export function createApp(options: AppOptions = {}) {
   const issue = (issueId: string): Issue => {
     const row = db
       .query(
-        "SELECT id,number,projectId,title,body,labels,assigneeId,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
+        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
     if (!row) return fail(404, "Issue not found");
@@ -218,9 +217,6 @@ export function createApp(options: AppOptions = {}) {
     if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
       fail(400, "Unknown lane");
     if (!state.lanes.includes(lane)) fail(400, "Destination lane is hidden");
-  };
-  const validateAssignee = (value: string | null | undefined) => {
-    if (value && !publicUser(value)) fail(400, "Unknown assignee");
   };
   const validateMentions = (body: string) => {
     for (const userId of extractMentionUserIds(body))
@@ -659,7 +655,7 @@ export function createApp(options: AppOptions = {}) {
         )
         .get(p.id) as { n: number };
       db.query(
-        "INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,assigneeId,authorId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         uid,
         n.n,
@@ -669,7 +665,6 @@ export function createApp(options: AppOptions = {}) {
         "backlog", // Archived legacy columns; not active issue state.
         "none",
         JSON.stringify(input.labels),
-        null,
         c.get("user").id,
         time,
         time,
@@ -694,7 +689,6 @@ export function createApp(options: AppOptions = {}) {
       Object.entries(parsed).filter(([key]) => Object.hasOwn(raw, key)),
     ) as z.infer<typeof issueUpdateFields>;
     if (!Object.keys(input).length) return fail(400, "No changes");
-    validateAssignee(input.assigneeId);
     const body =
       input.title === undefined
         ? (input.body ?? current.body)
@@ -720,12 +714,11 @@ export function createApp(options: AppOptions = {}) {
       if (input.body !== undefined) validateMentions(body);
       else if (input.title !== undefined) validateMentions(input.title);
       db.query(
-        "UPDATE issues SET title=?,body=?,labels=?,assigneeId=?,updatedAt=? WHERE id=?",
+        "UPDATE issues SET title=?,body=?,labels=?,updatedAt=? WHERE id=?",
       ).run(
         merged.title,
         merged.body,
         JSON.stringify(merged.labels),
-        merged.assigneeId,
         merged.updatedAt,
         current.id,
       );

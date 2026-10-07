@@ -3,7 +3,7 @@ title: Issues
 description: Create actionable issues, update their properties, and discuss work with your team.
 ---
 
-An issue holds one Markdown body, labels, one optional assignee, and an open or closed state.
+An issue holds one Markdown body, labels, tagged users, and an open or closed state. There is no assignee or assignment role.
 Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
 All authenticated users can read and update issues across all projects.
@@ -14,9 +14,9 @@ All authenticated users can read and update issues across all projects.
 2. Select **Create issue** from either **List** or **Board**.
 3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
 4. Optionally enter comma-separated labels.
-5. Select **Create issue** to save and open the issue detail page.
+5. Select **Create issue** to save. The dialog clears and refocuses for another issue; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
 
-New issues are open and **Unassigned**, and stay off the board until you [add them to it](/guides/board).
+New issues are open and stay off the board until you [add them to it](/guides/board).
 The issue body must contain non-whitespace content; labels may be empty.
 Numbers are allocated within each project, not across the entire workspace.
 
@@ -27,12 +27,12 @@ Numbers are allocated within each project, not across the entire workspace.
 | Issue body | Required Markdown; up to 101,000 characters |
 | Display title | Derived from the body; up to 300 characters |
 | State | Open or Closed |
-| Assignee | One existing workspace user, or Unassigned |
+| Tagged users | Deduplicated users mentioned in the saved issue or its comments |
 | Labels | Up to 30 entries, each up to 50 characters |
 
 Enter labels such as `bug, checkout, mobile` in the **Labels** field.
 The interface trims surrounding whitespace, ignores empty entries, and removes exact duplicates.
-Assignment communicates responsibility; it does not restrict who can edit the issue.
+Type `@` and select a teammate in an issue or comment to associate them with the issue. Tags have no roles, ownership, or notification behavior and do not restrict editing. Removing a user's last saved mention removes their association.
 
 ## How display titles work
 
@@ -51,6 +51,7 @@ Change the Markdown body or properties, then select **Save changes**.
 Edit the heading or first text line in the body to change the derived display title.
 Wait for **Changes saved** before leaving the page.
 Edits on the detail page are not automatically saved.
+When switching issues in the desktop side panel, the previous issue remains visible but non-interactive while the new one loads. A failed load shows an error and **Retry** without replacing the previous content.
 
 <Note>
   **Close issue** and **Reopen issue** save immediately.
@@ -67,6 +68,10 @@ Within a project, **Search issues** matches title text, issue numbers, and label
 It does not search the full issue body or comments.
 The list shows **Open** issues by default; select **Closed** to see closed ones.
 Search applies within the selected state, so check **Closed** if an expected issue is missing.
+
+Click a column heading to sort, or its filter button to open column filters. Filters combine with search and the selected state; created-date ranges include both boundary dates. **Clear column filters** resets filters without changing the sort.
+
+The list shows 25 rows per page by default. Use **Rows per page** to choose 10, 25, 50, or 100, and **Previous**/**Next** to navigate. Changing search, filters, sort, or issue state returns to the first page.
 
 ## Add to the discussion
 
@@ -91,6 +96,8 @@ Select **Close issue** in the issue details when the work is finished or no long
 The issue shows a **Closed** badge, records who closed it and when, and moves from **Open** to **Closed** in the list.
 It keeps its content and comments, can still be edited, and still counts toward the project's total issue count.
 Select **Reopen issue** to return it to the open list.
+
+To close several open issues, select their checkboxes and choose **Close selected issues**. The header checkbox selects open issues on the current page only; selections persist across pages but hidden or closed issues are removed from the selection. **Clear selection** deselects everything. If some closes fail, successful ones stay closed and failed ones remain selected for retry. Closing an issue with a pending draft in the side panel asks before discarding that draft. Closed issues and archived projects cannot be selected for bulk closing.
 
 Closing never changes the board: a closed issue keeps its lane, and its card shows a **Closed** tag.
 Move the card to **Done** or remove it from the board if you want it out of the way.

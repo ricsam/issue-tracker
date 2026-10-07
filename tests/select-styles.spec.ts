@@ -63,16 +63,19 @@ for (const width of [1440, 390]) {
     await expect(compact).toHaveValue("done");
     await expect(page.locator(".board-column").filter({ has: compact })).toContainText("Done");
 
-    await page.goto(`/issues/${issue.id}`);
-    const assignee = page.getByRole("combobox", { name: "Assignee", exact: true });
-    await expectChevron(assignee);
-    await assignee.focus();
-    await expect(assignee).toBeFocused();
-    await expect(assignee).toHaveCSS("border-color", "rgb(138, 106, 225)");
-    await assignee.screenshot({ path: testInfo.outputPath("property-select.png") });
+    await page.goto(`/projects/${project.slug}`);
+    await page.getByRole("button", { name: "Tagged users filters", exact: true }).click();
+    const tagged = page.getByRole("combobox", { name: "Filter by tagged user", exact: true });
+    await expectChevron(tagged);
+    await tagged.focus();
+    await expect(tagged).toBeFocused();
+    await expect(tagged).toHaveCSS("border-color", "rgb(138, 106, 225)");
+    await tagged.screenshot({ path: testInfo.outputPath("tagged-user-filter.png") });
 
     await page.emulateMedia({ forcedColors: "active" });
-    await expect(assignee).toHaveCSS("appearance", "auto");
-    await expect(assignee).toHaveCSS("background-image", "none");
+    await expect(tagged).toHaveCSS("appearance", "auto");
+    await expect(tagged).toHaveCSS("background-image", "none");
+    await page.goto(`/issues/${issue.id}`);
+    await expect(page.getByRole("combobox", { name: "Assignee", exact: true })).toHaveCount(0);
   });
 }

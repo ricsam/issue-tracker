@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.6.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.7.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.7.0
+
+Version 0.7.0 adds issue-list pagination, compact column-filter popovers, and bulk closing of selected open issues. Issue details keep the previous content visible but non-interactive while the next issue loads, with retry support for failed requests.
+
+**API compatibility:** `Issue` responses no longer include `assigneeId`, and issue create/PATCH requests reject that field. Update API clients before upgrading. Existing assignment values remain in the database as legacy data; this release adds no database migration. User associations use `taggedUserIds` from mentions instead, without converting legacy assignments into mentions. See [the API contract](api-contract.md).
+
+Back up `/data`, preserve the encryption-key Secret and existing deployment values, and select the published image tag matching this release. Upgrades from versions older than 0.6.0 still run the earlier migrations and carry the rollback restrictions documented below.
 
 ### Upgrading to 0.6.0
 

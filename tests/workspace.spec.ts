@@ -97,9 +97,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     page.getByRole("combobox", { name: "Priority", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("combobox", { name: "Assignee", exact: true })
-    .selectOption({ label: "Alex Morgan" });
+  await expect(page.getByRole("combobox", { name: "Assignee", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   const commentEditor = page.locator(".comments .rich-editor");

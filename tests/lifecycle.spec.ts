@@ -185,7 +185,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   for (const name of ["Close issue", "Save changes", "Post comment", "Edit comment", "Delete comment"])
     await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   await expect(page.locator(".comment")).toContainText("Kept for reference");
-  await expect(page.getByRole("combobox", { name: "Assignee" })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Assignee" })).toHaveCount(0);
 
   // Archived projects are listed separately from active work.
   await page.goto("/projects");

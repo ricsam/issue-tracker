@@ -1,0 +1,24 @@
+.issue-table .selection-column { width: 42px; }
+.issue-table .number-column { width: 125px; }
+.issue-table th { padding-block: 12px; }
+/* Row links cover noninteractive cells, but must not intercept selection. */
+.issue-row input[type="checkbox"] { position: relative; z-index: 2; }
+.issue-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #7050d9; cursor: pointer; }
+.issue-table input[type="checkbox"]:disabled { cursor: default; }
+.issue-column-heading { display: flex; align-items: center; gap: 4px; }
+.issue-column-heading .column-sort { flex: 0 0 auto; }
+.column-filter-trigger { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: transparent; color: #817b8e; padding: 6px; cursor: pointer; flex-shrink: 0; }
+.column-filter-trigger:hover, .column-filter-trigger.is-active { color: #7050d9; background: #eee9fb; }
+.column-filter-trigger.is-active { box-shadow: inset 0 -2px #7050d9; }
+.issue-filter-popover { position: fixed; inset: auto; margin: 0; width: 280px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; padding: 14px; border: 1px solid #ddd6e8; border-radius: 10px; background: white; color: #302a3c; box-shadow: 0 10px 35px #20133326; box-sizing: border-box; }
+.issue-filter-popover:popover-open { display: grid; gap: 12px; }
+.issue-filter-popover > input, .issue-filter-popover > select { width: 100%; min-width: 0; }
+.filter-popover-actions { display: flex; justify-content: space-between; gap: 8px; }
+.issue-pagination, .issue-bulk-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
+.issue-pagination { font-size: 12px; color: #817b8e; }
+.issue-pagination label { display: flex; align-items: center; gap: 8px; }
+.issue-pagination select { width: auto; margin: 0; }
+.issue-bulk-actions { padding: 10px 12px; border-radius: 8px; background: #f1edfb; }
+.issue-bulk-outcome { margin: 0; font-size: 13px; }
+.issue-bulk-outcome:empty { display: none; }
+.issue-table .is-bulk-selected { background: #f6f3ff; }

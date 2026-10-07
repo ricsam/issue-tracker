@@ -123,7 +123,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   function openDetails(event: MouseEvent<HTMLAnchorElement>, issue: Issue) {
     if (!desktop || !isPlainClick(event)) return;
     event.preventDefault();
-    if (selectedId === issue.id || !canLeaveDetails()) return;
+    if (bulkClosing.current || selectedId === issue.id || !canLeaveDetails()) return;
     pending.current = false;
     opener.current = event.currentTarget;
     setSelectedId(issue.id);
@@ -145,6 +145,54 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const bulkClosing = useRef(false);
+  const [closingIssues, setClosingIssues] = useState(false);
+  async function closeIssues(ids: string[]): Promise<{ closedIds: string[]; error?: string }> {
+    if (bulkClosing.current || project?.archivedAt) return { closedIds: [] };
+    const targets = issues.filter((issue) => ids.includes(issue.id) && issue.state === "open");
+    if (!targets.length) return { closedIds: [] };
+    // Do not silently discard an editor draft when its issue is part of the batch.
+    if (selectedId && targets.some((issue) => issue.id === selectedId)) {
+      if (!canLeaveDetails()) return { closedIds: [] };
+      setSelectedId(null);
+      pending.current = false;
+    }
+    bulkClosing.current = true;
+    setClosingIssues(true);
+    const closedIds: string[] = [];
+    const failures: string[] = [];
+    try {
+      // Bound concurrency; each result is committed independently so failed
+      // items can be retried without submitting successful closes again.
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(4, targets.length) }, async () => {
+        while (next < targets.length) {
+          const issue = targets[next++]!;
+          try {
+            const { issue: updated } = await api<{ issue: Issue }>(`/api/issues/${issue.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ state: "closed" }),
+            });
+            closedIds.push(updated.id);
+            setIssues((current) => current.map((item) => item.id === updated.id ? updated : item));
+          } catch (cause) {
+            failures.push(`#${issue.number}: ${message(cause)}`);
+          }
+        }
+      }));
+      if (closedIds.length) {
+        try { await refresh(); }
+        catch (cause) { setError(`Issues closed, but workspace counts could not refresh: ${message(cause)}`); }
+      }
+      return {
+        closedIds,
+        error: failures.length ? `Could not close ${failures.length} issue${failures.length === 1 ? "" : "s"}. ${failures.join("; ")}` : undefined,
+      };
+    } finally {
+      bulkClosing.current = false;
+      setClosingIssues(false);
+    }
+  }
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -283,7 +331,6 @@ function ProjectIssues({ slug }: { slug: string }) {
   );
   const filtered = board ? searched : issueTableRows(searched, users, tableState);
   function issueCard(i: Issue) {
-    const assignee = users.find((user) => user.id === i.assigneeId);
     return (
       <article
         key={i.id}
@@ -314,11 +361,6 @@ function ProjectIssues({ slug }: { slug: string }) {
               {l}
             </span>
           ))}
-          {assignee && (
-            <span className="avatar small" title={`Assigned to ${assignee.name}`}>
-              {assignee.name.slice(0, 1)}
-            </span>
-          )}
           {board && (
             <>
               <select
@@ -564,6 +606,9 @@ function ProjectIssues({ slug }: { slug: string }) {
             users={users}
             state={tableState}
             onChange={setTableState}
+            paginationKey={JSON.stringify([query, showClosed])}
+            readOnly={readOnly}
+            onCloseIssues={closeIssues}
             selectedId={selectedId}
             controls={desktop && selectedId ? "issue-detail-sidebar" : undefined}
             onOpen={openDetails}
@@ -602,7 +647,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               <X size={18} />
             </button>
           </header>
-          <div className="issue-detail-scroll" key={selectedId}>
+          <div className="issue-detail-scroll" inert={closingIssues}>
             <IssueDetails
               id={selectedId}
               embedded

@@ -35,7 +35,7 @@ for (const width of [1440, 390]) {
     const table = page.getByRole("table");
     const titles = table.locator("tbody .issue-link");
     await expect(titles).toHaveText(["Zebra", "Alpha", "Beta"]);
-    await expect(table.getByRole("columnheader")).toHaveCount(5);
+    await expect(table.getByRole("columnheader")).toHaveCount(6);
     await expect(table.locator(".avatar")).toHaveCount(0);
     await expect(table.locator("time").first()).toHaveAttribute("datetime", created[0].createdAt);
     await expect(table.locator(".user-tag")).toHaveText(["Alex Morgan"]);
@@ -55,11 +55,37 @@ for (const width of [1440, 390]) {
     await table.getByRole("button", { name: "Sort by tagged users" }).click();
     await expect(titles).toHaveText(["Alpha", "Beta", "Zebra"]);
 
+    const labelFilters = table.getByRole("button", { name: "Labels filters", exact: true });
+    await labelFilters.focus();
+    await page.keyboard.press("Enter");
+    const labelPopover = table.getByRole("dialog", { name: "Labels filters", exact: true });
+    await expect(labelPopover).toBeVisible();
+    await expect(table.getByLabel("Filter by label", { exact: true })).toBeFocused();
+    const popoverBox = (await labelPopover.boundingBox())!;
+    expect(popoverBox.x).toBeGreaterThanOrEqual(0);
+    expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/issue-filter-popover-${width}.png` });
     await table.getByLabel("Filter by label", { exact: true }).selectOption("label:bug");
+    await page.keyboard.press("Escape");
+    await expect(labelPopover).toBeHidden();
+    await expect(table.getByRole("button", { name: "Labels filters (active)", exact: true })).toBeFocused();
+    await table.getByRole("button", { name: "Labels filters (active)", exact: true }).click();
+    await labelPopover.getByRole("button", { name: "Clear labels filter" }).click();
+    await expect(titles).toHaveCount(3);
+    await table.getByLabel("Filter by label", { exact: true }).selectOption("label:bug");
+    await labelPopover.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(labelPopover).toBeHidden();
+    await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
     await table.getByLabel("Filter by tagged user").selectOption(alex.id);
+    await page.keyboard.press("Escape");
+    await table.getByRole("button", { name: "Issue filters", exact: true }).click();
     await table.getByLabel("Filter by issue", { exact: true }).fill("zeb");
+    await page.keyboard.press("Escape");
+    await table.getByRole("button", { name: "Number filters", exact: true }).click();
     await table.getByLabel("Filter by number").fill("#1");
+    await page.keyboard.press("Escape");
     await expect(titles).toHaveText(["Zebra"]);
+    await table.getByRole("button", { name: "Created filters", exact: true }).click();
     await table.getByLabel("Created on or after").fill("2000-01-01");
     await table.getByLabel("Created on or before").fill("2000-01-02");
     await expect(titles).toHaveCount(0);
@@ -67,9 +93,11 @@ for (const width of [1440, 390]) {
     await expect(table.getByLabel("Created on or before")).toBeVisible();
     await page.getByRole("button", { name: "Clear column filters" }).click();
     await expect(titles).toHaveCount(3);
+    await table.getByRole("button", { name: "Labels filters", exact: true }).click();
     await table.getByLabel("Filter by label", { exact: true }).selectOption("none");
     await expect(titles).toHaveText(["Beta"]);
     await page.getByRole("button", { name: "Clear column filters" }).click();
+    await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
     await table.getByLabel("Filter by tagged user").selectOption("none");
     await expect(titles).toHaveText(["Alpha", "Beta"]);
     await page.getByRole("button", { name: "Clear column filters" }).click();
@@ -84,7 +112,9 @@ for (const width of [1440, 390]) {
 
     if (width === 1440) {
       // A new comment association updates the active table filter without a reload.
+      await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
       await table.getByLabel("Filter by tagged user").selectOption("none");
+      await page.keyboard.press("Escape");
       await table.getByRole("link", { name: "#2 Alpha", exact: true }).click();
       const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
       const discussion = sidebar.locator(".comments");
