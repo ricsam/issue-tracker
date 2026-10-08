@@ -22,6 +22,9 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   const { issues } = await (await page.request.get(`/api/projects/${project.slug}/issues`)).json();
   expect(issues[0].labels).toEqual(["bug", "design"]);
   await dialog.getByRole("link", { name: "View issue" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(`/projects/${project.slug}`);
+  await page.getByRole("link", { name: "Open issue in full page" }).click();
   const form = page.locator(".detail-form");
   await expect(form.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(page.locator(".back-link")).toHaveCount(0);

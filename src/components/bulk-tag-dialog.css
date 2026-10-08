@@ -4,3 +4,5 @@
 .bulk-tag-option input { width: auto; flex: 0 0 auto; }
 .bulk-tag-option span { min-width: 0; overflow-wrap: anywhere; }
 .bulk-tag-option small { display: block; }
+.bulk-label-preview { display: grid; gap: 8px; }
+.bulk-label-preview .tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

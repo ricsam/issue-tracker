@@ -89,6 +89,9 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(editor).toBeFocused();
   await expect(modal.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   await modal.getByRole("link", { name: "View issue", exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(page).toHaveURL(projectUrl);
+  await page.getByRole("link", { name: "Open issue in full page" }).click();
   await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
   await expect(
     page.getByRole("textbox", { name: "Issue", exact: true }),

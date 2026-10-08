@@ -5,6 +5,7 @@ const modal = (page: Page) => page.getByRole("dialog");
 const editor = (page: Page) => modal(page).getByRole("textbox", { name: "Issue", exact: true });
 const submit = (page: Page) => modal(page).getByRole("button", { name: "Create issue", exact: true });
 const status = (page: Page) => modal(page).getByRole("status");
+const sidebar = (page: Page) => page.getByRole("complementary", { name: "Issue details", exact: true });
 
 // Reuse one login across these isolated project cases; repeated logins would
 // exhaust the real application's IP-based auth rate limit in the full suite.
@@ -31,6 +32,10 @@ async function setup(page: Page, baseURL: string, board = false) {
   await page.goto(path + (board ? "/board" : ""));
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   await expect(editor(page)).toBeFocused();
+  await expect(modal(page)).not.toContainText("Write your issue in one place.");
+  await expect(modal(page)).not.toContainText("Hashtags inside code are ignored.");
+  await expect(modal(page)).not.toContainText("Place it on the board later");
+  await expect(modal(page)).not.toContainText("Markdown supported.");
   return { path, endpoint: `/api/projects/${project.slug}/issues` };
 }
 
@@ -75,43 +80,116 @@ test("repeat creation resets preview, Markdown and undo history, then Done revea
   await expect(page.locator(".issue-row").filter({ hasText: "Second creation" })).toBeVisible();
 });
 
-test("View issue navigates immediately with an empty draft", async ({ page, baseURL }) => {
-  await setup(page, baseURL!);
-  await editor(page).fill("Open created issue");
+for (const width of [1440, 1024, 1023, 390]) {
+  for (const board of [false, true]) {
+    test(`View issue ${width >= 1024 ? "opens the sidebar" : "navigates"} from the ${board ? "board" : "list"} at ${width}px`, async ({ page, baseURL }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const { path } = await setup(page, baseURL!, board);
+      await editor(page).fill("Open created issue");
+      await submit(page).click();
+      await expectReset(page);
+      const link = modal(page).getByRole("link", { name: "View issue" });
+      const href = await link.getAttribute("href");
+      const prompts: string[] = [];
+      page.on("dialog", async (dialog) => { prompts.push(dialog.message()); await dialog.dismiss(); });
+      await link.click();
+      await expect(modal(page)).toBeHidden();
+      await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open created issue");
+      if (width >= 1024) {
+        await expect(page).toHaveURL(path + (board ? "/board" : ""));
+        await expect(sidebar(page)).toBeVisible();
+        await expect(sidebar(page)).toBeFocused();
+        await expect(sidebar(page).getByRole("link", { name: "Open issue in full page" })).toHaveAttribute("href", href!);
+        if (board) await expect(page.locator(".board-card")).toHaveCount(0);
+        await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
+        await expect(sidebar(page)).toBeHidden();
+        await expect(board ? page.locator(".project-issues-content") : page.locator(`.issue-link[href="${href}"]`)).toBeFocused();
+      } else {
+        await expect(page).toHaveURL(href!);
+        await expect(sidebar(page)).toHaveCount(0);
+      }
+      expect(prompts).toEqual([]);
+    });
+  }
+}
+
+for (const mobile of [false, true]) {
+  for (const draft of ["body", "hashtag"] as const) {
+    test(`View issue confirms before discarding a ${draft} draft on ${mobile ? "mobile" : "desktop"}`, async ({ page, baseURL }) => {
+      if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+      const { path } = await setup(page, baseURL!);
+      await editor(page).fill("Saved issue");
+      await submit(page).click();
+      await expectReset(page);
+      const field = editor(page);
+      await field.fill(draft === "body" ? "Unsaved draft" : "#unsaved");
+      const link = modal(page).getByRole("link", { name: "View issue" });
+      const href = await link.getAttribute("href");
+      page.once("dialog", async (dialog) => {
+        expect(dialog.message()).toBe("Discard the new issue draft and view the created issue?");
+        await dialog.dismiss();
+      });
+      await link.click();
+      await expect(page).toHaveURL(path);
+      await expect(field).toContainText(draft === "body" ? "Unsaved draft" : "#unsaved");
+      page.once("dialog", async (dialog) => { await dialog.accept(); });
+      await link.click();
+      await expect(modal(page)).toBeHidden();
+      await expect(page).toHaveURL(mobile ? href! : path);
+      await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Saved issue");
+      if (!mobile) await expect(sidebar(page)).toBeVisible();
+    });
+  }
+}
+
+test("View issue preserves new-tab behavior and the current draft on desktop", async ({ page, baseURL }) => {
+  const { path } = await setup(page, baseURL!);
+  await editor(page).fill("Open in another tab");
   await submit(page).click();
   await expectReset(page);
+  await editor(page).fill("Keep this draft");
   const link = modal(page).getByRole("link", { name: "View issue" });
   const href = await link.getAttribute("href");
-  const prompts: string[] = [];
-  page.on("dialog", async (dialog) => { prompts.push(dialog.message()); await dialog.dismiss(); });
-  await link.click();
-  await expect(page).toHaveURL(href!);
-  expect(prompts).toEqual([]);
-  await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open created issue");
+  const popupPromise = page.context().waitForEvent("page");
+  await link.click({ modifiers: ["ControlOrMeta"] });
+  const popup = await popupPromise;
+  try {
+    await expect(popup).toHaveURL(href!);
+    await expect(popup.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open in another tab");
+    await expect(page).toHaveURL(path);
+    await expect(editor(page)).toContainText("Keep this draft");
+    await expect(sidebar(page)).toHaveCount(0);
+  } finally {
+    await popup.close();
+  }
 });
 
-for (const draft of ["body", "hashtag"] as const) {
-  test(`View issue confirms before discarding a ${draft} draft`, async ({ page, baseURL }) => {
-    const { path } = await setup(page, baseURL!);
-    await editor(page).fill("Saved issue");
-    await submit(page).click();
-    await expectReset(page);
-    const field = editor(page);
-    await field.fill(draft === "body" ? "Unsaved draft" : "#unsaved");
-    const link = modal(page).getByRole("link", { name: "View issue" });
-    const href = await link.getAttribute("href");
-    page.once("dialog", async (dialog) => {
-      expect(dialog.message()).toBe("Discard the new issue draft and view the created issue?");
-      await dialog.dismiss();
-    });
-    await link.click();
-    await expect(page).toHaveURL(path);
-    await expect(field).toContainText(draft === "body" ? "Unsaved draft" : "#unsaved");
-    page.once("dialog", async (dialog) => { await dialog.accept(); });
-    await link.click();
-    await expect(page).toHaveURL(href!);
+test("View issue protects an existing sidebar draft before replacing it", async ({ page, baseURL }) => {
+  const { path } = await setup(page, baseURL!);
+  await editor(page).fill("Original issue");
+  await submit(page).click();
+  await expectReset(page);
+  await modal(page).getByRole("link", { name: "View issue" }).click();
+  await sidebar(page).getByRole("textbox", { name: "Issue", exact: true }).fill("Unsaved sidebar draft");
+  await page.getByRole("button", { name: "Create issue", exact: true }).click();
+  await editor(page).fill("Replacement issue");
+  await submit(page).click();
+  await expectReset(page);
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("Discard unsaved issue changes or comment?");
+    await dialog.dismiss();
   });
-}
+  await modal(page).getByRole("link", { name: "View issue" }).click();
+  await expect(modal(page)).toBeVisible();
+  await expect(page.locator(".issue-detail-sidebar .detail-form [contenteditable=true]")).toContainText("Unsaved sidebar draft");
+  page.once("dialog", async (dialog) => { await dialog.accept(); });
+  await modal(page).getByRole("link", { name: "View issue" }).click();
+  await expect(modal(page)).toBeHidden();
+  await expect(page).toHaveURL(path);
+  await expect(sidebar(page).getByRole("textbox", { name: "Issue", exact: true })).toContainText("Replacement issue");
+  await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
+  await expect(sidebar(page)).toBeHidden();
+});
 
 test("a rejected submission retains the entire draft and can be retried", async ({ page, baseURL }) => {
   const { endpoint } = await setup(page, baseURL!);
@@ -198,14 +276,14 @@ test("mobile board creation exposes actions without overflow and never adds boar
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   expect(await modal(page).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
   await page.screenshot({ path: "test-results/issue-created-mobile.png" });
-  // Scrolling the fields must reveal labels without putting them under the actions.
+  // Scrolling the fields must reveal hashtag chips without putting them under the actions.
   for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(size);
     await editor(page).fill("Next draft #next-draft");
-    const labels = modal(page).getByText("#hashtags in your issue become labels automatically. Hashtags inside code are ignored.", { exact: true });
+    const labels = editor(page).locator(".hashtag-chip");
     await labels.scrollIntoViewIfNeeded();
     // Chromium rounds scroll offsets to pixels; allow subpixel clipping of the
-    // paragraph box (the footer bound below still ensures no overlap).
+    // chip box (the footer bound below still ensures no overlap).
     await expect(labels).toBeInViewport({ ratio: 0.98 });
     const fieldBox = (await labels.boundingBox())!;
     const footerBox = (await modal(page).locator(".create-issue-footer").boundingBox())!;

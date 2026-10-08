@@ -2,6 +2,7 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { titleHeading } from "./issue-content";
+import { HASHTAG_EXCLUDED_NODES, matchHashtags } from "./hashtag-matches";
 
 const parser = unified().use(remarkParse).use(remarkGfm);
 type Node = { type: string; value?: string; children?: Node[] };
@@ -13,16 +14,9 @@ type Node = { type: string; value?: string; children?: Node[] };
 export function extractIssueLabels(markdown: string): string[] {
   const labels = new Set<string>();
   const walk = (node: Node) => {
-    if (["code", "inlineCode", "html", "link", "linkReference", "image", "imageReference", "definition"].includes(node.type)) return;
+    if (HASHTAG_EXCLUDED_NODES.has(node.type)) return;
     if (node.type === "text") {
-      const prose = (node.value ?? "").replace(/\b(?:[a-z][a-z\d+.-]*:\/\/|www\.)\S+/gi, " ");
-      const pattern = /(^|[^\p{L}\p{N}\p{M}_/#&=:%?\\-])#(?:\[([^\]\r\n]+)\]|([\p{L}\p{N}_][\p{L}\p{N}\p{M}_-]*))/gu;
-      for (const match of prose.matchAll(pattern)) {
-        let label = match[2] ?? match[3]!;
-        if (match[2]) { try { label = decodeURIComponent(label); } catch { /* Literal percent text. */ } }
-        label = label.trim();
-        if (label) labels.add(label);
-      }
+      for (const { label } of matchHashtags(node.value ?? "")) labels.add(label);
     }
     for (const child of node.children ?? []) walk(child);
   };

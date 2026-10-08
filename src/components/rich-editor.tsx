@@ -63,12 +63,14 @@ import { mentionUserId } from "../../shared/mentions";
 import { MentionLinkNode, mentionLinkReplacement } from "./mention-link-node";
 import { MENTION_TRANSFORMER } from "./mention-transformer";
 import { MentionAutocomplete } from "./mention-autocomplete";
+import { HashtagNode, HashtagPlugin } from "./hashtag-node";
+import { ESCAPED_HASHTAG_TRANSFORMER } from "./hashtag-transformer";
 import type { Attachment, User } from "../../shared/types";
 import { IMAGE_TRANSFORMER, ImageNode } from "./image-node";
 import { Markdown } from "./markdown";
 import "./editor.css";
 
-const transformers = [MENTION_TRANSFORMER, IMAGE_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
+const transformers = [MENTION_TRANSFORMER, IMAGE_TRANSFORMER, ESCAPED_HASHTAG_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
 type Mode = "write" | "markdown" | "preview";
 function validLink(url: string) {
   return !!mentionUserId(url) || /^(https?:\/\/|mailto:|\/api\/uploads\/)/i.test(url);
@@ -343,7 +345,7 @@ function EditorContents({
           contentEditable={
             <ContentEditable
               aria-label={ariaLabel}
-              aria-describedby={`${id}-help`}
+              aria-describedby={uploading ? `${id}-help` : undefined}
               className={`editor-input markdown-content ${minimal ? "editor-minimal" : ""}`}
             />
           }
@@ -374,6 +376,7 @@ function EditorContents({
       )}
       <MentionAutocomplete users={mentionUsers} mode={mode} source={source} onChange={onChange} />
       {autoFocus && <AutoFocusPlugin defaultSelection="rootStart" />}
+      <HashtagPlugin />
       <HistoryPlugin />
       <ListPlugin />
       <CheckListPlugin />
@@ -392,11 +395,11 @@ function EditorContents({
           });
         }}
       />
-      <div id={`${id}-help`} className="editor-help">
-        {uploading
-          ? "Uploading attachment…"
-          : "Markdown supported. Paste, drop or attach files · 10 MiB each"}
-      </div>
+      {uploading && (
+        <div id={`${id}-help`} className="editor-help" role="status">
+          Uploading attachment…
+        </div>
+      )}
       {error && (
         <div role="alert" className="editor-error">
           {error}
@@ -436,6 +439,7 @@ export function RichEditor({
           LinkNode,
           MentionLinkNode,
           mentionLinkReplacement,
+          HashtagNode,
           ImageNode,
         ],
         editorState: () => $convertFromMarkdownString(value, transformers),

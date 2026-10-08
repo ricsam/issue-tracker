@@ -77,6 +77,7 @@ The OIDC callback keys identities by immutable issuer and subject. Verified emai
 | `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
 | `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?}`; number increments within the project |
 | `POST` | `/api/projects/:slug/issues/tag` | `{issueIds,userIds}` → `{issues}`; atomic addition of body mentions |
+| `POST` | `/api/projects/:slug/issues/labels` | `{issueIds,labels}` → `{issues}`; atomic addition of body hashtags |
 | `GET` | `/api/projects/:slug/board` | `{board: BoardSettings}` |
 | `PATCH` | `/api/projects/:slug/board` | `{lanes,customLanes?}`; returns `{board: BoardSettings}` |
 | `GET` | `/api/issues/:id` | `{issue,comments}` |
@@ -93,6 +94,8 @@ Legacy clients may still send a nonempty `title` of up to 300 characters: POST a
 Board membership uses `POST /api/projects/:slug/board/issues` with `{issueIds,lane}` (atomic add), `PATCH /api/projects/:slug/board/issues/:id` with `{lane}` (move), and `DELETE` on that same issue route (remove). Each returns `{board}`. Bulk moves/removals in the UI use individual requests, retaining failed selections for retry; they are not atomic batches.
 
 Bulk tagging accepts 1–1000 unique UUIDs in each of `issueIds` and `userIds`. All issues must belong to the project and users must exist. The whole batch rolls back on error, including body-limit errors. Missing body mentions are inserted without rewriting original content or comments; stored titles are preserved, and repeat requests do not duplicate mentions or change timestamps. Comment-only mentions still receive a body mention. Archived projects reject tagging. This endpoint requires the same cookie authentication and Origin protection as other writes.
+
+Bulk hashtags accept 1–1000 unique issue UUIDs and 1–30 trimmed, nonempty label names of at most 50 characters, without the `#` prefix. Missing hashtags are appended to the latest body (or inserted before an unclosed Markdown block), preserving original content, titles, mentions, comments and lifecycle/board data. Existing hashtags are not duplicated and no-op retries keep timestamps unchanged. All issues must belong to the project; archived projects reject changes. Authentication, Origin checks, body/combined-label limits and atomic rollback apply to the whole batch.
 
 Projects and issues have no delete endpoint. Close an issue with `state: "closed"` and archive a project with `archived: true`; both are reversible. Archived projects (`archivedAt` set) stay readable, but issue, comment, and board writes return `409 Project is archived` until the project is restored.
 

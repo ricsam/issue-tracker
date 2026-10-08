@@ -43,6 +43,7 @@ import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { BoardActionsMenu } from "../components/board-actions-menu";
 import { BulkTagDialog } from "../components/bulk-tag-dialog";
+import { BulkLabelDialog } from "../components/bulk-label-dialog";
 import { IssueDetails } from "./detail";
 import {
   ArchiveProjectButton,
@@ -167,7 +168,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const boardAnchor = useRef<string | null>(null);
   const cardDrag = useRef<string[]>([]);
   const [boardOutcome, setBoardOutcome] = useState("");
-  const [taggingIds, setTaggingIds] = useState<string[] | null>(null);
+  const [tagging, setTagging] = useState<{ ids: string[]; kind: "mentions" | "labels" } | null>(null);
   useEffect(() => {
     setBoardSelection([]);
     boardAnchor.current = null;
@@ -177,14 +178,18 @@ function ProjectIssues({ slug }: { slug: string }) {
     setBoardSelection((current) => current.filter((id) => visible.has(id)));
     if (boardAnchor.current && !visible.has(boardAnchor.current)) boardAnchor.current = null;
   }, [boardSettings]);
-  function tagIssues(ids: string[]) {
+  function tagIssues(ids: string[], kind: "mentions" | "labels" = "mentions") {
     if (project?.archivedAt || bulkClosing.current || boardBusy.current || !ids.length) return;
     if (selectedId && ids.includes(selectedId)) {
       if (!canLeaveDetails()) return;
       setSelectedId(null);
       pending.current = false;
     }
-    setTaggingIds(ids);
+    setTagging({ ids: [...ids], kind });
+  }
+  function tagsSaved(updated: Issue[]) {
+    const changes = new Map(updated.map((issue) => [issue.id, issue]));
+    setIssues((current) => current.map((issue) => changes.get(issue.id) ?? issue));
   }
   const [retry, setRetry] = useState(0);
   const bulkClosing = useRef(false);
@@ -393,8 +398,12 @@ function ProjectIssues({ slug }: { slug: string }) {
       <article
         key={i.id}
         className={`board-card${selectedId === i.id ? " is-selected" : ""}${checked ? " is-bulk-selected" : ""}${i.state === "closed" ? " is-closed" : ""}`}
-        onClick={(event) => {
-          if ((event.target as HTMLElement).closest("a, button, input, [popover]")) return;
+        onClickCapture={(event) => {
+          if (event.button !== 0 || event.altKey || !(event.metaKey || event.ctrlKey || event.shiftKey)) return;
+          // Checkboxes keep their native toggle; popover items are not card surfaces.
+          if ((event.target as HTMLElement).closest("input, [popover]")) return;
+          event.preventDefault();
+          event.stopPropagation();
           selectBoardIssue(i.id, event.shiftKey || !checked, event.shiftKey);
         }}
         draggable={board && !saving && !readOnly}
@@ -424,11 +433,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           className="issue-link"
           data-issue-id={i.id}
           to={`/issues/${i.id}`}
-          onClick={(event) => {
-            if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
-              event.preventDefault(); selectBoardIssue(i.id, true, true);
-            } else openDetails(event, i);
-          }}
+          onClick={(event) => openDetails(event, i)}
           aria-current={selectedId === i.id ? "true" : undefined}
           aria-controls={
             desktop && selectedId ? "issue-detail-sidebar" : undefined
@@ -541,36 +546,32 @@ function ProjectIssues({ slug }: { slug: string }) {
         <ErrorNotice error={error} />
         {board ? (
           <>
-            <div className="board-summary">
-              <p className="muted">
+            <div className="issue-bulk-actions issue-board-actions" role="group" aria-label="Selected board issue actions" aria-busy={!!saving}>
+              <p className="board-summary muted">
                 {`${boardIssues.length} issues on board`}
                 {` · ${lanes.length} lanes`}
                 {hiddenCount > 0 && ` · ${hiddenCount} issues in hidden lanes`}
               </p>
-              {boardIssues.length === 0 && (
-                <p>
-                  No work on the board yet. Use Add issues to place work in a
-                  lane. The list keeps all your issues.
-                </p>
-              )}
-              {boardIssues.length > 0 && filtered.length === 0 && (
-                <p>
-                  No visible issues. Check your search or restore a lane using
-                  Manage lanes.
-                </p>
-              )}
-            </div>
-            {!readOnly && <div className="board-selection-toolbar">
-              <Button variant="ghost" disabled={!!saving || !boardOrder.length} onClick={() => setBoardSelection(boardOrder)}>Select visible issues</Button>
-              <span className="muted">Use checkboxes or Shift-click to select a range.</span>
-            </div>}
-            {selectedBoard.length > 0 && <div className="issue-bulk-actions" aria-label="Selected board issue actions" aria-busy={!!saving}>
-              <span>{selectedBoard.length} selected</span>
+              <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => setBoardSelection(boardOrder)}>Select visible issues</Button>
+              <span className="issue-selection-count">{selectedBoard.length} selected</span>
               <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
-                disabled={!!saving || readOnly} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
-              <Button variant="secondary" disabled={!!saving || readOnly} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
-              <Button variant="ghost" disabled={!!saving} onClick={() => { setBoardSelection([]); boardAnchor.current = null; }}>Clear selection</Button>
-            </div>}
+                disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
+              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
+              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add hashtags</Button>
+              <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; }}>Clear selection</Button>
+            </div>
+            {boardIssues.length === 0 && (
+              <p className="board-empty-notice">
+                No work on the board yet. Use Add issues to place work in a
+                lane. The list keeps all your issues.
+              </p>
+            )}
+            {boardIssues.length > 0 && filtered.length === 0 && (
+              <p className="board-empty-notice">
+                No visible issues. Check your search or restore a lane using
+                Manage lanes.
+              </p>
+            )}
             <p className="board-outcome" role="status">{boardOutcome}</p>
             <p className="sr-only">
               Drag issues between lanes, or use each issue’s board actions menu. Drag a selected issue to move the selection.
@@ -683,6 +684,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             onOpen={openDetails}
             onNavigate={navigateIssue}
             onTagIssues={tagIssues}
+            onLabelIssues={(ids) => tagIssues(ids, "labels")}
           />
         )}
       </div>
@@ -734,11 +736,11 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
         </aside>
       )}
-      {taggingIds && <BulkTagDialog slug={slug} issueIds={taggingIds} users={users}
-        onSaved={(updated) => {
-          const changes = new Map(updated.map((issue) => [issue.id, issue]));
-          setIssues((current) => current.map((issue) => changes.get(issue.id) ?? issue));
-        }} onClose={() => setTaggingIds(null)} />}
+      {tagging?.kind === "mentions" && <BulkTagDialog slug={slug} issueIds={tagging.ids} users={users}
+        onSaved={tagsSaved} onClose={() => setTagging(null)} />}
+      {tagging?.kind === "labels" && <BulkLabelDialog slug={slug} issueIds={tagging.ids}
+        existingLabels={[...new Set(issues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b))}
+        onSaved={tagsSaved} onClose={() => setTagging(null)} />}
       {configureBoard && (
         <BoardSettingsDialog
           slug={slug}
@@ -762,6 +764,14 @@ function ProjectIssues({ slug }: { slug: string }) {
           onCreated={issueCreated}
           onClose={() => setOpen(false)}
           canViewIssue={canLeaveDetails}
+          onViewIssue={desktop ? (issue, source) => {
+            pending.current = false;
+            focusDetails.current = true;
+            opener.current = source;
+            openerId.current = issue.id;
+            setOpen(false);
+            setSelectedId(issue.id);
+          } : undefined}
         />
       )}
     </div>

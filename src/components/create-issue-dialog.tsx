@@ -13,11 +13,13 @@ export function CreateIssueDialog({
   onCreated,
   onClose,
   canViewIssue,
+  onViewIssue,
 }: {
   project: Project;
   onCreated: (issue: Issue) => void;
   onClose: () => void;
   canViewIssue: () => boolean;
+  onViewIssue?: (issue: Issue, source: HTMLAnchorElement) => void;
 }) {
   const { users } = useWorkspace();
   const submitting = useRef(false);
@@ -78,15 +80,20 @@ export function CreateIssueDialog({
       (body.trim() &&
         !window.confirm("Discard the new issue draft and view the created issue?")) ||
       !canViewIssue()
-    )
+    ) {
       event.preventDefault();
+      return;
+    }
+    if (created && onViewIssue) {
+      event.preventDefault();
+      onViewIssue(created, event.currentTarget);
+    }
   }
 
   return (
     <Modal
       className="create-issue-dialog"
       title="Create issue"
-      description={`Add an issue to ${project.name}. Place it on the board later when it’s ready for work.`}
       open
       onOpenChange={(open) => !open && !submitting.current && onClose()}
       onOpenAutoFocus={(event) => event.preventDefault()}
@@ -106,12 +113,7 @@ export function CreateIssueDialog({
                 autoFocus
                 placeholder="What needs to happen? Just start writing…"
               />
-              <p className="settings-help muted">
-                Write your issue in one place. A heading or the first line becomes
-                its title on the board.
-              </p>
             </div>
-            <p className="settings-help muted">#hashtags in your issue become labels automatically. Hashtags inside code are ignored.</p>
           </fieldset>
         </div>
         <div className="create-issue-footer">

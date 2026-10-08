@@ -586,6 +586,28 @@ export function createApp(options: AppOptions = {}) {
     }).immediate();
     return c.json({ issues });
   });
+  app.post("/api/projects/:slug/issues/labels", async (c) => {
+    const input = z.object({
+      issueIds: z.array(z.string().uuid()).min(1).max(1000)
+        .refine((values) => new Set(values).size === values.length),
+      labels: z.array(text(50)).min(1).max(30),
+    }).strict().parse(await json(c));
+    const issues = db.transaction(() => {
+      const p = activeProject(c.req.param("slug"));
+      return input.issueIds.map((issueId) => {
+        const current = issue(issueId);
+        if (current.projectId !== p.id) fail(400, "Unknown project issue");
+        const body = appendIssueLabels(current.body, current.title, input.labels);
+        if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Labeled issue exceeds body length limit");
+        if (body !== current.body) {
+          db.query("UPDATE issues SET body=?,labels=?,updatedAt=? WHERE id=?").run(body, JSON.stringify(bodyLabels(body)), now(), issueId);
+          syncIssueTaggedUsers(db, issueId);
+        }
+        return issue(issueId);
+      });
+    }).immediate();
+    return c.json({ issues });
+  });
   app.post("/api/projects/:slug/board/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const input = z

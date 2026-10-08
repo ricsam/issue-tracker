@@ -627,15 +627,6 @@ fieldset > small {
 .issue-table-section {
   min-width: 0;
 }
-.issue-table-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 36px;
-  margin-bottom: 8px;
-  font-size: 12px;
-}
 .issue-table-scroll {
   overflow-x: auto;
   border: 1px solid #e9e3f0;
@@ -795,10 +786,8 @@ fieldset > small {
   overflow-x: auto;
   padding-bottom: 12px;
 }
-.board-summary {
-  margin-bottom: 16px;
-  font-size: 12px;
-}
+.board-summary { margin: 0; }
+.board-empty-notice { margin: 0 0 8px; font-size: 12px; }
 .board-column {
   background: #f5f2f8;
   padding: 12px 10px;
@@ -898,7 +887,6 @@ fieldset > small {
 .board-card-toolbar .issue-number { margin-right: auto; }
 .board-card.is-bulk-selected { background: #f6f3ff; border-color: #a48be7; }
 .board-card-toolbar .icon-button { width: 26px; height: 26px; padding: 4px; }
-.board-selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 12px; }
 .board-outcome { margin: 8px 0; font-size: 12px; }
 .board-outcome:empty { display: none; }
 .board-actions-menu {

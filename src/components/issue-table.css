@@ -19,6 +19,10 @@
 .issue-pagination label { display: flex; align-items: center; gap: 8px; }
 .issue-pagination select { width: auto; margin: 0; }
 .issue-bulk-actions { padding: 10px 12px; border-radius: 8px; background: #f1edfb; }
+.issue-table-actions, .issue-board-actions { gap: 8px; margin-bottom: 8px; padding: 8px 12px; font-size: 12px; }
+.issue-table-actions .btn, .issue-board-actions .btn { min-height: 28px; padding: 4px 9px; border-radius: 5px; font-size: 12px; line-height: 18px; }
+.issue-table-count { margin: 0; white-space: nowrap; }
+.issue-selection-count { min-width: 12ch; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .issue-bulk-outcome { margin: 0; font-size: 13px; }
 .issue-bulk-outcome:empty { display: none; }
 .issue-table .is-bulk-selected { background: #f6f3ff; }

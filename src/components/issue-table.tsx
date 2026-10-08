@@ -43,12 +43,13 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   </>;
 }
 
-export function IssueTable({ issues, allIssues, users, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues }: {
+export function IssueTable({ issues, allIssues, users, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues }: {
   issues: Issue[]; allIssues: Issue[]; users: User[]; state: IssueTableState;
   onChange: (state: IssueTableState) => void; selectedId: string | null; controls?: string;
   onOpen: (event: MouseEvent<HTMLAnchorElement>, issue: Issue) => void;
   onNavigate: (issue: Issue, opener: HTMLAnchorElement) => boolean;
   onTagIssues: (ids: string[]) => void;
+  onLabelIssues: (ids: string[]) => void;
   paginationKey: string; readOnly?: boolean;
   onCloseIssues: (ids: string[]) => Promise<{ closedIds: string[]; error?: string }>;
 }) {
@@ -141,12 +142,19 @@ export function IssueTable({ issues, allIssues, users, state, onChange, selected
     created: { active: !!(state.createdFrom || state.createdTo), clear: () => patch({ createdFrom: "", createdTo: "" }), content: <div className="date-filter"><label><span>From</span><input type="date" aria-label="Created on or after" value={state.createdFrom} max={state.createdTo || undefined} onChange={(e) => patch({ createdFrom: e.target.value })} /></label><label><span>To</span><input type="date" aria-label="Created on or before" value={state.createdTo} min={state.createdFrom || undefined} onChange={(e) => patch({ createdTo: e.target.value })} /></label></div> },
   };
   return <section className="issue-table-section" aria-label="Issue list">
-    <div className="issue-table-summary"><p className="muted">{issues.length} of {allIssues.length} issues</p>{hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}</div>
-    {(selected.length > 0 || pending) && <div className="issue-bulk-actions" aria-label="Selected issue actions" aria-busy={pending}><span>{selected.length} selected</span><Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button><Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onTagIssues([...selected])}>Tag selected issues</Button><Button type="button" variant="ghost" disabled={pending} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button></div>}
+    <div className="issue-bulk-actions issue-table-actions" role="group" aria-label="Selected issue actions" aria-busy={pending}>
+      <p className="issue-table-count muted">{issues.length} of {allIssues.length} issues</p>
+      <span className="issue-selection-count">{selected.length} selected</span>
+      <Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button>
+      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onTagIssues([...selected])}>Tag selected issues</Button>
+      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onLabelIssues([...selected])}>Add hashtags</Button>
+      <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
+      {hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}
+    </div>
     <p className="issue-bulk-outcome" role="status">{outcome}</p>
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className="issue-table">
-        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
+        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to add hashtags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
         <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" /><col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {columns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}

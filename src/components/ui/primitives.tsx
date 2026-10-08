@@ -20,7 +20,7 @@ export function Modal({
   onOpenAutoFocus,
 }: {
   title: string;
-  description: string;
+  description?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
@@ -34,11 +34,14 @@ export function Modal({
         <Dialog.Content
           className={`dialog-content ${className}`}
           onOpenAutoFocus={onOpenAutoFocus}
+          {...(!description ? { "aria-describedby": undefined } : {})}
         >
           <Dialog.Title className="dialog-title">{title}</Dialog.Title>
-          <Dialog.Description className="muted">
-            {description}
-          </Dialog.Description>
+          {description && (
+            <Dialog.Description className="muted">
+              {description}
+            </Dialog.Description>
+          )}
           <Dialog.Close
             className="icon-button dialog-close"
             aria-label="Close dialog"

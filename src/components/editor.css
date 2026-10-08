@@ -294,7 +294,7 @@
 }
 .mention-option span { color: #71717a; font-size: 11px; }
 .mention-option[aria-selected="true"], .mention-option:hover { background: #ede9fe; }
-.mention-chip, .markdown-content a[href^="mention:"] {
+.hashtag-chip, .mention-chip, .markdown-content a[href^="mention:"] {
   background: #ede9fe;
   color: #6d28d9;
   border-radius: 5px;

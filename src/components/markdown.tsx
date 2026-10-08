@@ -3,6 +3,7 @@ import { mentionUserId } from "../../shared/mentions";
 import type { User } from "../../shared/types";
 import remarkGfm from "remark-gfm";
 import { safeImageUrl } from "./image-node";
+import { remarkHashtags } from "./hashtag-markdown";
 import "./editor.css";
 
 /** Raw HTML is deliberately not enabled; remote images never track workspace readers. */
@@ -10,7 +11,7 @@ export function Markdown({ children, mentionUsers = [] }: { children: string; me
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkHashtags]}
         urlTransform={(url) => mentionUserId(url) ? url : defaultUrlTransform(url)}
         components={{
           a: ({ children, href }) => {

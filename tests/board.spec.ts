@@ -195,9 +195,11 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
   await expect(create.getByRole("status")).toContainText("Issue #4 created.");
+  const issueUrl = (await create.getByRole("link", { name: "View issue" }).getAttribute("href"))!;
   await create.getByRole("link", { name: "View issue" }).click();
-  await expect(page).toHaveURL(/\/issues\//);
-  const issueUrl = page.url();
+  await expect(create).toBeHidden();
+  await expect(page).toHaveURL(projectPath + "/board");
+  await expect(page.getByRole("complementary", { name: "Issue details", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("#design #idea");
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Priority", { exact: true })).toHaveCount(0);
