@@ -222,7 +222,7 @@ export function createApp(options: AppOptions = {}) {
   const bodyLabels = (body: string) => {
     const labels = extractIssueLabels(body);
     if (labels.length > 30 || labels.some((label) => label.length > 50))
-      fail(400, "Use at most 30 hashtags, each at most 50 characters");
+      fail(400, "Use at most 30 tags, each at most 50 characters");
     return labels;
   };
   const validateMentions = (body: string) => {

@@ -21,7 +21,8 @@ export function mentionQuery(text: string) {
     else if (run.length === ticks) ticks = 0;
   }
   if (ticks) return null;
-  const match = /(?:^|[\s(])@([^@\n\r\[\]()`<>]{0,60})$/.exec(line);
+  // A # trigger hands completion to tags rather than keeping a stale @ query.
+  const match = /(?:^|[\s(])@([^@#\n\r\[\]()`<>]{0,60})$/.exec(line);
   if (!match || /\]\([^)]*$/.test(line)) return null;
   return { query: match[1], start: text.length - match[1].length - 1, end: text.length };
 }
@@ -117,8 +118,12 @@ export function MentionAutocomplete({ users, mode, source, onChange }: {
       element.setAttribute("aria-autocomplete", "list"); element.setAttribute("aria-controls", id);
       if (options.length) element.setAttribute("aria-activedescendant", `${id}-${active}`);
       else element.removeAttribute("aria-activedescendant");
-    } else for (const attr of ["aria-autocomplete", "aria-controls", "aria-activedescendant"]) element.removeAttribute(attr);
+    }
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+    return () => {
+      // The tag picker shares this input; only release our own ARIA attributes.
+      if (element.getAttribute("aria-controls") === id) for (const attr of ["aria-autocomplete", "aria-controls", "aria-activedescendant"]) element.removeAttribute(attr);
+    };
   }, [match, active, options.length, editor, mode, source, id]);
   if (!match) return null;
   return <div className="mention-picker" ref={list}>

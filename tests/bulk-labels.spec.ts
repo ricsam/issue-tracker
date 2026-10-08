@@ -27,7 +27,7 @@ const fetchIssue = async (page: Page, id: string): Promise<Issue> => (await (awa
 test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry without duplicates", async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const { project, issues, headers } = await seed(page, baseURL!, 11);
-  await expect(page.getByRole("button", { name: "Add hashtags", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add tags", exact: true })).toBeDisabled();
   await page.getByLabel("Rows per page", { exact: true }).selectOption("10");
   await select(page, 1).check();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
@@ -36,19 +36,19 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   await editor.fill("Unsaved hashtag draft");
   page.once("dialog", (prompt) => prompt.dismiss());
-  await page.getByRole("button", { name: "Add hashtags", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Add hashtags", exact: true });
+  await page.getByRole("button", { name: "Add tags", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add tags", exact: true });
   await expect(dialog).toHaveCount(0);
   await expect(editor).toContainText("Unsaved hashtag draft");
   page.once("dialog", (prompt) => prompt.accept());
-  await page.getByRole("button", { name: "Add hashtags", exact: true }).click();
-  await expect(dialog).toContainText("Add hashtags to 2 selected issues.");
-  const input = dialog.getByRole("textbox", { name: "New hashtags", exact: true });
-  const add = dialog.getByRole("button", { name: "Add hashtags", exact: true });
+  await page.getByRole("button", { name: "Add tags", exact: true }).click();
+  await expect(dialog).toContainText("Add tags to 2 selected issues.");
+  const input = dialog.getByRole("textbox", { name: "New tags", exact: true });
+  const add = dialog.getByRole("button", { name: "Add tags", exact: true });
   await expect(input).toBeFocused();
   await expect(add).toBeDisabled();
   await input.fill("missing-hash");
-  await expect(dialog.getByRole("alert")).toContainText("Start each hashtag with #");
+  await expect(dialog.getByRole("alert")).toContainText("Start each tag with #");
   await expect(add).toBeDisabled();
   await input.fill("#" + "x".repeat(51));
   await expect(dialog.getByRole("alert")).toContainText("at most 50 characters");
@@ -56,9 +56,9 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   await input.fill("#triage #triage #日本語 #[needs review]");
   const existing = dialog.getByRole("checkbox", { name: "#existing", exact: true });
   await existing.check();
-  await expect(dialog.getByRole("status")).toContainText("4 hashtags to add");
+  await expect(dialog.getByRole("status")).toContainText("4 tags to add");
   await existing.uncheck();
-  await expect(dialog.getByRole("status")).toContainText("3 hashtags to add");
+  await expect(dialog.getByRole("status")).toContainText("3 tags to add");
   await existing.check();
   await dialog.screenshot({ path: "test-results/bulk-hashtags-desktop.png" });
 
@@ -104,15 +104,15 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   }
   expect(await fetchIssue(page, issues[1].id)).toEqual(issues[1]);
   await expect(page.locator(".issue-row").filter({ hasText: "Task 11" })).toContainText("triage");
-  await page.getByRole("button", { name: "Add hashtags", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "New hashtags", exact: true }).fill("#triage");
+  await page.getByRole("button", { name: "Add tags", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#triage");
   await add.click();
   await expect(dialog).toBeHidden();
   expect(await fetchIssue(page, issues[0].id)).toEqual(first);
   expect(await fetchIssue(page, issues[10].id)).toEqual(last);
   await page.reload();
-  await page.getByRole("button", { name: "Labels filters", exact: true }).click();
-  await page.getByLabel("Filter by label", { exact: true }).selectOption("label:triage");
+  await page.getByRole("button", { name: "Tags filters", exact: true }).click();
+  await page.getByLabel("Filter by tag", { exact: true }).selectOption("label:triage");
   await page.keyboard.press("Escape");
   await expect(page.locator(".issue-row")).toHaveCount(2);
 });
@@ -126,12 +126,12 @@ test("mobile board and closed-list selection can add hashtags without changing m
   await expect(page.locator(".board-card")).toHaveCount(3);
   await select(page, 1).check();
   await select(page, 2).check();
-  await page.getByRole("button", { name: "Add hashtags", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Add hashtags", exact: true });
-  await dialog.getByRole("textbox", { name: "New hashtags", exact: true }).fill("#board-tag");
+  await page.getByRole("button", { name: "Add tags", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add tags", exact: true });
+  await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#board-tag");
   await page.screenshot({ path: "test-results/bulk-hashtags-mobile.png" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await dialog.getByRole("button", { name: "Add hashtags", exact: true }).click();
+  await dialog.getByRole("button", { name: "Add tags", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator(".board-card").filter({ hasText: "Task 1" })).toContainText("board-tag");
   await expect(page.locator(".board-card").filter({ hasText: "Task 2" })).toContainText("board-tag");
@@ -141,9 +141,9 @@ test("mobile board and closed-list selection can add hashtags without changing m
   expect((await page.request.patch(`/api/issues/${issues[0].id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
   await page.goto(`/projects/${project.slug}?state=closed`);
   await select(page, 1).check();
-  await page.getByRole("button", { name: "Add hashtags", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "New hashtags", exact: true }).fill("#closed-tag");
-  await dialog.getByRole("button", { name: "Add hashtags", exact: true }).click();
+  await page.getByRole("button", { name: "Add tags", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#closed-tag");
+  await dialog.getByRole("button", { name: "Add tags", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator(".issue-row")).toContainText("closed-tag");
   const closed = await fetchIssue(page, issues[0].id);

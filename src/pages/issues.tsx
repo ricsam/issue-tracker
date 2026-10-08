@@ -52,6 +52,8 @@ import {
 } from "../components/lifecycle";
 import { useDesktopIssues } from "../lib/use-desktop-issues";
 import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
+import { NEW_ISSUE_KEYS, newIssueTooltip, useNewIssueShortcut } from "../lib/issue-shortcuts";
+import { issueTags } from "../lib/issue-tags";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
@@ -162,6 +164,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [query, setQuery] = useState("");
   const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
+  useNewIssueShortcut(() => setOpen(true), !loading && !!project && !project.archivedAt);
+  const existingTags = issueTags(issues);
   const [saving, setSaving] = useState<string | null>(null);
   const boardBusy = useRef(false);
   const [boardSelection, setBoardSelection] = useState<string[]>([]);
@@ -406,14 +410,10 @@ function ProjectIssues({ slug }: { slug: string }) {
           event.stopPropagation();
           selectBoardIssue(i.id, event.shiftKey || !checked, event.shiftKey);
         }}
-        draggable={board && !saving && !readOnly}
-        onDragStart={(e) => {
-          if ((e.target as HTMLElement).closest("button, input, [popover]")) { e.preventDefault(); return; }
-          cardDrag.current = [...targets];
-          e.dataTransfer.setData("text/plain", i.id);
-          e.dataTransfer.effectAllowed = "move";
+        onDragStart={(event) => {
+          // Links and selected text must never initiate a card move.
+          if (!(event.target as Element).closest(".board-card-handle")) event.preventDefault();
         }}
-        onDragEnd={() => { cardDrag.current = []; }}
       >
         <div className="board-card-toolbar">
           <input type="checkbox" aria-label={`Select issue #${i.number}`} checked={checked} disabled={!!saving || readOnly}
@@ -423,14 +423,32 @@ function ProjectIssues({ slug }: { slug: string }) {
             onChange={(event) => {
               if (!(event.nativeEvent as globalThis.MouseEvent).shiftKey) selectBoardIssue(i.id, event.target.checked);
             }} />
-          <span className="issue-number">#{i.number}</span>
-          <GripVertical size={14} className="drag-hint" />
+          <span
+            className="board-card-handle"
+            aria-label={`Drag issue #${i.number}`}
+            title="Drag to move issue; use Board actions for keyboard controls"
+            draggable={!saving && !readOnly}
+            onDragStart={(event) => {
+              if (saving || readOnly) { event.preventDefault(); return; }
+              cardDrag.current = [...targets];
+              event.dataTransfer.setData("text/plain", i.id);
+              event.dataTransfer.effectAllowed = "move";
+              const card = event.currentTarget.closest<HTMLElement>(".board-card");
+              if (card) {
+                const box = card.getBoundingClientRect();
+                event.dataTransfer.setDragImage(card, event.clientX - box.left, event.clientY - box.top);
+              }
+            }}
+            onDragEnd={() => { cardDrag.current = []; }}
+          ><GripVertical size={14} className="drag-hint" /></span>
           <BoardActionsMenu label={`Board actions for issue #${i.number}`} lanes={lanes} currentLane={currentLane}
             count={targets.length} disabled={!!saving || readOnly}
             onMove={(lane) => void changeBoard(targets, lane)} onRemove={() => void changeBoard(targets)} />
         </div>
         <Link
           className="issue-link"
+          aria-label={i.title}
+          draggable={false}
           data-issue-id={i.id}
           to={`/issues/${i.id}`}
           onClick={(event) => openDetails(event, i)}
@@ -439,8 +457,8 @@ function ProjectIssues({ slug }: { slug: string }) {
             desktop && selectedId ? "issue-detail-sidebar" : undefined
           }
         >
+          <span className="issue-number">#{i.number}</span>
           <strong>{i.title}</strong>
-        </Link>
         <div className="issue-meta">
           {i.state === "closed" && <ClosedTag />}
           {i.labels.slice(0, 3).map((l) => (
@@ -450,6 +468,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           ))}
 
         </div>
+        </Link>
       </article>
     );
   }
@@ -470,7 +489,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           {!readOnly && (
             <div className="page-actions">
               <ArchiveProjectButton project={project} onChange={setProject} />
-              <Button onClick={() => setOpen(true)}>
+              <Button onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                 <Plus size={16} />
                 Create issue
               </Button>
@@ -557,7 +576,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
                 disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
-              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add hashtags</Button>
+              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add tags</Button>
               <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; }}>Clear selection</Button>
             </div>
             {boardIssues.length === 0 && (
@@ -574,7 +593,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             )}
             <p className="board-outcome" role="status">{boardOutcome}</p>
             <p className="sr-only">
-              Drag issues between lanes, or use each issue’s board actions menu. Drag a selected issue to move the selection.
+              Drag issues by their handle between lanes, or use each issue’s board actions menu. Drag a selected issue’s handle to move the selection.
               Drag a lane by its heading to reorder lanes, or use Manage lanes.
             </p>
             <div
@@ -723,6 +742,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           <div className="issue-detail-scroll" inert={closingIssues}>
             <IssueDetails
               id={selectedId}
+              existingTags={existingTags}
               embedded
               onPendingChange={onPendingChange}
               onSaved={(updated) =>
@@ -739,7 +759,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       {tagging?.kind === "mentions" && <BulkTagDialog slug={slug} issueIds={tagging.ids} users={users}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
       {tagging?.kind === "labels" && <BulkLabelDialog slug={slug} issueIds={tagging.ids}
-        existingLabels={[...new Set(issues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b))}
+        existingLabels={existingTags}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
       {configureBoard && (
         <BoardSettingsDialog
@@ -761,6 +781,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       {open && (
         <CreateIssueDialog
           project={project}
+          existingTags={existingTags}
           onCreated={issueCreated}
           onClose={() => setOpen(false)}
           canViewIssue={canLeaveDetails}

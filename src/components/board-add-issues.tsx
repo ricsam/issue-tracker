@@ -92,7 +92,7 @@ export function BoardAddIssuesDialog({
               <Search size={16} />
               <input
                 aria-label="Search issues to add to board"
-                placeholder="Find issues by title, number, or label…"
+                placeholder="Find issues by title, number, or tag…"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />

@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.9.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.10.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.10.0
+
+Version 0.10.0 consistently calls issue tags **tags**, adds existing-tag autocomplete in Write and Markdown modes, and restricts board-card dragging to the handle while the rest of the card opens the issue. Create and save actions show keyboard shortcuts on hover: Cmd/Ctrl+N opens a new issue where the browser permits it, Alt+N is the fallback, and Cmd/Ctrl+S saves the focused issue or new draft.
+
+No database migration, API field rename, or deployment-value change is added. Back up `/data`, preserve the encryption-key Secret and existing deployment values, and select the published image matching the release commit. Earlier migration and rollback restrictions still apply when upgrading from older versions.
 
 ### Upgrading to 0.9.0
 

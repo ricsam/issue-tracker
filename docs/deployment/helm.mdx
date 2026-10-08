@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.9.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.10.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.9.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.9.0 adds bulk hashtags, inline hashtag styling, permanent selection bars, modifier-click board selection, and a simpler create-issue flow with desktop sidebar navigation. No new database migration or deployment-value change is required. Upgrades from versions before 0.8.0 still run migration v8, which adds hashtags for existing labels while preserving content, stored titles, lifecycle history, and timestamps. Back up `/data` and retain the encryption key before upgrading; avoid automatic rollback across migrations. Earlier releases do not maintain body-derived labels, so recovery should restore a pre-upgrade backup with its matching image/chart, preserving newer writes separately first.
+Verify `0.10.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.10.0 adds consistent **tags** terminology, existing-tag autocomplete in Write and Markdown modes, handle-only board-card dragging, clickable card bodies, and create/save keyboard shortcuts with hover hints. Cmd/Ctrl+N opens a new issue where supported; Alt+N is the fallback for browsers that reserve it. Cmd/Ctrl+S saves the focused issue or new draft. No new database migration, API field rename, or deployment-value change is required. Upgrades from versions before 0.8.0 still run migration v8, which adds tags to issue bodies while preserving content, stored titles, lifecycle history, and timestamps. Back up `/data` and retain the encryption key before upgrading; avoid automatic rollback across migrations. Earlier releases do not maintain body-derived tags, so recovery should restore a pre-upgrade backup with its matching image/chart, preserving newer writes separately first.
 
 ## Choose the image
 
@@ -43,7 +43,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.9.0 --namespace issue-tracker \
+  --version 0.10.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -83,9 +83,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.9.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.10.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.9.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.10.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

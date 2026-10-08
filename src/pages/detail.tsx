@@ -6,6 +6,7 @@ import {
   MessageSquare,
   RotateCcw,
   Save,
+  Plus,
 } from "lucide-react";
 import type {
   Issue,
@@ -21,6 +22,9 @@ import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
+import { CreateIssueDialog } from "../components/create-issue-dialog";
+import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut, useNewIssueShortcut } from "../lib/issue-shortcuts";
+import { useProjectTags } from "../lib/issue-tags";
 import {
   validateBody,
   validateIssueBody,
@@ -37,6 +41,7 @@ export function DetailPage() {
 type IssueDetailsProps = {
   id: string;
   embedded?: boolean;
+  existingTags?: string[];
   onSaved?: (issue: Issue) => void;
   onPendingChange?: (pending: boolean) => void;
 };
@@ -123,6 +128,7 @@ function IssueDetailForm({
   onSaved,
   onPendingChange,
   initialDetail,
+  existingTags,
 }: IssueDetailsProps & { initialDetail: IssueDetail }) {
   const { users, projects, refresh } = useWorkspace();
   const [issue, setIssue] = useState<Issue>(initialDetail.issue);
@@ -134,6 +140,16 @@ function IssueDetailForm({
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saved, setSaved] = useState("");
+  const form = useRef<HTMLFormElement>(null);
+  const submitting = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const project = projects.find((p) => p.id === issue.projectId);
+  const archived = !!project?.archivedAt;
+  const catalog = useProjectTags(project?.slug, existingTags);
+  const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
+  useIssueSaveShortcut(form, !busy && !changingState && !archived, id);
+  useNewIssueShortcut(() => setCreating(true), !embedded && !!project && !archived);
   const setBreadcrumb = useIssueBreadcrumb();
   useEffect(() => {
     if (embedded) return;
@@ -152,7 +168,8 @@ function IssueDetailForm({
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!issue) return;
+    if (submitting.current || busy || changingState || archived || form.current?.closest("[inert]")) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
     setSaved("");
@@ -173,6 +190,7 @@ function IssueDetailForm({
     } catch (e) {
       setError(message(e));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -225,8 +243,6 @@ function IssueDetailForm({
       setPosting(false);
     }
   }
-  const project = projects.find((p) => p.id === issue.projectId);
-  const archived = !!project?.archivedAt;
   const closed = issue.state === "closed";
   const closer = users.find((u) => u.id === issue.closedById)?.name;
   return (
@@ -245,9 +261,10 @@ function IssueDetailForm({
         </p>
       )}
       <ErrorNotice error={error} />
-      <form onSubmit={save} className="detail-form">
+      <form ref={form} onSubmit={save} className="detail-form">
         <fieldset
           disabled={busy || changingState || archived}
+          inert={busy || changingState}
           className={archived ? "is-read-only" : undefined}
         >
           <div className="detail-heading">
@@ -265,6 +282,9 @@ function IssueDetailForm({
                 <span role="status" className="success">
                   {saved}
                 </span>
+                {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+                  <Plus size={15} /> Create issue
+                </Button>}
                 <Button
                   type="button"
                   variant="secondary"
@@ -280,7 +300,7 @@ function IssueDetailForm({
                       ? "Reopen issue"
                       : "Close issue"}
                 </Button>
-                <Button disabled={busy || changingState}>
+                <Button disabled={busy || changingState} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
                   <Save size={15} />
                   {busy ? "Saving…" : "Save changes"}
                 </Button>
@@ -297,11 +317,11 @@ function IssueDetailForm({
                   value={issue.body}
                   onChange={(body) => update({ body })}
                   mentionUsers={users}
+                  existingTags={tags}
                   ariaLabel="Issue"
                   placeholder="What needs to happen? Just start writing…"
                 />
               )}
-            {!archived && <p className="settings-help muted">#hashtags outside code become labels automatically.</p>}
           </div>
         </fieldset>
       </form>
@@ -346,6 +366,10 @@ function IssueDetailForm({
           </form>
         )}
       </section>
+      {creating && project && <CreateIssueDialog project={project} existingTags={tags}
+        onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
+        onClose={() => setCreating(false)}
+        canViewIssue={() => !pending || window.confirm("Discard unsaved issue changes or comment?")} />}
     </div>
   );
 }

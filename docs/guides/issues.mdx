@@ -1,9 +1,9 @@
 ---
 title: Issues
-description: Create actionable issues, label them with hashtags, and discuss work with your team.
+description: Create actionable issues, organize them with tags, and discuss work with your team.
 ---
 
-An issue holds one Markdown body, labels, tagged users, and an open or closed state. There is no assignee or assignment role.
+An issue holds one Markdown body, tags, tagged users, and an open or closed state. There is no assignee or assignment role.
 Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
 All authenticated users can read and update issues across all projects.
@@ -13,14 +13,14 @@ All authenticated users can read and update issues across all projects.
 1. Open the project that should contain the work.
 2. Select **Create issue** from either **List** or **Board**.
 3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
-4. Optionally add hashtags such as `#bug` or `#needs-review` to the body.
+4. Optionally add tags such as `#bug` or `#needs-review` to the body.
 5. Select **Create issue** to save. The dialog clears and refocuses for another issue; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
 
 New issues are open and stay off the board until you [add them to it](/guides/board).
-The issue body must contain non-whitespace content; labels may be empty.
+The issue body must contain non-whitespace content; tags may be empty.
 Numbers are allocated within each project, not across the entire workspace.
 
-## Labels and mentions
+## Tags and mentions
 
 | Property | Available values or limits |
 | --- | --- |
@@ -28,10 +28,10 @@ Numbers are allocated within each project, not across the entire workspace.
 | Display title | Derived from the body; up to 300 characters |
 | State | Open or Closed |
 | Tagged users | Deduplicated users mentioned in the saved issue or its comments |
-| Labels | Up to 30 entries, each up to 50 characters |
+| Tags | Up to 30 entries, each up to 50 characters |
 
-Labels come from hashtags in saved issue prose, including Unicode hashtags. Remove the hashtag to remove its label. Code, links, URLs, and images do not create labels, and comment hashtags do not affect issue labels. Escaped hashes in Markdown still count when rendered as hashtags. Legacy labels containing spaces or punctuation use extended syntax such as `#[needs%20review]`; existing labels are migrated without removing original content or changing stored titles or timestamps.
-Type `@` and select a teammate in an issue or comment to associate them with the issue. Tags have no roles, ownership, or notification behavior and do not restrict editing. Removing a user's last saved mention removes their association.
+Tags come from `#tag` text in saved issue prose, including Unicode tags. Type `#` in Write or Markdown mode to find existing tags from this project. Use Up/Down and Enter/Tab, or click a suggestion; Escape dismisses the menu. Keep typing to use a new tag. Remove the tag from the body to remove it. Code, links, URLs, and images do not create tags, and tags in comments do not affect the issue’s tags. Escaped hashes in Markdown still count when rendered as tags. Tags containing spaces or punctuation use extended syntax such as `#[needs%20review]`; existing tags are migrated without removing original content or changing stored titles or timestamps.
+Type `@` and select a teammate in an issue or comment to associate them with the issue. Mentions have no roles, ownership, or notification behavior and do not restrict editing. Removing a user's last saved mention removes their association.
 
 ## How display titles work
 
@@ -45,8 +45,8 @@ This automatic migration preserves the original description bytes, timestamps, a
 
 ## Edit and save
 
-Open an issue by selecting its title in the list or board. Full-page issues have a top breadcrumb back to the project. Creation metadata appears beside the issue number and state; there is no separate properties card or tag list.
-Change the Markdown body, then select **Save changes**.
+Open an issue by selecting its title in the list or its card body on the board. Full-page issues have a top breadcrumb back to the project. Creation metadata appears beside the issue number and state; there is no separate properties card or tag list.
+Change the Markdown body, then select **Save changes**, or press Cmd+S on macOS / Ctrl+S elsewhere while focused on the issue.
 Edit the heading or first text line in the body to change the derived display title.
 Wait for **Changes saved** before leaving the page.
 Edits on the detail page are not automatically saved.
@@ -61,9 +61,13 @@ Use [rich text and Markdown](/guides/rich-text) for structured issue bodies.
 Use [uploads](/guides/uploads) for screenshots and supporting files.
 Wait for an upload to finish before saving the surrounding content.
 
+## Keyboard shortcuts
+
+Hover **Create issue** or **Save changes** to see its shortcut. Cmd+N on macOS / Ctrl+N elsewhere opens a new issue in the current project when the browser allows it. Some browsers reserve that key for a new window; use **Alt+N** instead. Cmd/Ctrl+S saves the focused issue or creates the focused new draft, without submitting a comment or saving an issue behind another dialog.
+
 ## Find an issue
 
-Within a project, **Search issues** matches title text, issue numbers, and labels without case sensitivity.
+Within a project, **Search issues** matches title text, issue numbers, and tags without case sensitivity.
 It does not search the full issue body or comments.
 The list shows **Open** issues by default; select **Closed** to see closed ones.
 Search applies within the selected state, so check **Closed** if an expected issue is missing.
@@ -76,9 +80,9 @@ Use Up/Down to open adjacent issues, including across page boundaries. Shift+Up/
 
 Select issues and choose **Tag selected issues** to add teammates as saved body mentions. Existing body mentions are not duplicated, and original content is preserved. Users already mentioned only in comments still receive a body mention. Archived projects cannot be tagged.
 
-Select issues in the list or board and choose **Add hashtags** to label them together. Choose existing labels, type new hashtags such as `#bug #needs-review`, or combine both. Use `#[needs review]` for labels containing spaces. The preview shows the labels that will be added.
+Select issues in the list or board and choose **Add tags** to tag them together. Choose existing tags, type new tags such as `#bug #needs-review`, or combine both. Use `#[needs review]` for tags containing spaces. The preview shows the tags that will be added.
 
-Hashtags are appended to each selected issue’s latest saved body without replacing text or duplicating existing labels. If an unclosed Markdown block would hide the tags, they are inserted near the top instead. Closed issues can be labeled; archived projects are read-only. If a selected issue has an unsaved draft, you are asked before discarding it. A failed batch leaves all issues unchanged and keeps the dialog open for retry.
+Tags are appended to each selected issue’s latest saved body without replacing text or duplicating existing tags. If an unclosed Markdown block would hide the tags, they are inserted near the top instead. Closed issues can be tagged; archived projects are read-only. If a selected issue has an unsaved draft, you are asked before discarding it. A failed batch leaves all issues unchanged and keeps the dialog open for retry.
 
 ## Add to the discussion
 

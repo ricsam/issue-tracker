@@ -22,8 +22,8 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
   const entered = extractIssueLabels(input);
   const labels = [...new Set([...selected, ...entered])];
   const validation = labels.length > 30 || labels.some((label) => label.length > 50)
-    ? "Use at most 30 hashtags, each at most 50 characters."
-    : input.trim() && !entered.length ? "Start each hashtag with #, for example #bug #needs-review." : "";
+    ? "Use at most 30 tags, each at most 50 characters."
+    : input.trim() && !entered.length ? "Start each tag with #, for example #bug #needs-review." : "";
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -47,19 +47,19 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
   }
 
   return (
-    <Modal title="Add hashtags" description={`Add hashtags to ${issueIds.length} selected issue${issueIds.length === 1 ? "" : "s"}.`} open
+    <Modal title="Add tags" description={`Add tags to ${issueIds.length} selected issue${issueIds.length === 1 ? "" : "s"}.`} open
       onOpenAutoFocus={(event) => { event.preventDefault(); inputRef.current?.focus(); }}
       onOpenChange={(open) => !open && !submitting.current && onClose()}>
       <form className="form-stack" onSubmit={save} aria-busy={busy}>
-        <p className="muted">Appends hashtags to the end of each body without replacing existing text or duplicating labels. If Markdown blocks prevent appending, hashtags are inserted near the top instead.</p>
+        <p className="muted">Adds tags without replacing existing text or duplicating tags.</p>
         <fieldset disabled={busy} className="bulk-tag-fields">
-          <label>New hashtags
+          <label>New tags
             <input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="#bug #needs-review" aria-describedby={helpId} aria-invalid={!!validation} />
           </label>
-          <small id={helpId} className="muted">Separate hashtags with spaces. Use #[needs review] for a label containing spaces.</small>
+          <small id={helpId} className="muted">Separate tags with spaces. Use #[needs review] for a tag containing spaces.</small>
           {existingLabels.length > 0 && <>
-            <strong>Existing labels</strong>
-            <div className="bulk-tag-options" role="group" aria-label="Existing labels">
+            <strong>Existing tags</strong>
+            <div className="bulk-tag-options" role="group" aria-label="Existing tags">
               {existingLabels.map((label) => <label className="bulk-tag-option" key={label}>
                 <input type="checkbox" checked={selected.has(label)} onChange={(event) => {
                   const checked = event.target.checked;
@@ -75,13 +75,13 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
           </>}
         </fieldset>
         <div className="bulk-label-preview" role="status">
-          <p className="muted">{labels.length} hashtag{labels.length === 1 ? "" : "s"} to add</p>
+          <p className="muted">{labels.length} tag{labels.length === 1 ? "" : "s"} to add</p>
           {labels.length > 0 && <div className="issue-meta">{labels.map((label) => <span className="tag" key={label}>{labelMarkdown(label)}</span>)}</div>}
         </div>
         <ErrorNotice error={validation || error} />
         <div className="form-actions">
           <Button type="button" variant="secondary" disabled={busy} onClick={() => !submitting.current && onClose()}>Cancel</Button>
-          <Button disabled={busy || !!validation || !labels.length || !issueIds.length}>{busy ? "Adding…" : "Add hashtags"}</Button>
+          <Button disabled={busy || !!validation || !labels.length || !issueIds.length}>{busy ? "Adding…" : "Add tags"}</Button>
         </div>
       </form>
     </Modal>

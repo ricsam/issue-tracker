@@ -18,6 +18,6 @@ export function parseLabels(value: string): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
   if (labels.length > 30 || labels.some((s) => s.length > 50))
-    throw new Error("Use at most 30 labels, each at most 50 characters.");
+    throw new Error("Use at most 30 tags, each at most 50 characters.");
   return [...new Set(labels)];
 }

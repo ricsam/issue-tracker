@@ -105,7 +105,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   const plan = page
     .locator(".board-card")
     .filter({ hasText: "Plan the release" });
-  await plan.dragTo(progress);
+  await plan.locator(".board-card-handle").dragTo(progress);
   await expect(progress.locator(".board-card")).toHaveCount(1);
   await plan.getByRole("button", { name: /Board actions for issue/ }).click();
   await page.getByRole("menuitem", { name: "Done", exact: true }).click();
@@ -362,9 +362,9 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await plan.dragTo(todo);
+  await plan.locator(".board-card-handle").dragTo(todo);
   await expect(todo.getByRole("link", { name: /Plan the release/ })).toBeVisible();
-  await plan.dragTo(review);
+  await plan.locator(".board-card-handle").dragTo(review);
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.screenshot({ path: "test-results/custom-lanes-desktop.png", fullPage: true });
 

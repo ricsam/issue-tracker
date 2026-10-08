@@ -63,6 +63,7 @@ import { mentionUserId } from "../../shared/mentions";
 import { MentionLinkNode, mentionLinkReplacement } from "./mention-link-node";
 import { MENTION_TRANSFORMER } from "./mention-transformer";
 import { MentionAutocomplete } from "./mention-autocomplete";
+import { TagAutocomplete } from "./tag-autocomplete";
 import { HashtagNode, HashtagPlugin } from "./hashtag-node";
 import { ESCAPED_HASHTAG_TRANSFORMER } from "./hashtag-transformer";
 import type { Attachment, User } from "../../shared/types";
@@ -110,6 +111,7 @@ function EditorContents({
   ariaLabel,
   autoFocus,
   mentionUsers,
+  existingTags,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -118,6 +120,7 @@ function EditorContents({
   ariaLabel: string;
   autoFocus: boolean;
   mentionUsers: User[];
+  existingTags: string[];
 }) {
   const [editor] = useLexicalComposerContext();
   const [mode, setMode] = useState<Mode>("write");
@@ -375,6 +378,7 @@ function EditorContents({
         </div>
       )}
       <MentionAutocomplete users={mentionUsers} mode={mode} source={source} onChange={onChange} />
+      <TagAutocomplete tags={existingTags} mode={mode} source={source} onChange={onChange} />
       {autoFocus && <AutoFocusPlugin defaultSelection="rootStart" />}
       <HashtagPlugin />
       <HistoryPlugin />
@@ -417,6 +421,7 @@ export function RichEditor({
   ariaLabel = placeholder,
   autoFocus = false,
   mentionUsers = [],
+  existingTags = [],
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -425,6 +430,7 @@ export function RichEditor({
   ariaLabel?: string;
   autoFocus?: boolean;
   mentionUsers?: User[];
+  existingTags?: string[];
 }) {
   return (
     <LexicalComposer
@@ -477,6 +483,7 @@ export function RichEditor({
         ariaLabel={ariaLabel}
         autoFocus={autoFocus}
         mentionUsers={mentionUsers}
+        existingTags={existingTags}
       />
     </LexicalComposer>
   );

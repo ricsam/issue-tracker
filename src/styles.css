@@ -860,23 +860,52 @@ fieldset > small {
   border: 1px solid #e7dfee;
   background: #fff;
   border-radius: 7px;
-  padding: 15px 12px;
+  padding: 0;
   margin-bottom: 9px;
   box-shadow: 0 2px 3px #39204d04;
 }
-.board-card[draggable="true"] {
-  cursor: grab;
-}
+/* The real link fills the card; only toolbar controls sit above it. */
 .board-card .issue-link {
   display: block;
-  margin-bottom: 10px;
+  padding: 15px 12px;
+  border-radius: 7px;
+  cursor: pointer;
 }
+.board-card .issue-link:focus-visible {
+  outline: 2px solid #7050d9;
+  outline-offset: 2px;
+}
+.board-card .issue-link > .issue-number {
+  display: block;
+  margin: 0 60px 10px 21px;
+  min-height: 16px;
+}
+.board-card .issue-link > strong { margin-bottom: 10px; }
 .board-card-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 8px;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: -5px -4px 8px 0;
+  pointer-events: none;
 }
+.board-card-toolbar > * { pointer-events: auto; }
+.board-card-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 26px;
+  user-select: none;
+}
+.board-card-handle svg { pointer-events: none; }
+.board-card-handle[draggable="true"] { cursor: grab; }
+.board-card-handle[draggable="true"]:active { cursor: grabbing; }
+.board-card-handle[draggable="false"] { opacity: 0.4; }
+.board-card-handle:hover .drag-hint { color: #9581aa; }
 .board-card-toolbar input[type="checkbox"] {
   width: 14px;
   height: 14px;
@@ -884,7 +913,7 @@ fieldset > small {
   accent-color: #7050d9;
   cursor: pointer;
 }
-.board-card-toolbar .issue-number { margin-right: auto; }
+.board-card-toolbar input[type="checkbox"] { margin-right: auto; }
 .board-card.is-bulk-selected { background: #f6f3ff; border-color: #a48be7; }
 .board-card-toolbar .icon-button { width: 26px; height: 26px; padding: 4px; }
 .board-outcome { margin: 8px 0; font-size: 12px; }
@@ -1320,6 +1349,7 @@ fieldset.is-read-only:disabled {
 }
 .save-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }

@@ -158,7 +158,16 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   const done = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /Done/ }) });
-  await inProgress.locator(".board-card").dragTo(done);
+  // Start the native drag with small moves over the narrow handle before
+  // crossing the board (one large jump can skip Chromium's drag threshold).
+  const handle = inProgress.locator(".board-card-handle");
+  const start = (await handle.boundingBox())!;
+  const end = (await done.boundingBox())!;
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + start.width / 2 + 10, start.y + start.height / 2, { steps: 5 });
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 10 });
+  await page.mouse.up();
   await expect(
     done.getByRole("link", { name: /Improve the onboarding/ }),
   ).toBeVisible();

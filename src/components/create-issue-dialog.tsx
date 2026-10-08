@@ -5,6 +5,7 @@ import type { Issue, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
+import { SAVE_ISSUE_KEYS, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { RichEditor } from "./rich-editor";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
@@ -14,8 +15,10 @@ export function CreateIssueDialog({
   onClose,
   canViewIssue,
   onViewIssue,
+  existingTags = [],
 }: {
   project: Project;
+  existingTags?: string[];
   onCreated: (issue: Issue) => void;
   onClose: () => void;
   canViewIssue: () => boolean;
@@ -29,6 +32,8 @@ export function CreateIssueDialog({
   const [created, setCreated] = useState<Issue | null>(null);
   const [showNotice, setShowNotice] = useState(false);
   const fields = useRef<HTMLDivElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  useIssueSaveShortcut(form, !busy && !!body.trim());
   useEffect(() => {
     // Autofocus can scroll just the editable surface into view; keep its tabs
     // and formatting controls visible at the start of each fresh draft too.
@@ -98,7 +103,7 @@ export function CreateIssueDialog({
       onOpenChange={(open) => !open && !submitting.current && onClose()}
       onOpenAutoFocus={(event) => event.preventDefault()}
     >
-      <form onSubmit={create} className="create-issue-form" aria-busy={busy}>
+      <form ref={form} onSubmit={create} className="create-issue-form" aria-busy={busy}>
         <div ref={fields} className="create-issue-fields">
           <fieldset disabled={busy} inert={busy} className="form-stack">
             <div>
@@ -109,6 +114,7 @@ export function CreateIssueDialog({
                 value={body}
                 onChange={setBody}
                 mentionUsers={users}
+                existingTags={existingTags}
                 ariaLabel="Issue"
                 autoFocus
                 placeholder="What needs to happen? Just start writing…"
@@ -156,7 +162,7 @@ export function CreateIssueDialog({
             >
               {created ? "Done" : "Cancel"}
             </Button>
-            <Button disabled={busy || !body.trim()}>
+            <Button disabled={busy || !body.trim()} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
               {busy ? "Creating…" : "Create issue"}
             </Button>
           </div>

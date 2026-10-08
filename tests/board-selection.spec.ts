@@ -33,7 +33,7 @@ for (const width of [1440, 1060, 390]) {
     const actions = [
       bar.getByRole("button", { name: "Selected board issue actions", exact: true }),
       bar.getByRole("button", { name: "Tag selected issues", exact: true }),
-      bar.getByRole("button", { name: "Add hashtags", exact: true }),
+      bar.getByRole("button", { name: "Add tags", exact: true }),
       bar.getByRole("button", { name: "Clear selection", exact: true }),
     ];
     const offset = () => board.evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
@@ -99,21 +99,31 @@ test("only checkboxes or modifier clicks select board cards, while ordinary link
   const second = cards.filter({ has: select(page, 2) });
   const fourth = cards.filter({ has: select(page, 4) });
   const selected = page.locator(".board-card.is-bulk-selected");
-  for (const surface of [first.locator(".issue-number"), first.locator(".drag-hint"), first.locator(".tag")]) {
-    await surface.click();
-    await expect(selected).toHaveCount(0);
-  }
-  await first.click({ position: { x: 2, y: 2 } });
-  await expect(selected).toHaveCount(0);
-  await first.locator(".issue-link").click();
   const details = page.getByRole("complementary", { name: "Issue details", exact: true });
+  await expect(first).not.toHaveAttribute("draggable", "true");
+  await expect(first.locator(".issue-link")).toHaveAttribute("draggable", "false");
+  await first.locator(".board-card-handle").click();
+  await expect(details).toHaveCount(0);
+  for (const surface of [first.locator(".issue-number"), first.locator(".tag"), first.locator(".issue-link strong")]) {
+    await surface.click();
+    await expect(details).toContainText("Selection issue 1");
+    await expect(selected).toHaveCount(0);
+    await details.getByRole("button", { name: "Close issue details", exact: true }).click();
+  }
+  await first.click({ position: { x: 5, y: 5 } });
   await expect(details).toContainText("Selection issue 1");
   await expect(selected).toHaveCount(0);
   await details.getByRole("button", { name: "Close issue details", exact: true }).click();
+  // Card bodies are not draggable; moving one leaves all placements untouched.
+  await first.locator(".issue-link strong").dragTo(column(page, "Done"));
+  await expect(column(page, "Todo").locator(".board-card")).toHaveCount(4);
+  await expect(column(page, "Done").locator(".board-card")).toHaveCount(0);
   await select(page, 1).check();
   await expect(selected).toHaveCount(1);
   await first.locator(".issue-number").click();
   await expect(select(page, 1)).toBeChecked();
+  await expect(details).toBeVisible();
+  await details.getByRole("button", { name: "Close issue details", exact: true }).click();
 
   // Cmd/Ctrl toggle from anywhere, including links, without opening another tab.
   const tabs = context.pages().length;
@@ -172,7 +182,7 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
   await expect(page.locator(".board-card.is-bulk-selected")).toHaveCount(0);
   await select(page, 1).check();
   await select(page, 2).check();
-  await page.locator(".board-card").filter({ has: select(page, 1) }).dragTo(column(page, "Done"));
+  await page.locator(".board-card").filter({ has: select(page, 1) }).locator(".board-card-handle").dragTo(column(page, "Done"));
   await expect(column(page, "Done").locator(".board-card")).toHaveCount(2);
   await expect(column(page, "In progress").locator(".board-card")).toHaveCount(1);
   await select(page, 1).check();
