@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.11.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.12.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.12.0
+
+Version 0.12.0 replaces UUID issue IDs and project-local numbers with one global sequential issue number. Issue URLs use `/issues/12`, and references use **`!12`** throughout the UI. Type `!` in an issue or comment to find and link another issue; `@` remains for users and `#` for tags. Existing issue bodies open in Preview, and board-action results use a non-shifting snackbar.
+
+**Breaking API/URL change:** `Issue.id`, `Comment.issueId`, and `BoardCard.issueId` are canonical positive decimal strings; `Issue.number` is the numeric equivalent. Issue and board requests must use the new IDs. Old UUID issue URLs are not supported and return 404. Other entity IDs remain UUIDs.
+
+Migration v11 runs once transactionally, assigning existing issues numbers in creation order and updating their live relationships. Content, comments, tagged users, lifecycle metadata, timestamps, board membership and card order are preserved. Historical text is not rewritten. Back up all of `/data`, preserve the encryption-key Secret and existing values, and select the published SHA image matching this chart's release commit. **Do not use automatic Helm rollback (`--atomic`) across this migration.** Older images expect UUID IDs and cannot safely use the migrated database. Recovery requires stopping the app and restoring the pre-upgrade data backup with its matching image/chart, preserving newer writes separately first. No deployment-value change is required.
 
 ### Upgrading to 0.11.0
 
