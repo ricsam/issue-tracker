@@ -118,13 +118,13 @@ test("project list lane reflects board add, move and removal when switching view
   await page.goto(`/projects/${a.slug}/board`);
   await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
   await page.getByRole("menuitem", { name: "Done", exact: true }).click();
-  await expect(page.locator(".board-outcome")).toContainText("1 of 1 issues moved.");
+  await expect(page.locator(".snackbar").getByRole("status")).toHaveText("1 of 1 issues moved.");
   await page.getByRole("link", { name: "List", exact: true }).click();
   await expect(row(page, issues[0]).locator(".issue-board-lane")).toHaveText("Done");
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
   await page.getByRole("menuitem", { name: "Remove from board", exact: true }).click();
-  await expect(page.locator(".board-outcome")).toContainText("1 of 1 issues removed from board.");
+  await expect(page.locator(".snackbar").getByRole("status")).toHaveText("1 of 1 issues removed from board.");
   await page.getByRole("link", { name: "List", exact: true }).click();
   await expect(row(page, issues[0]).locator(".issue-board-lane")).toHaveText("Not on board");
 });

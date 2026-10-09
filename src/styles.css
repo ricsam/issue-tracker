@@ -925,8 +925,6 @@ fieldset > small {
 .board-card-toolbar input[type="checkbox"] { margin-right: auto; }
 .board-card.is-bulk-selected { background: #f6f3ff; border-color: #a48be7; }
 .board-card-toolbar .icon-button { width: 26px; height: 26px; padding: 4px; }
-.board-outcome { margin: 8px 0; font-size: 12px; }
-.board-outcome:empty { display: none; }
 .board-actions-menu {
   position: fixed;
   inset: auto;
