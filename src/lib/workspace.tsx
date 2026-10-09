@@ -5,6 +5,7 @@ export interface Workspace {
   users: User[];
   projects: Project[];
   refresh: () => Promise<void>;
+  updateProject: (project: Project) => void;
 }
 export const WorkspaceContext = createContext<Workspace | null>(null);
 export function useWorkspace() {

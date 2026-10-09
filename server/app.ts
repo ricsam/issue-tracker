@@ -68,7 +68,12 @@ const issueUpdateFields = issueFields
     state: z.enum(["open", "closed"]),
   })
   .partial();
-const projectUpdateFields = z.object({ archived: z.boolean() }).strict();
+// Metadata edits and lifecycle changes are separate actions; neither implicitly restores a project.
+const projectUpdateFields = z.union([
+  z.object({ archived: z.boolean() }).strict(),
+  z.object({ name: text(100).optional(), description: z.string().max(10000).optional() })
+    .strict().refine((input) => input.name !== undefined || input.description !== undefined),
+]);
 const laneField = z.string().min(1).max(100);
 const customLaneField = z.object({
   value: z.string().regex(/^custom_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
@@ -494,16 +499,25 @@ export function createApp(options: AppOptions = {}) {
   );
   app.patch("/api/projects/:slug", async (c) => {
     const p = project(c.req.param("slug"));
-    const { archived } = projectUpdateFields.parse(await json(c));
-    // Conditional writes keep repeated archive requests idempotent.
-    if (archived)
-      db.query(
-        "UPDATE projects SET archivedAt=?,archivedById=? WHERE id=? AND archivedAt IS NULL",
-      ).run(now(), c.get("user").id, p.id);
-    else
-      db.query(
-        "UPDATE projects SET archivedAt=NULL,archivedById=NULL WHERE id=?",
-      ).run(p.id);
+    const input = projectUpdateFields.parse(await json(c));
+    db.transaction(() => {
+      if ("archived" in input) {
+        // Conditional writes keep repeated archive requests idempotent.
+        if (input.archived)
+          db.query(
+            "UPDATE projects SET archivedAt=?,archivedById=? WHERE id=? AND archivedAt IS NULL",
+          ).run(now(), c.get("user").id, p.id);
+        else
+          db.query(
+            "UPDATE projects SET archivedAt=NULL,archivedById=NULL WHERE id=?",
+          ).run(p.id);
+      } else {
+        activeProject(p.slug);
+        // Update only supplied fields. Slug, identity, creation history and children stay unchanged.
+        if (input.name !== undefined) db.query("UPDATE projects SET name=? WHERE id=?").run(input.name, p.id);
+        if (input.description !== undefined) db.query("UPDATE projects SET description=? WHERE id=?").run(input.description, p.id);
+      }
+    }).immediate();
     return c.json({ project: project(p.slug) });
   });
   app.get("/api/projects/:slug/board", (c) =>

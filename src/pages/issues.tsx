@@ -37,6 +37,7 @@ import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
+import { EditProjectDialog } from "../components/edit-project-dialog";
 import { IssueTable } from "../components/issue-table";
 import { initialIssueTableState, issueTableRows } from "../lib/issue-table";
 import { BoardSettingsDialog } from "../components/board-settings";
@@ -169,6 +170,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [query, setQuery] = useState("");
   const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
+  const [projectSaved, setProjectSaved] = useState("");
   useIssueCreationHandler(() => setOpen(true), !loading && !loadFailed && (all || !!project));
   useEffect(() => {
     if (loading) return;
@@ -501,7 +504,10 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
           {!readOnly && (
             <div className="page-actions">
-              {project && <ArchiveProjectButton project={project} onChange={setProject} />}
+              {project && <>
+                <Button variant="secondary" onClick={() => { setProjectSaved(""); setEditingProject(true); }}>Edit project</Button>
+                <ArchiveProjectButton project={project} onChange={setProject} />
+              </>}
               <Button onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                 <Plus size={16} />
                 Create issue
@@ -509,6 +515,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             </div>
           )}
         </header>
+        {projectSaved && <p className="success" role="status">{projectSaved}</p>}
         {readOnly && project && (
           <ArchivedProjectNotice project={project} onChange={setProject} />
         )}
@@ -772,6 +779,9 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
         </aside>
       )}
+      {editingProject && project && <EditProjectDialog project={project}
+        onSaved={(updated) => { setProject(updated); setProjectSaved("Project updated"); }}
+        onClose={() => setEditingProject(false)} />}
       {tagging?.kind === "mentions" && <BulkTagDialog slug={slug || undefined} issueIds={tagging.ids} users={users}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
       {tagging?.kind === "labels" && <BulkLabelDialog slug={slug || undefined} issueIds={tagging.ids}

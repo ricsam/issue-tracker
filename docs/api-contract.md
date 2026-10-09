@@ -17,7 +17,7 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | GET | `/api/projects` | `{projects:Project[]}` |
 | POST | `/api/projects` | `{name,description?}` → `{project:Project}` |
 | GET | `/api/projects/:slug` | `{project:Project}` |
-| PATCH | `/api/projects/:slug` | `{archived:boolean}` → `{project:Project}`; archive or restore |
+| PATCH | `/api/projects/:slug` | `{name?,description?}` or `{archived:boolean}` → `{project:Project}`; edit metadata or archive/restore (separate actions) |
 | GET | `/api/projects/:slug/issues` | `{issues:Issue[]}`; UI filters client-side initially |
 | POST | `/api/projects/:slug/issues` | `{body,title?,labels?}` → `{issue:Issue}` |
 | POST | `/api/projects/:slug/issues/tag` | `{issueIds:string[],userIds:string[]}` → `{issues:Issue[]}`; atomic body mentions |
@@ -41,6 +41,8 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | POST | `/api/uploads` | Multipart field `file` → `{attachment:Attachment}`; max 10 MiB, authenticated access |
 | GET | `/api/uploads/:id/:name` | Authenticated download; raster images inline, other files forced attachment with nosniff and restrictive CSP |
 | GET | `/healthz`, `/readyz` | Public minimal probes |
+
+Project metadata PATCH requires at least one of `name` (trimmed, 1–100 characters) or `description` (0–10,000 characters, empty clears it). Omitted fields are preserved. Unknown keys, empty payloads and combining metadata with `archived` return 400. Any authenticated member may edit an active project, with same-origin CSRF protection; archived metadata edits return 409 until restored separately. Updates are transactional and preserve `id`, `slug`, `createdAt`, lifecycle fields, counts, issues, comments and board configuration/membership. Renaming never changes existing URLs.
 
 Issue content is a single Markdown `body` (maximum `ISSUE_BODY_MAX_LENGTH = 101000` characters). Body-only POST/PATCH requires non-whitespace content. `Issue.title` remains a derived display cache: first ATX/setext heading outside fenced/indented code, otherwise the first meaningful text line, with common inline markup/links removed and a 300-character maximum; image/code-only content displays `Untitled issue`. `deriveIssueTitle` is exported by `shared/issue-content.ts`. State-only PATCH preserves content and cache. For legacy clients, optional nonempty `title` (max 300) is merged into the body as an escaped leading heading on POST or PATCH with body; an equivalent existing leading heading is not duplicated. Title-only PATCH replaces/adds the leading heading and preserves the remainder. The final merged body must fit the body limit. SQLite migration v3 transactionally prepends each old title as an escaped heading (unless an equivalent heading already leads the body), preserving original body bytes and all timestamps/metadata, and recomputes the title cache. Migration runs once, safely across reopenings.
 

@@ -56,6 +56,9 @@ function SidebarCreateIssue() {
 function AppContent() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const updateProject = useCallback((project: Project) => {
+    setProjects((current) => current.map((item) => item.id === project.id ? project : item));
+  }, []);
   const [users, setUsers] = useState<User[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -168,7 +171,7 @@ function AppContent() {
   const breadcrumbProject = currentIssue ? projects.find((p) => p.id === currentIssue.projectId) : null;
   return (
     <WorkspaceContext.Provider
-      value={{ user: auth.user, users, projects, refresh }}
+      value={{ user: auth.user, users, projects, refresh, updateProject }}
     >
       <IssueCreationProvider>
       <IssueBreadcrumbContext.Provider value={setBreadcrumbIssue}>

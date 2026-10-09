@@ -73,7 +73,7 @@ The OIDC callback keys identities by immutable issuer and subject. Verified emai
 | `GET` | `/api/projects` | All shared projects with issue/open counts |
 | `POST` | `/api/projects` | `{name,description?}`; generated slug is stable |
 | `GET` | `/api/projects/:slug` | One project |
-| `PATCH` | `/api/projects/:slug` | `{archived: boolean}` archives or restores the project |
+| `PATCH` | `/api/projects/:slug` | `{name?,description?}` edits active project metadata without changing its slug; `{archived: boolean}` separately archives or restores |
 | `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
 | `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?}`; number increments within the project |
 | `POST` | `/api/projects/:slug/issues/tag` | `{issueIds,userIds}` → `{issues}`; atomic addition of body mentions |
