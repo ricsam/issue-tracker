@@ -92,6 +92,115 @@ for (const width of [1440, 1060, 390]) {
   });
 }
 
+for (const width of [1440, 390]) {
+  test(`board move notifications do not shift lanes at ${width}px`, async ({ page, baseURL }) => {
+    const { issues } = await seed(page, baseURL!, 3);
+    await page.setViewportSize({ width, height: 1000 });
+    const board = page.locator(".board");
+    const offset = () => board.evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
+    const initialOffset = await offset();
+    await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
+    const status = page.getByRole("status").filter({ hasText: "1 of 1 issues moved." });
+    await expect(status).toBeVisible();
+    expect(await offset()).toBe(initialOffset);
+    const snackbar = page.locator(".snackbar");
+    await expect(snackbar).toHaveCSS("position", "fixed");
+    const bounds = (await snackbar.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(1000);
+    await page.screenshot({ path: `test-results/board-snackbar-${width}.png` });
+    await snackbar.getByRole("button", { name: "Dismiss notification" }).click();
+    await expect(status).toHaveCount(0);
+    expect(await offset()).toBe(initialOffset);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+test("snackbars restart for identical moves, pause for interaction, and clear when leaving the board", async ({ page, baseURL }) => {
+  const { issues } = await seed(page, baseURL!);
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:10Z"));
+  const snackbar = page.locator(".snackbar");
+  const status = snackbar.getByRole("status");
+  const dismiss = snackbar.getByRole("button", { name: "Dismiss notification" });
+  const move = async (number: number, lane: string) => {
+    await page.getByRole("button", { name: `Board actions for issue !${number}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: lane, exact: true }).click();
+    await expect(status).toHaveText("1 of 1 issues moved.");
+    await expect(column(page, lane).getByRole("checkbox", { name: `Select issue !${number}`, exact: true })).toBeVisible();
+    await expect(dismiss).not.toBeFocused();
+  };
+  await expect(status).toBeEmpty();
+  await expect(status).toHaveAttribute("aria-atomic", "true");
+  await move(issues[0].number, "In progress");
+  await page.clock.fastForward(4000);
+  await move(issues[1].number, "In progress");
+  await page.clock.fastForward(1500);
+  await expect(status).toHaveText("1 of 1 issues moved.");
+  await page.clock.fastForward(3500);
+  await expect(status).toBeEmpty();
+  await expect(dismiss).toHaveCount(0);
+
+  await move(issues[2].number, "In progress");
+  await snackbar.hover();
+  await page.clock.fastForward(6000);
+  await expect(status).toHaveText("1 of 1 issues moved.");
+  await dismiss.focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(6000);
+  await expect(dismiss).toBeFocused();
+  await page.getByRole("textbox", { name: "Search issues" }).focus();
+  await page.clock.fastForward(5000);
+  await expect(status).toBeEmpty();
+
+  await move(issues[3].number, "In progress");
+  await dismiss.focus();
+  await dismiss.press("Enter");
+  await expect(status).toBeEmpty();
+  await move(issues[0].number, "Done");
+  await page.getByRole("link", { name: "List", exact: true }).click();
+  await expect(snackbar).toHaveCount(0);
+  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await expect(status).toBeEmpty();
+});
+
+test("pending and failed moves clear stale snackbars while preserving errors and retry selection", async ({ page, baseURL }) => {
+  const { endpoint, issues } = await seed(page, baseURL!);
+  await page.clock.install();
+  const status = page.locator(".snackbar").getByRole("status");
+  const offset = () => page.locator(".board").evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
+  const initialOffset = await offset();
+  await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
+  await expect(status).toHaveText("1 of 1 issues moved.");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**${endpoint}/issues/${issues[1].id}`, async (route) => {
+    await gate;
+    await route.fulfill({ status: 500, json: { error: "Move failed" } });
+  });
+  try {
+    await select(page, issues[1].number).check();
+    await page.getByRole("button", { name: `Board actions for issue !${issues[1].number}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
+    await expect(status).toBeEmpty();
+    expect(await offset()).toBe(initialOffset);
+  } finally { release(); }
+  await expect(page.getByRole("alert")).toContainText("Move failed");
+  await expect(status).toHaveText("0 of 1 issues moved.");
+  await expect(column(page, "Todo").getByRole("checkbox", { name: `Select issue !${issues[1].number}`, exact: true })).toBeChecked();
+  await page.clock.fastForward(5000);
+  await expect(status).toBeEmpty();
+  await expect(page.getByRole("alert")).toContainText("Move failed");
+  await page.unroute(`**${endpoint}/issues/${issues[1].id}`);
+  await page.getByRole("button", { name: `Board actions for issue !${issues[1].number}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
+  await expect(status).toHaveText("1 of 1 issues moved.");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 test("only checkboxes or modifier clicks select board cards, while ordinary links and menus still work", async ({ page, baseURL, context }) => {
   const { issues } = await seed(page, baseURL!);
   const cards = page.locator(".board-card");
@@ -178,13 +287,14 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
   await expect(page.getByRole("menu")).toContainText("Applies to 3 selected issues");
   await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
   await expect(column(page, "In progress").locator(".board-card")).toHaveCount(3);
-  await expect(page.locator(".board-outcome")).toHaveText("3 of 3 issues moved.");
+  await expect(page.locator(".snackbar").getByRole("status")).toHaveText("3 of 3 issues moved.");
   await expect(page.locator(".board-card.is-bulk-selected")).toHaveCount(0);
   await select(page, issues[0].number).check();
   await select(page, issues[1].number).check();
   await page.locator(".board-card").filter({ has: select(page, issues[0].number) }).locator(".board-card-handle").dragTo(column(page, "Done"));
   await expect(column(page, "Done").locator(".board-card")).toHaveCount(2);
   await expect(column(page, "In progress").locator(".board-card")).toHaveCount(1);
+  await expect(page.locator(".snackbar").getByRole("status")).toHaveText("2 issues reordered.");
   await select(page, issues[0].number).check();
   await select(page, issues[1].number).check();
   let firstDeletes = 0;
@@ -199,6 +309,7 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
   await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(page.locator(".board-card")).toHaveCount(3);
   await expect(page.getByRole("alert")).toContainText("Remove failed");
+  await expect(page.locator(".snackbar").getByRole("status")).toHaveText("1 of 2 issues removed from board.");
   await expect(select(page, issues[1].number)).toBeChecked();
   expect(firstDeletes).toBe(1);
   await page.unroute(`**${endpoint}/issues/*`);

@@ -37,6 +37,7 @@ import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
+import { Snackbar } from "../components/ui/snackbar";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
 import { EditProjectDialog } from "../components/edit-project-dialog";
 import { IssueTable } from "../components/issue-table";
@@ -200,6 +201,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const cardDrag = useRef<string[]>([]);
   const [cardDrop, setCardDrop] = useState<{ lane: Lane; targetId: string | null; after: boolean } | null>(null);
   const [boardOutcome, setBoardOutcome] = useState("");
+  const dismissBoardOutcome = useCallback(() => setBoardOutcome(""), []);
+  useEffect(() => { setBoardOutcome(""); }, [board]);
   const [tagging, setTagging] = useState<{ ids: string[]; kind: "mentions" | "labels" } | null>(null);
   useEffect(() => {
     setBoardSelection([]);
@@ -692,7 +695,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 Manage lanes.
               </p>
             )}
-            <p className="board-outcome" role="status">{boardOutcome}</p>
+            <Snackbar message={boardOutcome} onDismiss={dismissBoardOutcome} />
             <p className="sr-only">
               Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
               Drag a lane by its heading to reorder lanes, or use Manage lanes.

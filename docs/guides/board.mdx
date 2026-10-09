@@ -46,6 +46,8 @@ For keyboard or mobile access, open a card's kebab menu and use **Move up**, **M
 
 Moves save immediately, persist across reloads, and are shared with your team. They do not change issue content, state, tags, timestamps, or unsaved edits.
 
+Move, reorder, and removal results appear in a snackbar at the bottom of the screen without shifting the board. It hides after five seconds, pauses while hovered or focused, and can be dismissed with **Dismiss notification**. Errors remain visible on the page so failed operations can be retried.
+
 The permanent selection bar combines the board/lane counts, **Select visible issues**, and bulk actions. Select individual cards with their checkboxes, Cmd/Ctrl-click anywhere on a card to toggle selection, or Shift-click to select a range. Ordinary clicks on the card body, padding, or metadata open issue details; checkboxes and the kebab menu keep their own actions. Then use the selection bar or a selected card's menu to move or remove the selection. Dragging a selected card’s handle moves the whole selection. Failed operations remain selected for retry; successful operations are kept. Changing search or hiding lanes removes hidden cards from the selection. Removing cards never deletes their issues.
 
 Selected cards are kept in their displayed order when dragged as a group. Search filters do not remove hidden cards or scramble their relative order: drops are positioned relative to the visible target in the complete lane. Menu moves use the full lane order, including search-hidden cards. Failed reorders leave the saved order and selection intact for retry.
