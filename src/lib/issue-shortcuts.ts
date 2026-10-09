@@ -2,9 +2,11 @@ import { useEffect, type RefObject } from "react";
 
 export const NEW_ISSUE_KEYS = "Meta+N Control+N Alt+N";
 export const SAVE_ISSUE_KEYS = "Meta+S Control+S";
+export const CREATE_ISSUE_KEYS = `Meta+Enter Control+Enter ${SAVE_ISSUE_KEYS}`;
 const modifier = () => /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 export const newIssueTooltip = () => `Create issue (${modifier()}N; Alt+N if your browser reserves it)`;
 export const saveIssueTooltip = () => `Save issue (${modifier()}S)`;
+export const createIssueTooltip = () => `Create issue (${modifier()}Enter or ${modifier()}S)`;
 
 function command(event: KeyboardEvent, key: string) {
   return event.key.toLowerCase() === key && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !event.isComposing;
@@ -24,6 +26,25 @@ export function useNewIssueShortcut(open: () => void, enabled: boolean) {
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [open, enabled]);
+}
+
+/** Submit only the create dialog containing focus, including its editor tabs/header. */
+export function useCreateIssueShortcut(form: RefObject<HTMLFormElement | null>, enabled: boolean) {
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !command(event, "enter")) return;
+      const element = form.current;
+      const target = event.target;
+      const modal = element?.closest('[role="dialog"]');
+      if (!element || !modal || !(target instanceof Element) ||
+        target.closest('[role="dialog"]') !== modal || element.closest("[inert]")) return;
+      event.preventDefault();
+      if (!enabled || event.repeat) return;
+      element.requestSubmit();
+    };
+    window.addEventListener("keydown", keydown, true);
+    return () => window.removeEventListener("keydown", keydown, true);
+  }, [form, enabled]);
 }
 
 export function useIssueSaveShortcut(form: RefObject<HTMLFormElement | null>, enabled: boolean, issueId?: string) {

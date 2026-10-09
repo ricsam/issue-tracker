@@ -78,6 +78,75 @@ for (const modifier of ["Control", "Meta"]) {
   });
 }
 
+for (const modifier of ["Control", "Meta"]) {
+  test(`${modifier}+Enter creates only in the modal, across editor modes, with empty/repeat/busy protection`, async ({ page, baseURL }) => {
+    const { project, issue } = await seed(page, baseURL!);
+    await page.getByRole("link", { name: "#1 Existing issue", exact: true }).click();
+    const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
+    const existing = sidebar.getByRole("textbox", { name: "Issue", exact: true });
+    await existing.fill("Unsaved existing issue");
+    let patches = 0;
+    let creates = 0;
+    page.on("request", (request) => {
+      if (request.method() === "PATCH" && request.url().endsWith(`/api/issues/${issue.id}`)) patches++;
+      if (request.method() === "POST" && request.url().endsWith(`/api/projects/${project.slug}/issues`)) creates++;
+    });
+    await existing.press(`${modifier}+Enter`);
+    await page.keyboard.press("Alt+n");
+    const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
+    const draft = dialog.getByRole("textbox", { name: "Issue", exact: true });
+    const submit = dialog.getByRole("button", { name: "Create issue", exact: true });
+    await expect(draft).toBeFocused();
+    await expect(submit).toHaveAttribute("title", /Create issue \((Ctrl\+|⌘)Enter or (Ctrl\+|⌘)S\)/);
+    await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter Meta+S Control+S");
+    await draft.press(`${modifier}+Enter`);
+    await expect(submit).toBeDisabled();
+    expect(creates).toBe(0);
+
+    for (const [index, mode] of ["Write", "Markdown", "Preview"].entries()) {
+      await draft.fill(`${mode} shortcut draft`);
+      if (mode !== "Write") await dialog.getByRole("button", { name: mode, exact: true }).click();
+      const target = mode === "Markdown" ? dialog.getByLabel("Markdown source") : mode === "Preview" ? dialog.getByRole("button", { name: "Preview", exact: true }) : draft;
+      if (mode === "Write") {
+        // IME composition and held-key repeats must never submit a new draft.
+        await target.dispatchEvent("keydown", { key: "Enter", code: "Enter", ctrlKey: modifier === "Control", metaKey: modifier === "Meta", isComposing: true });
+        await target.dispatchEvent("keydown", { key: "Enter", code: "Enter", ctrlKey: modifier === "Control", metaKey: modifier === "Meta", repeat: true });
+        expect(creates).toBe(0);
+      }
+      await target.press(`${modifier}+Enter`);
+      await expect(dialog.getByRole("status")).toContainText(`Issue #${index + 2} created.`);
+      await expect(draft).toBeEmpty();
+      await expect(draft).toBeFocused();
+      expect(creates).toBe(index + 1);
+    }
+
+    await draft.fill("Pending shortcut draft");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route(`**/api/projects/${project.slug}/issues`, async (route) => {
+      if (route.request().method() === "POST") await gate;
+      await route.continue();
+    });
+    try {
+      await draft.press(`${modifier}+Enter`);
+      await expect(dialog.getByRole("button", { name: "Creating…" })).toBeDisabled();
+      // Focus outside the form, but still inside the modal: busy submissions stay suppressed.
+      await dialog.getByRole("button", { name: "Close dialog" }).focus();
+      await page.keyboard.press(`${modifier}+Enter`);
+      await expect(dialog).toBeVisible();
+      expect(creates).toBe(4);
+    } finally { release(); }
+    await expect(dialog.getByRole("status")).toContainText("Issue #5 created.");
+    await dialog.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(existing).toContainText("Unsaved existing issue");
+    expect(patches).toBe(0);
+    expect(creates).toBe(4);
+    const saved = (await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue;
+    expect(saved.body).toContain("Existing issue");
+    await expect(page.getByRole("button", { name: "Create issue", exact: true })).toBeVisible();
+  });
+}
+
 test("full-page shortcuts, project tag catalog, busy protection and archived guards", async ({ page, baseURL }) => {
   const { project, issue, headers } = await seed(page, baseURL!);
   await page.goto(`/issues/${issue.id}`);

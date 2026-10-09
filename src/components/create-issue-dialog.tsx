@@ -6,7 +6,7 @@ import { api, message } from "../lib/api";
 import { validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
 import { useProjectTags } from "../lib/issue-tags";
-import { SAVE_ISSUE_KEYS, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
+import { CREATE_ISSUE_KEYS, createIssueTooltip, useCreateIssueShortcut, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { RichEditor } from "./rich-editor";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
@@ -39,6 +39,7 @@ export function CreateIssueDialog({
   const fields = useRef<HTMLDivElement>(null);
   const form = useRef<HTMLFormElement>(null);
   useIssueSaveShortcut(form, !busy && !!body.trim());
+  useCreateIssueShortcut(form, !busy && !!body.trim());
   useEffect(() => {
     // Autofocus can scroll just the editable surface into view; keep its tabs
     // and formatting controls visible at the start of each fresh draft too.
@@ -176,7 +177,7 @@ export function CreateIssueDialog({
             >
               {created ? "Done" : "Cancel"}
             </Button>
-            <Button disabled={busy || !body.trim()} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
+            <Button disabled={busy || !body.trim()} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
               {busy ? "Creating…" : "Create issue"}
             </Button>
           </div>
