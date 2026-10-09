@@ -112,6 +112,7 @@ function EditorContents({
   autoFocus,
   mentionUsers,
   existingTags,
+  initialMode,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -121,9 +122,10 @@ function EditorContents({
   autoFocus: boolean;
   mentionUsers: User[];
   existingTags: string[];
+  initialMode: Mode;
 }) {
   const [editor] = useLexicalComposerContext();
-  const [mode, setMode] = useState<Mode>("write");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const last = useRef(value);
@@ -422,6 +424,7 @@ export function RichEditor({
   autoFocus = false,
   mentionUsers = [],
   existingTags = [],
+  initialMode = "write",
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -431,6 +434,7 @@ export function RichEditor({
   autoFocus?: boolean;
   mentionUsers?: User[];
   existingTags?: string[];
+  initialMode?: Mode;
 }) {
   return (
     <LexicalComposer
@@ -484,6 +488,7 @@ export function RichEditor({
         autoFocus={autoFocus}
         mentionUsers={mentionUsers}
         existingTags={existingTags}
+        initialMode={initialMode}
       />
     </LexicalComposer>
   );

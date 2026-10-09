@@ -96,6 +96,7 @@ test("table keyboard navigation and reversible ranges cross pages without confla
   await page.keyboard.press("ArrowDown");
   await expect(links.nth(1)).toBeFocused();
   await expect(sidebar).toContainText("Item 08");
+  await sidebar.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await sidebar.getByRole("textbox", { name: "Issue", exact: true }).fill("Keep this keyboard draft");
   await links.nth(1).focus();
   page.once("dialog", (dialog) => dialog.dismiss());

@@ -62,7 +62,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await expect(form.getByRole("status")).toHaveText("Changes saved");
   expect((await (await page.request.get(`/api/issues/${issues[0].id}`)).json()).issue.labels).toEqual(["triage", "release"]);
   await page.reload();
-  await expect(form.getByRole("textbox", { name: "Issue", exact: true })).toContainText("#triage");
+  await expect(form.locator(".editor-preview")).toContainText("#triage");
   await expect(chips).toHaveCount(0);
   await form.getByRole("button", { name: "Markdown", exact: true }).click();
   await form.getByLabel("Markdown source").fill("No labels remain\n\n`#code-only`");

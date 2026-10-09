@@ -57,6 +57,7 @@ const sidebar = (page: Page) =>
   page.getByRole("complementary", { name: "Issue details", exact: true });
 const issueEditor = (page: Page) =>
   sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
+const issuePreview = (page: Page) => sidebar(page).locator(".detail-form .editor-preview");
 const issueLink = (page: Page, title: string) =>
   page
     .locator(".project-issues-content .issue-link")
@@ -106,7 +107,7 @@ for (const width of [1440, 1024]) {
     await expect(alpha).toHaveAttribute("href", /^\/issues\/.+/);
     await alpha.click();
     await expect(page).toHaveURL(projectPath);
-    await expect(issueEditor(page)).toContainText("Sidebar alpha");
+    await expect(issuePreview(page)).toContainText("Sidebar alpha");
     await expect(alpha).toHaveAttribute("aria-current", "true");
     await expect(page.locator("tr.issue-row.is-selected")).toHaveCount(1);
     await expect(
@@ -121,14 +122,14 @@ for (const width of [1440, 1024]) {
       await dialog.dismiss();
     });
     await beta.click();
-    await expect(issueEditor(page)).toContainText("Sidebar beta");
+    await expect(issuePreview(page)).toContainText("Sidebar beta");
     await expect(beta).toHaveAttribute("aria-current", "true");
     await expect(alpha).not.toHaveAttribute("aria-current", "true");
     await page.getByRole("link", { name: "Board", exact: true }).click();
-    await expect(issueEditor(page)).toContainText("Sidebar beta");
+    await expect(issuePreview(page)).toContainText("Sidebar beta");
     await expect(search).toHaveValue("Sidebar");
     await page.getByRole("link", { name: "List", exact: true }).click();
-    await expect(issueEditor(page)).toContainText("Sidebar beta");
+    await expect(issuePreview(page)).toContainText("Sidebar beta");
     await sidebar(page)
       .getByRole("button", { name: "Close issue details" })
       .click();
@@ -146,11 +147,12 @@ test("desktop sidebar width is resizable, remembered, clamped, and keyboard acce
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath);
   await issueLink(page, "Sidebar alpha").click();
-  await expect(issueEditor(page)).toBeVisible();
+  await expect(issuePreview(page)).toBeVisible();
   const resizer = page.getByRole("separator", { name: "Resize issue details" });
   await expect(resizer).toHaveAttribute("aria-valuenow", "680");
   expect((await sidebar(page).boundingBox())!.width).toBe(680);
   await expect(sidebar(page).getByRole("list", { name: "Tagged users" })).toHaveCount(0);
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await issueEditor(page).fill("Draft survives resizing");
   const box = (await resizer.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + 150);
@@ -183,7 +185,7 @@ test("desktop sidebar width is resizable, remembered, clamped, and keyboard acce
   await resizer.focus();
   await page.keyboard.press("Home");
   await expect(resizer).toHaveAttribute("aria-valuenow", "420");
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   await assertLayout(page, 1440);
   await resizer.focus();
   await page.keyboard.press("End");
@@ -224,6 +226,7 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath);
   await issueLink(page, "Sidebar alpha").click();
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await issueEditor(page).fill("Renamed sidebar issue");
   await expect(sidebar(page).getByLabel("Status", { exact: true })).toHaveCount(
     0,
@@ -251,7 +254,7 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
     await dialog.dismiss();
   });
   await issueLink(page, "Sidebar beta").click();
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   await sidebar(page)
     .getByRole("button", { name: "Close issue details" })
     .click();
@@ -264,7 +267,7 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
     todo.getByRole("link", { name: /Renamed sidebar issue/ }),
   ).toBeVisible();
   await issueLink(page, "Sidebar beta").click();
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   const betaCard = page.locator(".board-card.is-selected");
   await betaCard.getByRole("button", { name: /Board actions for issue/ }).click();
   await page.getByRole("menuitem", { name: "Done", exact: true }).click();
@@ -273,12 +276,13 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
     .filter({ has: page.getByRole("heading", { name: /^Done/ }) });
   await expect(done.locator(".board-card")).toHaveCount(1);
   await issueLink(page, "Renamed sidebar issue").click();
-  await expect(issueEditor(page)).toContainText("Renamed sidebar issue");
+  await expect(issuePreview(page)).toContainText("Renamed sidebar issue");
   await expect(page).toHaveURL(`${projectPath}/board`);
   await expect(page.locator("article.board-card.is-selected")).toHaveCount(1);
   await assertLayout(page, 1440);
   await page.screenshot({ path: "test-results/issue-sidebar-board.png" });
   // Moving in the board never loses detail edits or gets overwritten by their save.
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await issueEditor(page).fill("Keep this draft while moving");
   await page.locator(".board-card.is-selected").getByRole("button", { name: /Board actions for issue/ }).click();
   await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
@@ -311,6 +315,7 @@ test("dirty issue switches and unsent comment closes require confirmation", asyn
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath);
   await issueLink(page, "Sidebar alpha").click();
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await issueEditor(page).fill("Unsaved title");
   let accept = false;
   const dialogs: string[] = [];
@@ -324,7 +329,7 @@ test("dirty issue switches and unsent comment closes require confirmation", asyn
   expect(dialogs).toEqual(["confirm"]);
   accept = true;
   await issueLink(page, "Sidebar beta").click();
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   await sidebar(page)
     .locator(".comments")
     .getByRole("textbox")
@@ -344,7 +349,7 @@ test("dirty issue switches and unsent comment closes require confirmation", asyn
   await expect(sidebar(page)).toHaveCount(0);
   expect(dialogs).toEqual(["confirm", "confirm", "confirm", "confirm"]);
   await issueLink(page, "Sidebar alpha").click();
-  await expect(issueEditor(page)).toContainText("Sidebar alpha");
+  await expect(issuePreview(page)).toContainText("Sidebar alpha");
   await sidebar(page)
     .locator(".comments")
     .getByRole("textbox")
@@ -356,7 +361,7 @@ test("dirty issue switches and unsent comment closes require confirmation", asyn
     "Posted from the sidebar",
   );
   await issueLink(page, "Sidebar beta").click();
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   await expect(sidebar(page).locator(".comment")).toHaveCount(0);
   await issueLink(page, "Sidebar alpha").click();
   await expect(sidebar(page).locator(".comment")).toContainText(
@@ -379,7 +384,7 @@ test("mobile links, direct issue URLs, full-page link and shrinking viewport use
   await expect(page).toHaveURL(issuePath);
   await expect(sidebar(page)).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Issue", exact: true }),
+    page.locator(".detail-form .editor-preview"),
   ).toContainText("Sidebar alpha");
   await page.goto(`${projectPath}/board`);
   await issueLink(page, "Sidebar alpha").click();
@@ -388,7 +393,7 @@ test("mobile links, direct issue URLs, full-page link and shrinking viewport use
   await page.goto(issuePath);
   await expect(sidebar(page)).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Issue", exact: true }),
+    page.locator(".detail-form .editor-preview"),
   ).toContainText("Sidebar alpha");
   await page.goto(projectPath);
   await issueLink(page, "Sidebar alpha").click();
@@ -404,7 +409,7 @@ test("mobile links, direct issue URLs, full-page link and shrinking viewport use
   await expect(page).toHaveURL(issuePath);
   await expect(sidebar(page)).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Issue", exact: true }),
+    page.locator(".detail-form .editor-preview"),
   ).toContainText("Sidebar alpha");
 });
 
@@ -455,12 +460,12 @@ test("rapid selection ignores stale responses and failed details can retry witho
   await expect(sidebar(page).getByRole("alert")).toContainText(
     "Could not load this issue",
   );
-  await expect(issueEditor(page)).toHaveCount(0);
+  await expect(issuePreview(page)).toHaveCount(0);
   failBeta = false;
   await sidebar(page)
     .getByRole("button", { name: "Retry", exact: true })
     .click();
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   await expect(page).toHaveURL(projectPath);
   await page.unroute(`**/api${alphaPath}`);
   await page.unroute(`**/api${betaPath}`);
@@ -470,7 +475,7 @@ test("rapid selection ignores stale responses and failed details can retry witho
     .click();
   await issueLink(page, "Sidebar beta").focus();
   await page.keyboard.press("Enter");
-  await expect(issueEditor(page)).toContainText("Sidebar beta");
+  await expect(issuePreview(page)).toContainText("Sidebar beta");
   const newTab = page.context().waitForEvent("page");
   await issueLink(page, "Sidebar alpha").click({
     modifiers: ["ControlOrMeta"],
@@ -507,7 +512,7 @@ for (const width of [1440, 1024, 390]) {
       await page.mouse.click(point.x, point.y);
       if (width >= 1024) {
         await expect(page).toHaveURL(projectPath);
-        await expect(issueEditor(page)).toContainText("Sidebar alpha");
+        await expect(issuePreview(page)).toContainText("Sidebar alpha");
         await expect(page.locator(".issue-row select")).toHaveCount(0);
         await sidebar(page)
           .getByRole("button", { name: "Close issue details" })
@@ -515,7 +520,7 @@ for (const width of [1440, 1024, 390]) {
       } else {
         await expect(page).toHaveURL(issuePath);
         await expect(
-          page.getByRole("textbox", { name: "Issue", exact: true }),
+          page.locator(".detail-form .editor-preview"),
         ).toContainText("Sidebar alpha");
         await page.goto(projectPath);
       }

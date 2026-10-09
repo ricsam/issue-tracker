@@ -34,6 +34,7 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   await select(page, 11).check();
   await page.getByRole("link", { name: "#11 Task 11", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Unsaved hashtag draft");
   page.once("dialog", (prompt) => prompt.dismiss());
   await page.getByRole("button", { name: "Add tags", exact: true }).click();

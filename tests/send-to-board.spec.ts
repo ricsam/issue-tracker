@@ -40,6 +40,7 @@ test("list selection spans pages, adds and moves work to visible custom lanes, a
   await page.getByRole("combobox", { name: "Rows per page" }).selectOption("10");
   await page.locator(`a[data-issue-id="${issues[0].id}"]`).click();
   const editor = sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Keep this unsaved body");
   await sidebar(page).locator(".comments [contenteditable=true]").fill("Keep this unsent comment");
   await selectIssue(page, issues[0]);
@@ -109,6 +110,7 @@ for (const width of [1440, 390]) {
     const issue = await createIssue(page, baseURL!, p.id, "Persisted body #keep");
     await page.goto(`/issues/${issue.id}`);
     const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+    await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await editor.fill("Unsaved detail draft");
     await page.getByRole("button", { name: "Send to board", exact: true }).click();
     await modal(page).getByRole("combobox", { name: `Lane for ${p.name}` }).selectOption("in_progress");
@@ -166,6 +168,7 @@ test("embedded detail placement updates the board immediately and stale destinat
   await page.goto(`/projects/${p.slug}/board`);
   await page.locator(".board-card").getByRole("link", { name: issue.title, exact: true }).click();
   const editor = sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Draft remains on the board");
   await sidebar(page).getByRole("button", { name: "Send to board", exact: true }).click();
   const lane = modal(page).getByRole("combobox", { name: `Lane for ${p.name}` });

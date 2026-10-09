@@ -119,7 +119,7 @@ PNG, JPEG, GIF, and WebP bytes are signature-sniffed and may render inline. Othe
 
 ## Editor component contract
 
-`RichEditor` from `src/components/rich-editor.tsx` accepts `value: string`, `onChange: (markdown: string) => void`, and optional `placeholder?: string`, `minimal?: boolean`, `ariaLabel?: string`, and `autoFocus?: boolean`. Issue creation uses the single editor with autofocus. `Markdown` from `src/components/markdown.tsx` renders the saved body.
+`RichEditor` from `src/components/rich-editor.tsx` accepts `value: string`, `onChange: (markdown: string) => void`, and optional `placeholder?: string`, `minimal?: boolean`, `ariaLabel?: string`, `autoFocus?: boolean`, and `initialMode?: "write" | "markdown" | "preview"` (defaults to `"write"`). Existing issue bodies start in Preview; issue creation uses the single editor in Write mode with autofocus. `Markdown` from `src/components/markdown.tsx` renders the saved body.
 
 ## Documentation contributions
 

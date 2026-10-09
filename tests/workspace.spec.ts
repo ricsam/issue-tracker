@@ -95,7 +95,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await page.getByRole("link", { name: "Open issue in full page" }).click();
   await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
   await expect(
-    page.getByRole("textbox", { name: "Issue", exact: true }),
+    page.locator(".detail-form .editor-preview"),
   ).toContainText("Improve the onboarding experience");
   const issueUrl = page.url();
   await expect(
@@ -192,7 +192,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
-    page.getByRole("textbox", { name: "Issue", exact: true }),
+    page.locator(".detail-form .editor-preview"),
   ).toBeVisible();
   expect(
     await page.evaluate(() =>
@@ -267,6 +267,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     page.getByRole("heading", { name: "Member-owned project", exact: true }),
   ).toBeVisible();
   await page.goto(issueUrl);
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Issue", exact: true })
     .fill("Onboarding ready for review");

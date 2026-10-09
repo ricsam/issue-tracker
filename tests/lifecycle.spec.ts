@@ -63,6 +63,7 @@ test("issues close and reopen without losing edits, filter the list and stay on 
 
   await expect(page.locator(".detail-heading .state-badge")).toHaveText("Open");
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.click();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" Draft kept.");
@@ -217,6 +218,8 @@ test("archived projects leave navigation, become read-only and can be restored",
   expect(restored).toMatchObject({ archivedAt: null, archivedById: null });
   await page.goto(`/issues/${issues[0]!.id}`);
   await expect(page.getByRole("button", { name: "Close issue", exact: true })).toBeVisible();
+  await expect(page.locator(".detail-form .editor-preview")).toBeVisible();
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });

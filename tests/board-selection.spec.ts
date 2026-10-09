@@ -244,6 +244,7 @@ test("board selection prunes search-hidden issues and bulk tagging works from bo
   await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "#1 Selection issue 1", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Unsaved draft must survive cancellation");
   page.once("dialog", (prompt) => prompt.dismiss());
   await page.getByRole("button", { name: "Tag selected issues" }).click();

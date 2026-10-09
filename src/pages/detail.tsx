@@ -330,6 +330,7 @@ function IssueDetailForm({
                   mentionUsers={users}
                   existingTags={tags}
                   ariaLabel="Issue"
+                  initialMode="preview"
                   placeholder="What needs to happen? Just start writing…"
                 />
               )}

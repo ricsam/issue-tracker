@@ -69,10 +69,12 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   expect(issue.body).toBe(markdown);
   await dialog.getByRole("link", { name: "View issue" }).click();
   const detail = page.locator(".detail-form");
+  await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
+  await detail.getByRole("button", { name: "Write", exact: true }).click();
   await expect(detail.locator(".editor-input .hashtag-chip")).toHaveText(expected);
   await detail.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
   await page.goto(`/issues/${issue.id}`);
-  await expect(detail.locator(".editor-input .hashtag-chip")).toHaveText(expected);
+  await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
   expect(errors).toEqual([]);
 });

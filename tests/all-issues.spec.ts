@@ -52,6 +52,7 @@ test("sidebar creation works without a project, switches projects, and unlinked 
   await expect(dialog(page)).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "All issues" })).toHaveAttribute("href", "/issues");
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill(`${marker} edited #global`);
   await editor.press("Control+s");
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
@@ -94,6 +95,7 @@ test("project creation can become unlinked without leaking into the project list
   const { issue } = await (await page.request.post(`/api/projects/${p.slug}/issues`, { headers: { Origin: baseURL! }, data: { body: `${marker} original` } })).json();
   await page.goto(`/projects/${p.slug}`);
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await sidebar(page).getByRole("textbox", { name: "Issue", exact: true }).fill("Unsaved local draft");
   await page.getByRole("button", { name: "Create issue (Alt+N)", exact: true }).click();
   await expect(dialog(page).getByRole("combobox", { name: "Project", exact: true })).toHaveValue(p.id);
@@ -109,7 +111,7 @@ test("project creation can become unlinked without leaking into the project list
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await expect(rows(page)).toHaveCount(2);
   await page.locator(`a.issue-link[href="${href}"]`).click();
-  await expect(sidebar(page).getByRole("textbox", { name: "Issue", exact: true })).toContainText("without project");
+  await expect(sidebar(page).locator(".detail-form .editor-preview")).toContainText("without project");
 });
 
 test("all issues combines project filtering and bulk actions while archived rows stay read-only", async ({ page, baseURL }) => {
