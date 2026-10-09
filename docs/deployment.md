@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.10.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.11.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.11.0
+
+Version 0.11.0 adds unlinked issues, sidebar/Alt+N creation with optional project selection, and **All issues** with project and board-lane filters. Select issues in a list or open issue details to **Send to board**. Board cards can be reordered by dragging or with keyboard/mobile menu actions; order is shared and persistent. Projects now support editing names and descriptions without changing URLs. Cmd/Ctrl+Enter creates a draft from the create-issue dialog.
+
+**API compatibility:** `Issue.projectId` can now be null. `GET /api/issues` returns all issues plus a `boards` map keyed by project ID. Board card arrays retain their shape but their per-lane order is now meaningful. Project metadata PATCH and new workspace issue/board placement/reorder routes are documented in [the API contract](api-contract.md).
+
+Migrations v9 and v10 run once transactionally: v9 makes the project link nullable while preserving existing issues, comments, tags, and board memberships; v10 stores card positions initialized to each lane's previous issue-number order, including hidden/custom lanes. Back up all of `/data`, preserve the encryption-key Secret and existing deployment values, and select the published SHA image matching this chart's release commit. **Do not use automatic Helm rollback (`--atomic`) across these migrations.** Earlier releases do not support unlinked issues or maintain manual card order, and older board inserts are incompatible with the added position column. If recovery is needed, stop the application and restore the pre-upgrade data backup with its matching image/chart, preserving newer writes separately first. No deployment-value change is required.
 
 ### Upgrading to 0.10.0
 
