@@ -64,13 +64,19 @@ test("board keyboard ranges extend, shrink, cross lanes, and use Cmd/Ctrl to sel
   await page.keyboard.press("Shift+ArrowLeft");
   await expect(selected(page)).toHaveCount(2);
   await expect(checkbox(page, issues[4])).not.toBeChecked();
-  // Ordinary arrows move focus only, without changing selection or opening details.
+  // Plain arrows open details without changing the bulk selection; Shift stays selection-only.
+  const preview = page.getByRole("complementary", { name: "Issue details" }).locator(".detail-form .editor-preview");
   await page.keyboard.press("ArrowRight");
   await expect(cardLink(page, issues[5])).toBeFocused();
+  await expect(preview).toContainText(issues[5].title);
   await expect(selected(page)).toHaveCount(2);
   await page.keyboard.press("ArrowRight");
   await expect(cardLink(page, issues[6])).toBeFocused();
-  await page.keyboard.press("Shift+ArrowUp");
+  await expect(preview).toContainText(issues[6].title);
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(selected(page)).toHaveCount(4);
+  await expect(preview).toContainText(issues[6].title);
+  await page.keyboard.press("Shift+ArrowRight");
   await expect(selected(page)).toHaveCount(3);
   // A successful no-op lane move still clears the selection/range. Extending
   // afterwards must not restore the old range's additive base.
@@ -82,6 +88,92 @@ test("board keyboard ranges extend, shrink, cross lanes, and use Cmd/Ctrl to sel
   await expect(selected(page)).toHaveCount(1);
   await expect(checkbox(page, issues[0])).not.toBeChecked();
   expect(errors).toEqual([]);
+});
+
+test("plain board arrows open adjacent sidebar issues, respect boundaries/search, and leave editing controls alone", async ({ page, baseURL }) => {
+  const { project, issues, endpoint, headers } = await seed(page, baseURL!);
+  const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
+  const preview = sidebar.locator(".detail-form .editor-preview");
+  await cardLink(page, issues[0]).click();
+  await expect(preview).toContainText(issues[0].title);
+  await expect(cardLink(page, issues[0])).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(preview).toContainText(issues[0].title);
+  await page.keyboard.press("ArrowDown");
+  await expect(preview).toContainText(issues[1].title);
+  await expect(cardLink(page, issues[1])).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(preview).toContainText(issues[2].title);
+  await page.keyboard.press("ArrowUp");
+  await expect(preview).toContainText(issues[1].title);
+  await expect(page).toHaveURL(`/projects/${project.slug}/board`);
+  await expect(selected(page)).toHaveCount(0);
+
+  // Search and editors must not switch issues or turn cursor movement into navigation.
+  const search = page.getByRole("textbox", { name: "Search issues", exact: true });
+  await search.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(search).toBeFocused();
+  await expect(preview).toContainText(issues[1].title);
+  await sidebar.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
+  const editor = sidebar.getByRole("textbox", { name: "Issue", exact: true });
+  await editor.fill("Keep this board draft");
+  await editor.press("ArrowDown");
+  await expect(editor).toBeFocused();
+  await expect(editor).toContainText("Keep this board draft");
+  await cardLink(page, issues[1]).focus();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.keyboard.press("ArrowDown");
+  await expect(cardLink(page, issues[1])).toBeFocused();
+  await expect(editor).toContainText("Keep this board draft");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.keyboard.press("ArrowDown");
+  await expect(preview).toContainText(issues[2].title);
+  await expect(cardLink(page, issues[2])).toBeFocused();
+  const comment = sidebar.getByRole("textbox", { name: "Share an update or ask a question…", exact: true });
+  await comment.fill("Keep this unsent comment");
+  await cardLink(page, issues[2]).focus();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.keyboard.press("ArrowUp");
+  await expect(comment).toContainText("Keep this unsent comment");
+  await expect(cardLink(page, issues[2])).toBeFocused();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.keyboard.press("ArrowUp");
+  await expect(preview).toContainText(issues[1].title);
+
+  await search.fill("even");
+  await cardLink(page, issues[0]).click();
+  await page.keyboard.press("ArrowDown");
+  await expect(preview).toContainText(issues[2].title);
+  await expect(cardLink(page, issues[2])).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(cardLink(page, issues[2])).toBeFocused();
+  await expect(preview).toContainText(issues[2].title);
+  // Closing restores the card focus; a checkbox can start sidebar navigation too.
+  await sidebar.getByRole("button", { name: "Close issue details", exact: true }).click();
+  await expect(cardLink(page, issues[2])).toBeFocused();
+  await checkbox(page, issues[0]).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(preview).toContainText(issues[2].title);
+  await expect(selected(page)).toHaveCount(0);
+
+  // Hidden lanes are skipped and archived issues remain navigable for reading.
+  expect((await page.request.patch(endpoint, { headers, data: { lanes: ["todo", "done"] } })).ok()).toBeTruthy();
+  expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
+  await page.reload();
+  await cardLink(page, issues[0]).click();
+  await page.keyboard.press("ArrowRight");
+  await expect(sidebar.getByRole("article", { name: "Issue", exact: true })).toContainText(issues[6].title);
+  await expect(cardLink(page, issues[6])).toBeFocused();
+});
+
+test("board arrows use the existing full-page detail fallback on narrow screens", async ({ page, baseURL }) => {
+  const { issues } = await seed(page, baseURL!);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await cardLink(page, issues[0]).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page).toHaveURL(`/issues/${issues[1].id}`);
+  await expect(page.locator(".detail-form .editor-preview")).toContainText(issues[1].title);
 });
 
 test("lane selection is tri-state, additive, searchable and read-only safe", async ({ page, baseURL }) => {

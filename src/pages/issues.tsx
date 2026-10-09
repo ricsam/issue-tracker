@@ -143,8 +143,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     event.preventDefault();
     if (bulkClosing.current || selectedId === issue.id || !canLeaveDetails()) return;
     pending.current = false;
-    // Table clicks keep the row focused, so arrows work immediately after opening.
-    focusDetails.current = board;
+    // Keep the row/card focused, so arrows work immediately after opening.
+    focusDetails.current = false;
     opener.current = event.currentTarget;
     openerId.current = issue.id;
     setSelectedId(issue.id);
@@ -490,6 +490,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     const next = boardArrowTarget(boardColumns, source, event.key as BoardArrow, event.metaKey || event.ctrlKey);
     if (!next) return;
     event.preventDefault();
+    const nextLink = collection.current?.querySelector<HTMLAnchorElement>(`.board-card a[data-issue-id="${CSS.escape(next)}"]`);
+    if (!nextLink) return;
     if (event.shiftKey) {
       if (!boardRange.current || boardRange.current.key !== boardOrderKey || boardRange.current.head !== source) {
         boardRange.current = { key: boardOrderKey, anchor: source, head: source, base: [...selectedBoard] };
@@ -499,10 +501,13 @@ function ProjectIssues({ slug }: { slug: string }) {
       boardAnchor.current = range.anchor;
       setBoardSelection([...new Set([...range.base, ...boardSelectionRange(boardColumns, range.anchor, next)])]);
     } else {
+      if (next === source) return;
+      const issue = issueById.get(next);
+      if (!issue || !navigateIssue(issue, nextLink)) return;
       boardRange.current = null;
       boardAnchor.current = next;
     }
-    collection.current?.querySelector<HTMLAnchorElement>(`.board-card a[data-issue-id="${CSS.escape(next)}"]`)?.focus();
+    nextLink.focus();
   }
   function selectLane(ids: string[], checked: boolean) {
     if (saving || readOnly) return;
@@ -738,7 +743,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             )}
             <Snackbar message={boardOutcome} onDismiss={dismissBoardOutcome} />
             <p className="sr-only" id="board-keyboard-help">
-              Use arrow keys to focus adjacent cards. Hold Shift to extend or shrink a selection; Cmd or Ctrl plus Shift and Up or Down selects to the start or end of the current lane. Left and Right extend across lanes. Lane checkboxes select only issues visible in the current search.
+              Use arrow keys to open adjacent issues; on desktop, details open in the sidebar while the card stays focused. Hold Shift to extend or shrink a selection; Cmd or Ctrl plus Shift and Up or Down selects to the start or end of the current lane. Left and Right extend across lanes. Lane checkboxes select only issues visible in the current search.
               Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
               Drag a lane by its heading to reorder lanes, or use Manage lanes.
             </p>
