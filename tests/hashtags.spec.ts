@@ -18,8 +18,9 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   const creation = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith(`/api/projects/${project.slug}/issues`));
   await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
   expect((await creation).postDataJSON()).not.toHaveProperty("labels");
-  await expect(dialog.getByRole("status")).toContainText("Issue #1 created");
+  await expect(dialog.getByRole("textbox", { name: "Issue", exact: true })).toBeEmpty();
   const { issues } = await (await page.request.get(`/api/projects/${project.slug}/issues`)).json();
+  await expect(dialog.getByRole("status")).toContainText(`Issue !${issues[0].number} created`);
   expect(issues[0].labels).toEqual(["bug", "design"]);
   await dialog.getByRole("link", { name: "View issue" }).click();
   await expect(dialog).toBeHidden();
@@ -29,7 +30,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await expect(form.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(page.locator(".back-link")).toHaveCount(0);
   const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb", exact: true });
-  await expect(breadcrumb).toContainText("Issue #1");
+  await expect(breadcrumb).toContainText(`Issue !${issues[0].number}`);
   await expect(breadcrumb.getByRole("link", { name: project.name, exact: true })).toHaveAttribute("href", `/projects/${project.slug}`);
   await page.screenshot({ path: "test-results/clean-issue-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -38,7 +39,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
     const box = (await page.locator(".sidebar").boundingBox())!;
     return box.x + box.width;
   }).toBeLessThanOrEqual(0);
-  await expect(breadcrumb).toContainText("Issue #1");
+  await expect(breadcrumb).toContainText(`Issue !${issues[0].number}`);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await page.screenshot({ path: "test-results/clean-issue-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });

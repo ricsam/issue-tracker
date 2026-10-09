@@ -75,13 +75,16 @@ The OIDC callback keys identities by immutable issuer and subject. Verified emai
 | `GET` | `/api/projects/:slug` | One project |
 | `PATCH` | `/api/projects/:slug` | `{name?,description?}` edits active project metadata without changing its slug; `{archived: boolean}` separately archives or restores |
 | `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
-| `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?}`; number increments within the project |
+| `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?}`; number increments globally across all issues |
 | `POST` | `/api/projects/:slug/issues/tag` | `{issueIds,userIds}` → `{issues}`; atomic addition of body mentions |
 | `POST` | `/api/projects/:slug/issues/labels` | `{issueIds,labels}` → `{issues}`; atomic addition of body hashtags |
 | `GET` | `/api/projects/:slug/board` | `{board: BoardSettings}` |
 | `PATCH` | `/api/projects/:slug/board` | `{lanes,customLanes?}`; returns `{board: BoardSettings}` |
-| `GET` | `/api/issues/:id` | `{issue,comments}` |
+| `GET` | `/api/issues/references?q=...` | Up to 20 `{id,number,title,state}` suggestions in `{issues}` across all projects |
+| `GET` | `/api/issues/:id` | `{issue,comments}`; canonical decimal ID only; UUID URLs return 404 |
 | `PATCH` | `/api/issues/:id` | Any authenticated user may update supplied issue fields, including `state` |
+
+Issue IDs are global auto-incrementing integers, serialized as canonical positive decimal strings in `Issue.id`, `Comment.issueId`, and `BoardCard.issueId`. `Issue.number` is the numeric alias of the ID. Issue URLs use `/issues/12` and prose references use `!12`; `#` remains reserved for tags. Migration v11 numbers existing issues in creation order and preserves relationships/content/board order/lifecycle. Old UUID detail links are not supported. Back up before upgrading; rollback requires restoring the backup. Other entity IDs remain UUIDs.
 
 Issue fields include Markdown `body`, derived display `title`, `labels`, `taggedUserIds`, and `state` (`open` or `closed`, derived from nullable `closedAt` with `closedById`). Labels come from hashtags in saved issue-body prose, with at most 30 values of up to 50 characters on writes. Code, links, URLs and images are excluded, and comments do not add labels. Escaped Markdown hashes count when rendered as hashtags. Legacy `labels` input is additive: it adds missing body hashtags rather than replacing the label list. Remove body hashtags to remove labels. Migration v8 preserves original content, stored titles, timestamps and lifecycle history while adding missing legacy labels, using extended syntax such as `#[needs%20review]` for spaces/punctuation. There is no assignee field; POST and PATCH reject `assigneeId`. User associations come only from saved mentions in the issue and its comments.
 
@@ -93,9 +96,9 @@ Legacy clients may still send a nonempty `title` of up to 300 characters: POST a
 
 Board membership uses `POST /api/projects/:slug/board/issues` with `{issueIds,lane}` (atomic add), `PATCH /api/projects/:slug/board/issues/:id` with `{lane}` (move), and `DELETE` on that same issue route (remove). Each returns `{board}`. Bulk moves/removals in the UI use individual requests, retaining failed selections for retry; they are not atomic batches.
 
-Bulk tagging accepts 1–1000 unique UUIDs in each of `issueIds` and `userIds`. All issues must belong to the project and users must exist. The whole batch rolls back on error, including body-limit errors. Missing body mentions are inserted without rewriting original content or comments; stored titles are preserved, and repeat requests do not duplicate mentions or change timestamps. Comment-only mentions still receive a body mention. Archived projects reject tagging. This endpoint requires the same cookie authentication and Origin protection as other writes.
+Bulk tagging accepts 1–1000 unique canonical decimal strings in `issueIds` and 1–1000 unique UUIDs in `userIds`. All issues must belong to the project and users must exist. The whole batch rolls back on error, including body-limit errors. Missing body mentions are inserted without rewriting original content or comments; stored titles are preserved, and repeat requests do not duplicate mentions or change timestamps. Comment-only mentions still receive a body mention. Archived projects reject tagging. This endpoint requires the same cookie authentication and Origin protection as other writes.
 
-Bulk hashtags accept 1–1000 unique issue UUIDs and 1–30 trimmed, nonempty label names of at most 50 characters, without the `#` prefix. Missing hashtags are appended to the latest body (or inserted before an unclosed Markdown block), preserving original content, titles, mentions, comments and lifecycle/board data. Existing hashtags are not duplicated and no-op retries keep timestamps unchanged. All issues must belong to the project; archived projects reject changes. Authentication, Origin checks, body/combined-label limits and atomic rollback apply to the whole batch.
+Bulk hashtags accept 1–1000 unique decimal-string issue IDs and 1–30 trimmed, nonempty label names of at most 50 characters, without the `#` prefix. Missing hashtags are appended to the latest body (or inserted before an unclosed Markdown block), preserving original content, titles, mentions, comments and lifecycle/board data. Existing hashtags are not duplicated and no-op retries keep timestamps unchanged. All issues must belong to the project; archived projects reject changes. Authentication, Origin checks, body/combined-label limits and atomic rollback apply to the whole batch.
 
 Projects and issues have no delete endpoint. Close an issue with `state: "closed"` and archive a project with `archived: true`; both are reversible. Archived projects (`archivedAt` set) stay readable, but issue, comment, and board writes return `409 Project is archived` until the project is restored.
 

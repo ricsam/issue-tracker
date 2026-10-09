@@ -18,9 +18,9 @@ All authenticated users can read and update issues across the workspace. Issues 
 
 New issues are open and stay off the board until you [add them to it](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
-Numbers are allocated within each project, with a separate sequence for unlinked issues. Existing issues cannot yet be reassigned; unlinked issues cannot join project boards.
+Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Existing issues cannot yet be reassigned; unlinked issues cannot join project boards.
 
-## Tags and mentions
+## Tags, mentions and issue references
 
 | Property | Available values or limits |
 | --- | --- |
@@ -32,6 +32,10 @@ Numbers are allocated within each project, with a separate sequence for unlinked
 
 Tags come from `#tag` text in saved issue prose, including Unicode tags. Type `#` in Write or Markdown mode to find existing tags from this project. Use Up/Down and Enter/Tab, or click a suggestion; Escape dismisses the menu. Keep typing to use a new tag. Remove the tag from the body to remove it. Code, links, URLs, and images do not create tags, and tags in comments do not affect the issue’s tags. Escaped hashes in Markdown still count when rendered as tags. Tags containing spaces or punctuation use extended syntax such as `#[needs%20review]`; existing tags are migrated without removing original content or changing stored titles or timestamps.
 Type `@` and select a teammate in an issue or comment to associate them with the issue. Mentions have no roles, ownership, or notification behavior and do not restrict editing. Removing a user's last saved mention removes their association.
+
+Type `!` in an issue or comment in Write or Markdown mode to reference another issue. Search by number or title across the whole workspace, including closed and archived issues. Use Up/Down and Enter/Tab, or click a suggestion; Escape dismisses the menu. Plain `!12` renders as a link to issue 12; `#12` is a tag, not an issue reference. Code, images, URLs and existing links are not interpreted as references.
+
+On upgrade, existing issues receive global numbers in creation order while their content, comments, board placement/order and lifecycle stay intact. Use the new numeric URLs; old UUID links are not supported. Back up before upgrading; restoring an earlier app requires restoring the matching database backup.
 
 ## How display titles work
 

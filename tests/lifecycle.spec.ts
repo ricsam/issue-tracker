@@ -24,7 +24,7 @@ async function seed(page: Page, baseURL: string, name: string) {
       data: { name: `${name} ${randomUUID().slice(0, 8)}` },
     })
   ).json();
-  const issues: { id: string }[] = [];
+  const issues: { id: string; number: number }[] = [];
   for (const body of ["# Ship the beta\n\nFinal checks.", "Write release notes"]) {
     const created = await page.request.post(
       `/api/projects/${project.slug}/issues`,
@@ -174,8 +174,8 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(page.locator(".board-card")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Add issues", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Manage lanes" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Board actions for issue #1", exact: true })).toBeDisabled();
-  await expect(page.getByRole("checkbox", { name: "Select issue #1", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: `Select issue !${issues[0].number}`, exact: true })).toBeDisabled();
   await expect(page.locator(".board-card").first()).not.toHaveAttribute("draggable", "true");
   await expect(page.locator(".board-card-handle").first()).toHaveAttribute("draggable", "false");
   await expect(page.locator(".board-column h2").first()).toHaveAttribute("draggable", "false");

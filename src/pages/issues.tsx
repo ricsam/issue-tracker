@@ -255,7 +255,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             closedIds.push(updated.id);
             setIssues((current) => current.map((item) => item.id === updated.id ? updated : item));
           } catch (cause) {
-            failures.push(`#${issue.number}: ${message(cause)}`);
+            failures.push(`!${issue.number}: ${message(cause)}`);
           }
         }
       }));
@@ -328,7 +328,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           }
           succeeded.push(issue.id);
         } catch (cause) {
-          failures.push(`#${issue.number}: ${message(cause)}`);
+          failures.push(`!${issue.number}: ${message(cause)}`);
         }
       }
       setBoardSelection((current) => current.filter((id) => !succeeded.includes(id)));
@@ -416,7 +416,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     if (all || issue.projectId === project?.id) setIssues((current) => [...current, issue]);
     void refresh().catch((e) =>
       setError(
-        `Issue #${issue.number} was created, but workspace counts could not refresh: ${message(e)}`,
+        `Issue !${issue.number} was created, but workspace counts could not refresh: ${message(e)}`,
       ),
     );
   }
@@ -452,7 +452,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
       `${i.title} ${i.number} ${i.labels.join(" ")} ${users.filter((user) => i.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`
         .toLowerCase()
-        .includes(query.toLowerCase()),
+        .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
   const filtered = board ? searched : issueTableRows(searched, users, tableState, projects, listBoardLanes);
   const boardOrder = lanes.flatMap((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
@@ -510,7 +510,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         }}
       >
         <div className="board-card-toolbar">
-          <input type="checkbox" aria-label={`Select issue #${i.number}`} checked={checked} disabled={!!saving || readOnly}
+          <input type="checkbox" aria-label={`Select issue !${i.number}`} checked={checked} disabled={!!saving || readOnly}
             onClick={(event) => {
               if (event.shiftKey) selectBoardIssue(i.id, !checked, true);
             }}
@@ -519,7 +519,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             }} />
           <span
             className="board-card-handle"
-            aria-label={`Drag issue #${i.number}`}
+            aria-label={`Drag issue !${i.number}`}
             title="Drag to reorder or move issue; use Board actions for keyboard controls"
             draggable={!saving && !readOnly}
             onDragStart={(event) => {
@@ -536,7 +536,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             }}
             onDragEnd={() => { cardDrag.current = []; setCardDrop(null); }}
           ><GripVertical size={14} className="drag-hint" /></span>
-          <BoardActionsMenu label={`Board actions for issue #${i.number}`} lanes={lanes} currentLane={currentLane}
+          <BoardActionsMenu label={`Board actions for issue !${i.number}`} lanes={lanes} currentLane={currentLane}
             count={targets.length} disabled={!!saving || readOnly} {...reorderActions(targets)}
             onMove={(lane) => void changeBoard(targets, lane)} onRemove={() => void changeBoard(targets)} />
         </div>
@@ -552,7 +552,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             desktop && selectedId ? "issue-detail-sidebar" : undefined
           }
         >
-          <span className="issue-number">#{i.number}</span>
+          <span className="issue-number">!{i.number}</span>
           <strong>{i.title}</strong>
         <div className="issue-meta">
           {i.state === "closed" && <ClosedTag />}

@@ -84,8 +84,10 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await modal
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
-  await expect(modal.getByRole("status")).toContainText(/Issue #\d+ created\./);
+  await expect(modal.getByRole("status")).toContainText(/Issue !\d+ created\./);
   await expect(page).toHaveURL(projectUrl);
+  const createdHref = await modal.getByRole("link", { name: "View issue" }).getAttribute("href");
+  const { issue: createdIssue } = await (await page.request.get(`/api${createdHref}`)).json();
   await expect(editor).toBeEmpty();
   await expect(editor).toBeFocused();
   await expect(modal.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
@@ -93,7 +95,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(modal).toBeHidden();
   await expect(page).toHaveURL(projectUrl);
   await page.getByRole("link", { name: "Open issue in full page" }).click();
-  await expect(page).toHaveURL(/\/issues\/[a-z0-9-]+$/);
+  await expect(page).toHaveURL(/\/issues\/[1-9]\d*$/);
   await expect(
     page.getByRole("textbox", { name: "Issue", exact: true }),
   ).toContainText("Improve the onboarding experience");
@@ -146,7 +148,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   const add = page.getByRole("dialog", { name: "Add issues to board" });
-  await add.getByRole("checkbox", { name: /Add issue #1:/ }).check();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${createdIssue.number}:`) }).check();
   await add.getByLabel("Lane", { exact: true }).selectOption("in_progress");
   await add.getByRole("button", { name: "Add to board", exact: true }).click();
   await expect(add).toBeHidden();

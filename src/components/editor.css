@@ -271,7 +271,7 @@
   max-width: 100%;
 }
 /* In-flow popup remains inside dialog focus/scroll boundaries, never a clipped portal. */
-.mention-picker, .tag-picker {
+.mention-picker, .tag-picker, .issue-reference-picker {
   border-top: 1px solid #ddd6fe;
   background: #fff;
   max-height: min(240px, 35dvh);
@@ -279,12 +279,12 @@
   overscroll-behavior: contain;
   min-width: 0;
 }
-.mention-picker-help, .mention-empty, .tag-picker-help, .tag-empty {
+.mention-picker-help, .mention-empty, .tag-picker-help, .tag-empty, .issue-reference-picker-help, .issue-reference-empty {
   padding: 8px 12px;
   font-size: 11px;
   color: #71717a;
 }
-.mention-option, .tag-option {
+.mention-option, .tag-option, .issue-reference-option {
   padding: 8px 12px;
   cursor: pointer;
   display: flex;
@@ -292,10 +292,13 @@
   overflow-wrap: anywhere;
   font-size: 13px;
 }
-.mention-option span { color: #71717a; font-size: 11px; }
+.mention-option span, .issue-reference-option span { color: #71717a; font-size: 11px; }
 .mention-option[aria-selected="true"], .mention-option:hover,
-.tag-option[aria-selected="true"], .tag-option:hover { background: #ede9fe; }
-.hashtag-chip, .mention-chip, .markdown-content a[href^="mention:"] {
+.tag-option[aria-selected="true"], .tag-option:hover,
+.issue-reference-option[aria-selected="true"], .issue-reference-option:hover { background: #ede9fe; }
+.issue-reference-chip { cursor: pointer; }
+.issue-reference-chip:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.hashtag-chip, .mention-chip, .markdown-content .issue-reference-chip, .markdown-content a[href^="mention:"] {
   background: #ede9fe;
   color: #6d28d9;
   border-radius: 5px;

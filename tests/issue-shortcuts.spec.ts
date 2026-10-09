@@ -11,6 +11,14 @@ test.beforeAll(async ({ request, baseURL }) => {
 });
 test.beforeEach(async ({ context }) => { await context.addCookies(session.cookies); });
 
+async function expectCreated(page: Page) {
+  const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
+  await expect(dialog.getByRole("textbox", { name: "Issue", exact: true })).toBeEmpty();
+  const href = await dialog.getByRole("link", { name: "View issue" }).getAttribute("href");
+  const { issue } = await (await page.request.get(`/api${href}`)).json();
+  await expect(dialog.getByRole("status")).toContainText(`Issue !${issue.number} created.`);
+}
+
 async function seed(page: Page, baseURL: string) {
   const headers = { Origin: baseURL };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Shortcuts ${randomUUID()}` } })).json();
@@ -36,11 +44,11 @@ for (const modifier of ["Control", "Meta"]) {
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await expect(draft).toContainText("Shortcut creation");
     await draft.press(`${modifier}+s`);
-    await expect(dialog.getByRole("status")).toContainText("Issue #2 created.");
+    await expectCreated(page);
     await expect(draft).toBeEmpty();
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
 
-    await page.getByRole("link", { name: "#1 Existing issue", exact: true }).click();
+    await page.getByRole("link", { name: `!${issue.number} Existing issue`, exact: true }).click();
     const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
     const editor = sidebar.getByRole("textbox", { name: "Issue", exact: true });
     const save = sidebar.getByRole("button", { name: "Save changes", exact: true });
@@ -65,7 +73,7 @@ for (const modifier of ["Control", "Meta"]) {
     await expect(dialog).toBeVisible();
     await draft.fill("Another issue");
     await draft.press(`${modifier}+s`);
-    await expect(dialog.getByRole("status")).toContainText("Issue #3 created.");
+    await expectCreated(page);
     expect(writes).toBe(2);
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await expect(source).toHaveValue("Draft must stay unsaved under a modal");
@@ -81,7 +89,7 @@ for (const modifier of ["Control", "Meta"]) {
 for (const modifier of ["Control", "Meta"]) {
   test(`${modifier}+Enter creates only in the modal, across editor modes, with empty/repeat/busy protection`, async ({ page, baseURL }) => {
     const { project, issue } = await seed(page, baseURL!);
-    await page.getByRole("link", { name: "#1 Existing issue", exact: true }).click();
+    await page.getByRole("link", { name: `!${issue.number} Existing issue`, exact: true }).click();
     const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
     const existing = sidebar.getByRole("textbox", { name: "Issue", exact: true });
     await existing.fill("Unsaved existing issue");
@@ -114,7 +122,7 @@ for (const modifier of ["Control", "Meta"]) {
         expect(creates).toBe(0);
       }
       await target.press(`${modifier}+Enter`);
-      await expect(dialog.getByRole("status")).toContainText(`Issue #${index + 2} created.`);
+      await expectCreated(page);
       await expect(draft).toBeEmpty();
       await expect(draft).toBeFocused();
       expect(creates).toBe(index + 1);
@@ -136,7 +144,7 @@ for (const modifier of ["Control", "Meta"]) {
       await expect(dialog).toBeVisible();
       expect(creates).toBe(4);
     } finally { release(); }
-    await expect(dialog.getByRole("status")).toContainText("Issue #5 created.");
+    await expectCreated(page);
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await expect(existing).toContainText("Unsaved existing issue");
     expect(patches).toBe(0);

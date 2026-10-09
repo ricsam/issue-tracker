@@ -21,7 +21,7 @@ async function seed(page: Page, baseURL: string, count: number) {
   await page.goto(`/projects/${project.slug}`);
   return { project, issues, headers };
 }
-const select = (page: Page, number: number) => page.getByRole("checkbox", { name: `Select issue #${number}`, exact: true });
+const select = (page: Page, number: number) => page.getByRole("checkbox", { name: `Select issue !${number}`, exact: true });
 const fetchIssue = async (page: Page, id: string): Promise<Issue> => (await (await page.request.get(`/api/issues/${id}`)).json()).issue;
 
 test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry without duplicates", async ({ page, baseURL }) => {
@@ -29,10 +29,10 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   const { project, issues, headers } = await seed(page, baseURL!, 11);
   await expect(page.getByRole("button", { name: "Add tags", exact: true })).toBeDisabled();
   await page.getByLabel("Rows per page", { exact: true }).selectOption("10");
-  await select(page, 1).check();
+  await select(page, issues[0].number).check();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
-  await select(page, 11).check();
-  await page.getByRole("link", { name: "#11 Task 11", exact: true }).click();
+  await select(page, issues[10].number).check();
+  await page.getByRole("link", { name: `!${issues[10].number} Task 11`, exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   await editor.fill("Unsaved hashtag draft");
   page.once("dialog", (prompt) => prompt.dismiss());
@@ -124,8 +124,8 @@ test("mobile board and closed-list selection can add hashtags without changing m
   expect((await page.request.post(`${boardEndpoint}/issues`, { headers, data: { issueIds: issues.map((issue) => issue.id), lane: "todo" } })).ok()).toBeTruthy();
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(3);
-  await select(page, 1).check();
-  await select(page, 2).check();
+  await select(page, issues[0].number).check();
+  await select(page, issues[1].number).check();
   await page.getByRole("button", { name: "Add tags", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Add tags", exact: true });
   await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#board-tag");
@@ -140,7 +140,7 @@ test("mobile board and closed-list selection can add hashtags without changing m
 
   expect((await page.request.patch(`/api/issues/${issues[0].id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
   await page.goto(`/projects/${project.slug}?state=closed`);
-  await select(page, 1).check();
+  await select(page, issues[0].number).check();
   await page.getByRole("button", { name: "Add tags", exact: true }).click();
   await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#closed-tag");
   await dialog.getByRole("button", { name: "Add tags", exact: true }).click();

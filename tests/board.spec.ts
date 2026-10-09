@@ -32,6 +32,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   const projectPath = `/projects/${project.slug}`;
   const endpoint = `/api/projects/${project.slug}/board`;
   const issueEndpoint = `/api/projects/${project.slug}/issues`;
+  const issues: { id: string; number: number }[] = [];
   for (const body of [
     "# Plan the release\n\nKeep all details here.",
     "Review the design",
@@ -43,6 +44,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     });
     expect(response.ok()).toBeTruthy();
     const { issue } = await response.json();
+    issues.push(issue);
     expect(issue).not.toHaveProperty("status");
     expect(issue).not.toHaveProperty("priority");
     expect(issue).not.toHaveProperty("lane");
@@ -61,20 +63,22 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     exact: true,
   });
   await expect(addButton).toBeDisabled();
-  await add.getByRole("checkbox", { name: /Add issue #1:/ }).check();
+  await add.getByLabel("Search issues to add to board").fill(`!${issues[0].number}`);
+  await expect(add.getByRole("checkbox")).toHaveCount(1);
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[0].number}:`) }).check();
   await add.getByLabel("Search issues to add to board").fill("Review");
   await expect(add.getByRole("checkbox")).toHaveCount(1);
-  await add.getByRole("checkbox", { name: /Add issue #2:/ }).check();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[1].number}:`) }).check();
   await add.getByLabel("Search issues to add to board").fill("");
   await expect(
-    add.getByRole("checkbox", { name: /Add issue #1:/ }),
+    add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[0].number}:`) }),
   ).toBeChecked();
   await add.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   await add.getByLabel("Search issues to add to board").fill("release");
   await add.getByRole("button", { name: "Select matching" }).click();
-  await add.getByRole("checkbox", { name: /Add issue #3:/ }).uncheck();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[2].number}:`) }).uncheck();
   await add.getByLabel("Lane", { exact: true }).selectOption("todo");
   await page.route(`**${endpoint}/issues`, async (route) => {
     await route.fulfill({
@@ -86,7 +90,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await addButton.click();
   await expect(add.getByRole("alert")).toHaveText("Test add failed");
   await expect(
-    add.getByRole("checkbox", { name: /Add issue #1:/ }),
+    add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[0].number}:`) }),
   ).toBeChecked();
   await page.unroute(`**${endpoint}/issues`);
   await addButton.click();
@@ -116,7 +120,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   await expect(add.getByRole("checkbox")).toHaveCount(1);
   await expect(
-    add.getByRole("checkbox", { name: /Add issue #3:/ }),
+    add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[2].number}:`) }),
   ).toBeVisible();
   await add.getByRole("button", { name: "Cancel", exact: true }).click();
 
@@ -195,7 +199,10 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await create
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
-  await expect(create.getByRole("status")).toContainText("Issue #4 created.");
+  await expect(editor).toBeEmpty();
+  const desktopCreatedHref = await create.getByRole("link", { name: "View issue" }).getAttribute("href");
+  const { issue: desktopCreated } = await (await page.request.get(`/api${desktopCreatedHref}`)).json();
+  await expect(create.getByRole("status")).toContainText(`Issue !${desktopCreated.number} created.`);
   const issueUrl = (await create.getByRole("link", { name: "View issue" }).getAttribute("href"))!;
   await create.getByRole("link", { name: "View issue" }).click();
   await expect(create).toBeHidden();
@@ -210,7 +217,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     page.getByRole("link", { name: /Ship a simpler issue editor/ }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
-  await add.getByRole("checkbox", { name: /Add issue #4:/ }).check();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${desktopCreated.number}:`) }).check();
   await addButton.click();
   await expect(page.locator(".board-card")).toHaveCount(3);
 
@@ -242,7 +249,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   ).toBeVisible();
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
-  await add.getByRole("checkbox", { name: /Add issue #1:/ }).check();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[0].number}:`) }).check();
   await addButton.click();
   await expect(
     todo.getByRole("link", { name: /Plan the release/ }),
@@ -265,7 +272,10 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await create
     .getByRole("button", { name: "Create issue", exact: true })
     .click();
-  await expect(create.getByRole("status")).toContainText("Issue #5 created.");
+  await expect(editor).toBeEmpty();
+  const mobileCreatedHref = await create.getByRole("link", { name: "View issue" }).getAttribute("href");
+  const { issue: mobileCreated } = await (await page.request.get(`/api${mobileCreatedHref}`)).json();
+  await expect(create.getByRole("status")).toContainText(`Issue !${mobileCreated.number} created.`);
   await create.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page).toHaveURL(projectPath + "/board");
   await expect(page.locator(".board-card")).toHaveCount(3);
@@ -273,7 +283,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   expect(
     await add.evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBeTruthy();
-  await add.getByRole("checkbox", { name: /Add issue #5:/ }).check();
+  await add.getByRole("checkbox", { name: new RegExp(`Add issue !${mobileCreated.number}:`) }).check();
   await add.getByLabel("Lane", { exact: true }).selectOption("done");
   await page.screenshot({ path: "test-results/board-add-mobile.png" });
   await addButton.click();
@@ -351,7 +361,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await save.click();
   await expect(review.locator(".board-card")).toHaveCount(1);
   // New work can be placed directly into custom lanes, including from mobile.
-  await page.request.post(issueEndpoint, { headers, data: { body: "Check custom lane" } });
+  const { issue: customIssue } = await (await page.request.post(issueEndpoint, { headers, data: { body: "Check custom lane" } })).json();
   await page.reload();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
@@ -359,7 +369,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await add.getByLabel("Lane", { exact: true }).selectOption(customId);
   await addButton.click();
   await expect(review.locator(".board-card")).toHaveCount(2);
-  await review.getByRole("button", { name: "Board actions for issue #6" }).click();
+  await review.getByRole("button", { name: `Board actions for issue !${customIssue.number}` }).click();
   await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -436,6 +446,7 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
       })
     ).ok(),
   ).toBeTruthy();
+  const issues: { id: string; number: number }[] = [];
   for (const [body, lane] of [
     ["Draft the plan", "todo"],
     ["Ship the release", "done"],
@@ -446,6 +457,7 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
         data: { body },
       })
     ).json();
+    issues.push(issue);
     expect(
       (
         await page.request.post(`${endpoint}/issues`, {
@@ -476,7 +488,7 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
   expect(await savedLanes()).toEqual(["done", "in_progress", review.value, "todo"]);
   await page.reload();
   await expect(names).toHaveText(["Done", "In progress", "In review", "Todo"]);
-  await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
+  await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await expect(page.getByRole("menuitem")).toHaveText(["Done", "In progress", "In review", "Todo (current lane)", "Move up", "Move down", "Move to top", "Move to bottom", "Remove from board"]);
   await page.keyboard.press("Escape");
 

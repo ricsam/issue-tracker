@@ -34,8 +34,11 @@ export interface BoardSettings {
   /** Array order defines the saved card order within each lane. */
   cards: BoardCard[];
 }
+export type IssueReference = Pick<Issue, "id" | "number" | "title" | "state">;
 export interface Issue {
+  /** Global sequential integer key serialized as a canonical decimal string. */
   id: string;
+  /** Numeric alias of id for display and sorting; unique across all projects. */
   number: number;
   projectId: string | null;
   title: string;

@@ -43,16 +43,16 @@ const projects: Project[] = [
 ];
 
 test("project filters distinguish unlinked and archived-project issues and combine with other filters", () => {
-  const rows = [issue(1, { id: "linked", projectId: "p", labels: ["bug"] }), issue(1, { id: "unlinked", projectId: null, labels: ["bug"] }), issue(1, { id: "archived", projectId: "q" })];
+  const rows = [issue(1, { projectId: "p", labels: ["bug"] }), issue(2, { projectId: null, labels: ["bug"] }), issue(3, { projectId: "q" })];
   const ids = (state: Partial<typeof initialIssueTableState>) => issueTableRows(rows, users, { ...initialIssueTableState, ...state }, projects).map((row) => row.id);
-  expect(ids({ project: "none" })).toEqual(["unlinked"]);
-  expect(ids({ project: "q" })).toEqual(["archived"]);
-  expect(ids({ project: "p", label: "label:bug" })).toEqual(["linked"]);
+  expect(ids({ project: "none" })).toEqual(["2"]);
+  expect(ids({ project: "q" })).toEqual(["3"]);
+  expect(ids({ project: "p", label: "label:bug" })).toEqual(["1"]);
   expect(ids({ project: "none", label: "label:other" })).toEqual([]);
-  expect(ids({ sort: "project" })).toEqual(["linked", "unlinked", "archived"]);
-  expect(ids({ sort: "project", direction: "descending" })).toEqual(["archived", "unlinked", "linked"]);
+  expect(ids({ sort: "project" })).toEqual(["1", "2", "3"]);
+  expect(ids({ sort: "project", direction: "descending" })).toEqual(["3", "2", "1"]);
   expect(hasColumnFilters({ ...initialIssueTableState, project: "none" })).toBe(true);
-  // Duplicate per-project issue numbers still have a deterministic row order.
+  // Global numeric identifiers retain deterministic numeric order across projects.
   expect(issueTableRows([...rows].reverse(), users, initialIssueTableState)).toEqual(issueTableRows(rows, users, initialIssueTableState));
 });
 
@@ -67,7 +67,10 @@ test("table sorts without mutation and breaks ties by number", () => {
 
 test("table combines filters and includes both calendar date boundaries", () => {
   const day = issueDateKey(issues[0].createdAt);
-  expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, number: "#1", title: "ZEB", label: "label:bug", tagged: "a", createdFrom: day, createdTo: day }))).toEqual([10]);
+  for (const number of ["10", "!10", " !10 "]) {
+    expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, number }))).toEqual([10]);
+  }
+  expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, number: "!1", title: "ZEB", label: "label:bug", tagged: "a", createdFrom: day, createdTo: day }))).toEqual([10]);
   expect(issueTableRows(issues, users, { ...initialIssueTableState, createdFrom: "2026-01-03", createdTo: "2026-01-01" })).toEqual([]);
   expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, label: "label:design", tagged: "a" }))).toEqual([3]);
   expect(issueTableRows(issues, users, { ...initialIssueTableState, tagged: "none" })).toEqual([]);

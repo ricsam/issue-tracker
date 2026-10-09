@@ -40,6 +40,10 @@ export interface AppOptions {
 type Env = { Variables: { user: User }; Bindings: { remoteAddress?: string } };
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+const issueIdField = z.string().regex(/^[1-9][0-9]*$/).max(16)
+  .refine((value) => Number.isSafeInteger(Number(value)));
+const issueIdsField = z.array(issueIdField).min(1).max(1000)
+  .refine((values) => new Set(values).size === values.length);
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const fail = (
   status: 400 | 401 | 403 | 404 | 409 | 413 | 429,
@@ -169,7 +173,7 @@ export function createApp(options: AppOptions = {}) {
   const requireAdmin = (c: any) => {
     if (c.get("user").role !== "admin") fail(403, "Administrator required");
   };
-  const issue = (issueId: string): Issue => {
+  const issue = (issueId: string | number): Issue => {
     const row = db
       .query(
         "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
@@ -178,6 +182,8 @@ export function createApp(options: AppOptions = {}) {
     if (!row) return fail(404, "Issue not found");
     return {
       ...row,
+      id: String(row.id),
+      number: Number(row.id),
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
       state: row.closedAt ? "closed" : "open",
@@ -210,7 +216,7 @@ export function createApp(options: AppOptions = {}) {
       .get(projectId) as { lanes: string; customLanes: string } | null;
     const cards = db
       .query(
-        "SELECT b.issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY b.position,i.number",
+        "SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY b.position,i.number",
       )
       .all(projectId) as BoardCard[];
     return {
@@ -586,7 +592,7 @@ export function createApp(options: AppOptions = {}) {
   const tagIssues = async (c: Context<Env>) => {
     const ids = z.array(z.string().uuid()).min(1).max(1000)
       .refine((values) => new Set(values).size === values.length);
-    const input = z.object({ issueIds: ids, userIds: ids }).strict().parse(await json(c));
+    const input = z.object({ issueIds: issueIdsField, userIds: ids }).strict().parse(await json(c));
     const issues = db.transaction(() => {
       const slug = c.req.param("slug");
       const p = slug ? activeProject(slug) : null;
@@ -610,8 +616,7 @@ export function createApp(options: AppOptions = {}) {
   app.post("/api/issues/tagged-users", tagIssues);
   const labelIssues = async (c: Context<Env>) => {
     const input = z.object({
-      issueIds: z.array(z.string().uuid()).min(1).max(1000)
-        .refine((values) => new Set(values).size === values.length),
+      issueIds: issueIdsField,
       labels: z.array(text(50)).min(1).max(30),
     }).strict().parse(await json(c));
     const issues = db.transaction(() => {
@@ -638,10 +643,7 @@ export function createApp(options: AppOptions = {}) {
     const p = activeProject(c.req.param("slug"));
     const input = z
       .object({
-        issueIds: z
-          .array(z.string().uuid())
-          .min(1)
-          .refine((ids) => new Set(ids).size === ids.length),
+        issueIds: issueIdsField,
         lane: laneField,
       })
       .strict()
@@ -677,10 +679,9 @@ export function createApp(options: AppOptions = {}) {
   });
   app.post("/api/projects/:slug/board/issues/reorder", async (c) => {
     const input = z.object({
-      issueIds: z.array(z.string().uuid()).min(1).max(1000)
-        .refine((ids) => new Set(ids).size === ids.length),
+      issueIds: issueIdsField,
       lane: laneField,
-      beforeIssueId: z.string().uuid().nullable(),
+      beforeIssueId: issueIdField.nullable(),
     }).strict().parse(await json(c));
     const result = db.transaction(() => {
       const p = activeProject(c.req.param("slug"));
@@ -710,8 +711,7 @@ export function createApp(options: AppOptions = {}) {
   app.put("/api/projects/:slug/board/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const input = z.object({
-      issueIds: z.array(z.string().uuid()).min(1).max(1000)
-        .refine((ids) => new Set(ids).size === ids.length),
+      issueIds: issueIdsField,
       lane: laneField,
     }).strict().parse(await json(c));
     db.transaction(() => {
@@ -734,6 +734,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
+    issueIdField.parse(c.req.param("id"));
     const p = activeProject(c.req.param("slug"));
     const { lane } = z
       .object({ lane: laneField })
@@ -756,6 +757,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.delete("/api/projects/:slug/board/issues/:id", (c) => {
+    issueIdField.parse(c.req.param("id"));
     const p = activeProject(c.req.param("slug"));
     const result = db
       .query("DELETE FROM board_issues WHERE projectId=? AND issueId=?")
@@ -785,25 +787,17 @@ export function createApp(options: AppOptions = {}) {
     const body = appendIssueLabels(originalBody, deriveIssueTitle(originalBody), input.labels);
     if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
       fail(400, "Invalid issue body");
-    const uid = id();
     const time = now();
-    db.transaction(() => {
+    const uid = db.transaction(() => {
       if (projectId !== null) {
         const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
         if (!p) return fail(404, "Project not found");
         if (p.archivedAt) fail(409, "Project is archived");
       }
       validateMentions(body);
-      const n = db
-        .query(
-          "SELECT COALESCE(MAX(number),0)+1 AS n FROM issues WHERE projectId IS ?",
-        )
-        .get(projectId) as { n: number };
-      db.query(
-        "INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      ).run(
-        uid,
-        n.n,
+      const inserted = db.query(
+        "INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (0,?,?,?,?,?,?,?,?,?) RETURNING id",
+      ).get(
         projectId,
         deriveIssueTitle(originalBody),
         body,
@@ -813,23 +807,38 @@ export function createApp(options: AppOptions = {}) {
         c.get("user").id,
         time,
         time,
-      );
+      ) as { id: number };
+      const uid = String(inserted.id);
+      db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
       syncIssueTaggedUsers(db, uid);
+      return uid;
     }).immediate();
     return c.json({ issue: issue(uid) });
   };
   app.post("/api/projects/:slug/issues", createIssue);
   app.post("/api/issues", createIssue);
-  app.get("/api/issues/:id", (c) =>
-    c.json({
-      issue: issue(c.req.param("id")),
-      comments: db
-        .query("SELECT * FROM comments WHERE issueId=? ORDER BY createdAt,id")
-        .all(c.req.param("id")) as Comment[],
-    }),
-  );
+  app.get("/api/issues/references", (c) => {
+    const query = z.string().trim().max(300).parse(c.req.query("q") ?? "");
+    const numeric = query.replace(/^!/, "");
+    const exactId = issueIdField.safeParse(numeric);
+    const rows = exactId.success
+      ? db.query("SELECT id,title,closedAt FROM issues WHERE id=? LIMIT 20").all(exactId.data)
+      : db.query("SELECT id,title,closedAt FROM issues WHERE instr(lower(title),lower(?))>0 ORDER BY id DESC LIMIT 20").all(query);
+    return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null }[]).map((row) => ({
+      id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const,
+    })) });
+  });
+  app.get("/api/issues/:id", (c) => {
+    const canonical = issueIdField.safeParse(c.req.param("id"));
+    if (!canonical.success) return fail(404, "Issue not found");
+    const current = issue(canonical.data);
+    return c.json({
+      issue: current,
+      comments: db.query("SELECT *,CAST(issueId AS TEXT) AS issueId FROM comments WHERE issueId=? ORDER BY createdAt,id").all(current.id) as Comment[],
+    });
+  });
   app.patch("/api/issues/:id", async (c) => {
-    const current = activeIssue(c.req.param("id"));
+    const current = activeIssue(issueIdField.parse(c.req.param("id")));
     const raw = await json(c);
     const parsed = issueUpdateFields.parse(raw);
     const input = Object.fromEntries(
@@ -886,7 +895,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ issue: issue(current.id) });
   });
   app.post("/api/issues/:id/comments", async (c) => {
-    const i = activeIssue(c.req.param("id"));
+    const i = activeIssue(issueIdField.parse(c.req.param("id")));
     const { body } = z
       .object({ body: text(100000) })
       .strict()

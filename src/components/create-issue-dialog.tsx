@@ -145,7 +145,7 @@ export function CreateIssueDialog({
               <div className="issue-created-notice">
                 <CircleCheck size={20} aria-hidden="true" />
                 <div className="issue-created-message">
-                  <strong>Issue #{created.number} created.</strong>
+                  <strong>Issue !{created.number} created.</strong>
                   <span>Ready for another.</span>
                 </div>
                 <Link

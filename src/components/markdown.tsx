@@ -4,6 +4,8 @@ import type { User } from "../../shared/types";
 import remarkGfm from "remark-gfm";
 import { safeImageUrl } from "./image-node";
 import { remarkHashtags } from "./hashtag-markdown";
+import { remarkIssueReferences } from "./issue-reference-markdown";
+import { issueReferenceId } from "../../shared/issue-references";
 import "./editor.css";
 
 /** Raw HTML is deliberately not enabled; remote images never track workspace readers. */
@@ -11,7 +13,7 @@ export function Markdown({ children, mentionUsers = [] }: { children: string; me
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkHashtags]}
+        remarkPlugins={[remarkGfm, remarkHashtags, remarkIssueReferences]}
         urlTransform={(url) => mentionUserId(url) ? url : defaultUrlTransform(url)}
         components={{
           a: ({ children, href }) => {
@@ -20,6 +22,7 @@ export function Markdown({ children, mentionUsers = [] }: { children: string; me
               const user = mentionUsers.find(user => user.id === id);
               return <span className="mention-chip" data-mention-user-id={id} title={user?.email || "Mentioned teammate"}>{user ? `@${user.name}` : children}</span>;
             }
+            if (issueReferenceId(href || "")) return <a className="issue-reference-chip" href={href}>{children}</a>;
             return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
           },
           img: ({ src, alt }) =>

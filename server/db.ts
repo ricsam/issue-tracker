@@ -12,7 +12,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string) {
+export function openDatabase(path: string, targetVersion: 10 | 11 = 11) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -110,7 +110,7 @@ export function openDatabase(path: string) {
         ? (JSON.parse(old.issueIds) as string[] | null)
         : null;
       const issues = db
-        .query("SELECT id,status FROM issues WHERE projectId=? ORDER BY number")
+        .query("SELECT CAST(id AS TEXT) AS id,status FROM issues WHERE projectId=? ORDER BY number")
         .all(project.id) as { id: string; status: string }[];
       for (const issue of issues) {
         if (
@@ -232,5 +232,49 @@ export function openDatabase(path: string) {
       CREATE INDEX board_issues_order ON board_issues(projectId,lane,position);
       INSERT INTO migrations VALUES (10);`);
   }).immediate();
+  if (targetVersion < 11) return db; // Historical fixtures may stop before the ID migration.
+  db.exec("PRAGMA foreign_keys=OFF");
+  try {
+    db.transaction(() => {
+      if (db.query("SELECT version FROM migrations WHERE version=11").get()) return;
+      const { sql } = db.query("SELECT sql FROM sqlite_schema WHERE type='table' AND name='issues'").get() as { sql: string };
+      const objects = db.query("SELECT sql FROM sqlite_schema WHERE tbl_name='issues' AND type IN ('index','trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+      const definition = sql.replace(/^CREATE TABLE\s+(?:"issues"|issues)/i, 'CREATE TABLE issues_sequential')
+        .replace(/\bid\s+TEXT\s+PRIMARY KEY\b/i, 'id INTEGER PRIMARY KEY AUTOINCREMENT');
+      if (!/id INTEGER PRIMARY KEY AUTOINCREMENT/i.test(definition)) throw new Error("Unexpected legacy issues schema");
+      // Only needed while translating child relationships, never for URL lookup.
+      db.exec(`CREATE TEMP TABLE issue_id_migration (
+        legacyId TEXT PRIMARY KEY,
+        issueId INTEGER NOT NULL
+      );`);
+      const rows = db.query("SELECT id FROM issues ORDER BY createdAt,rowid").all() as { id: string }[];
+      const columns = db.query("PRAGMA table_xinfo(issues)").all() as { name: string; hidden: number }[];
+      const names = columns.filter((c) => !c.hidden).map((c) => c.name);
+      const quoted = names.map((name) => `"${name.replaceAll('"', '""')}"`).join(',');
+      db.exec(definition);
+      const selection = names.map((name) => name === 'id' || name === 'number' ? '?' : `"${name.replaceAll('"', '""')}"`).join(',');
+      const copy = db.query(`INSERT INTO issues_sequential (${quoted}) SELECT ${selection} FROM issues WHERE id=?`);
+      for (const [index, row] of rows.entries()) {
+        const newId = index + 1;
+        copy.run(newId, newId, row.id);
+        db.query("INSERT INTO issue_id_migration VALUES (?,?)").run(row.id, newId);
+      }
+      // Child columns retain TEXT affinity deliberately: API IDs remain strings.
+      // A single lookup update avoids collisions with any old decimal identifiers.
+      for (const table of ['comments', 'board_issues', 'issue_tagged_users'])
+        db.exec(`UPDATE ${table} SET issueId=CAST((SELECT issueId FROM issue_id_migration WHERE legacyId=${table}.issueId) AS TEXT)`);
+      // legacy_project_boards is a historical archive, including its UUID selections.
+      // Keep it byte-for-byte, along with historical prose; old URLs are unsupported.
+      db.exec("DROP TABLE issue_id_migration; DROP TABLE issues; ALTER TABLE issues_sequential RENAME TO issues;");
+      for (const object of objects) db.exec(object.sql);
+      if (db.query("PRAGMA foreign_key_check").all().length)
+        throw new Error("Foreign key violation during sequential issue migration");
+      db.query("INSERT INTO migrations VALUES (11)").run();
+    }).immediate();
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  db.exec("PRAGMA foreign_keys=ON");
   return db;
 }

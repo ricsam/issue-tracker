@@ -21,11 +21,11 @@ async function seed(page: Page, baseURL: string, count = 4) {
   return { project, issues, endpoint, headers };
 }
 const column = (page: Page, label: string) => page.locator(".board-column").filter({ has: page.getByRole("heading", { name: new RegExp(`^${label}`) }) });
-const select = (page: Page, n: number) => page.getByRole("checkbox", { name: `Select issue #${n}`, exact: true });
+const select = (page: Page, n: number) => page.getByRole("checkbox", { name: `Select issue !${n}`, exact: true });
 
 for (const width of [1440, 1060, 390]) {
   test(`board selection bar is permanent, compact and stable at ${width}px`, async ({ page, baseURL }) => {
-    const { project, endpoint, headers } = await seed(page, baseURL!, 12);
+    const { project, issues, endpoint, headers } = await seed(page, baseURL!, 12);
     await page.setViewportSize({ width, height: 1000 });
     const bar = page.getByRole("group", { name: "Selected board issue actions", exact: true });
     const board = page.locator(".board");
@@ -47,7 +47,7 @@ for (const width of [1440, 1060, 390]) {
     const initialOffset = await offset();
     expect(initialOffset - height).toBe(8);
     await bar.screenshot({ path: `test-results/board-selection-empty-${width}.png` });
-    await select(page, 1).check();
+    await select(page, issues[0].number).check();
     await expect(bar.getByText("1 selected", { exact: true })).toBeVisible();
     for (const action of actions) await expect(action).toBeEnabled();
     expect((await bar.boundingBox())!.height).toBe(height);
@@ -68,7 +68,7 @@ for (const width of [1440, 1060, 390]) {
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("issue 12");
     await selectAll.click();
     await expect(bar.getByText("1 selected", { exact: true })).toBeVisible();
-    await expect(select(page, 12)).toBeChecked();
+    await expect(select(page, issues[11].number)).toBeChecked();
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("missing");
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     await expect(selectAll).toBeDisabled();
@@ -93,11 +93,11 @@ for (const width of [1440, 1060, 390]) {
 }
 
 test("only checkboxes or modifier clicks select board cards, while ordinary links and menus still work", async ({ page, baseURL, context }) => {
-  await seed(page, baseURL!);
+  const { issues } = await seed(page, baseURL!);
   const cards = page.locator(".board-card");
-  const first = cards.filter({ has: select(page, 1) });
-  const second = cards.filter({ has: select(page, 2) });
-  const fourth = cards.filter({ has: select(page, 4) });
+  const first = cards.filter({ has: select(page, issues[0].number) });
+  const second = cards.filter({ has: select(page, issues[1].number) });
+  const fourth = cards.filter({ has: select(page, issues[3].number) });
   const selected = page.locator(".board-card.is-bulk-selected");
   const details = page.getByRole("complementary", { name: "Issue details", exact: true });
   await expect(first).not.toHaveAttribute("draggable", "true");
@@ -118,50 +118,50 @@ test("only checkboxes or modifier clicks select board cards, while ordinary link
   await first.locator(".issue-link strong").dragTo(column(page, "Done"));
   await expect(column(page, "Todo").locator(".board-card")).toHaveCount(4);
   await expect(column(page, "Done").locator(".board-card")).toHaveCount(0);
-  await select(page, 1).check();
+  await select(page, issues[0].number).check();
   await expect(selected).toHaveCount(1);
   await first.locator(".issue-number").click();
-  await expect(select(page, 1)).toBeChecked();
+  await expect(select(page, issues[0].number)).toBeChecked();
   await expect(details).toBeVisible();
   await details.getByRole("button", { name: "Close issue details", exact: true }).click();
 
   // Cmd/Ctrl toggle from anywhere, including links, without opening another tab.
   const tabs = context.pages().length;
   await second.locator(".issue-link").click({ modifiers: ["Meta"] });
-  await expect(select(page, 2)).toBeChecked();
+  await expect(select(page, issues[1].number)).toBeChecked();
   await expect(details).toHaveCount(0);
   expect(context.pages()).toHaveLength(tabs);
   await second.locator(".issue-number").click({ modifiers: ["Meta"] });
-  await expect(select(page, 2)).not.toBeChecked();
+  await expect(select(page, issues[1].number)).not.toBeChecked();
   await second.locator(".tag").click({ modifiers: ["Control"] });
-  await expect(select(page, 2)).toBeChecked();
+  await expect(select(page, issues[1].number)).toBeChecked();
   await second.click({ position: { x: 2, y: 2 }, modifiers: ["Control"] });
-  await expect(select(page, 2)).not.toBeChecked();
+  await expect(select(page, issues[1].number)).not.toBeChecked();
   await fourth.locator(".issue-link").click({ modifiers: ["Shift"] });
-  for (const number of [1, 2, 3, 4]) await expect(select(page, number)).toBeChecked();
+  for (const number of [1, 2, 3, 4]) await expect(select(page, issues[number - 1].number)).toBeChecked();
   await expect(details).toHaveCount(0);
   expect(context.pages()).toHaveLength(tabs);
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
-  await select(page, 1).check();
+  await select(page, issues[0].number).check();
   await fourth.locator(".issue-number").click({ modifiers: ["Shift"] });
   await expect(selected).toHaveCount(4);
 
   // A modified menu-trigger click selects the card; an ordinary one opens its menu.
-  const menuButton = first.getByRole("button", { name: "Board actions for issue #1", exact: true });
+  const menuButton = first.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true });
   await menuButton.click({ modifiers: ["Meta"] });
-  await expect(select(page, 1)).not.toBeChecked();
+  await expect(select(page, issues[0].number)).not.toBeChecked();
   await expect(page.getByRole("menu")).toHaveCount(0);
   await menuButton.click();
   await expect(page.getByRole("menu")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(select(page, 1)).not.toBeChecked();
+  await expect(select(page, issues[0].number)).not.toBeChecked();
 });
 
 test("board menu supports keyboard, range selection, bulk moves, drag and retryable remove", async ({ page, baseURL }) => {
   const { endpoint, issues } = await seed(page, baseURL!);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const trigger = page.getByRole("button", { name: "Board actions for issue #1", exact: true });
+  const trigger = page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true });
   await trigger.focus();
   await trigger.press("Enter");
   await expect(page.getByRole("menuitem", { name: "Todo (current lane)" })).toBeFocused();
@@ -170,23 +170,23 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await select(page, 1).check();
-  await select(page, 3).click({ modifiers: ["Shift"] });
-  for (const n of [1, 2, 3]) await expect(select(page, n)).toBeChecked();
-  await expect(select(page, 4)).not.toBeChecked();
+  await select(page, issues[0].number).check();
+  await select(page, issues[2].number).click({ modifiers: ["Shift"] });
+  for (const n of [1, 2, 3]) await expect(select(page, issues[n - 1].number)).toBeChecked();
+  await expect(select(page, issues[3].number)).not.toBeChecked();
   await trigger.click();
   await expect(page.getByRole("menu")).toContainText("Applies to 3 selected issues");
   await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
   await expect(column(page, "In progress").locator(".board-card")).toHaveCount(3);
   await expect(page.locator(".board-outcome")).toHaveText("3 of 3 issues moved.");
   await expect(page.locator(".board-card.is-bulk-selected")).toHaveCount(0);
-  await select(page, 1).check();
-  await select(page, 2).check();
-  await page.locator(".board-card").filter({ has: select(page, 1) }).locator(".board-card-handle").dragTo(column(page, "Done"));
+  await select(page, issues[0].number).check();
+  await select(page, issues[1].number).check();
+  await page.locator(".board-card").filter({ has: select(page, issues[0].number) }).locator(".board-card-handle").dragTo(column(page, "Done"));
   await expect(column(page, "Done").locator(".board-card")).toHaveCount(2);
   await expect(column(page, "In progress").locator(".board-card")).toHaveCount(1);
-  await select(page, 1).check();
-  await select(page, 2).check();
+  await select(page, issues[0].number).check();
+  await select(page, issues[1].number).check();
   let firstDeletes = 0;
   await page.route(`**${endpoint}/issues/*`, async (route) => {
     if (route.request().method() === "DELETE") {
@@ -199,7 +199,7 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
   await page.getByRole("menuitem", { name: "Remove from board" }).click();
   await expect(page.locator(".board-card")).toHaveCount(3);
   await expect(page.getByRole("alert")).toContainText("Remove failed");
-  await expect(select(page, 2)).toBeChecked();
+  await expect(select(page, issues[1].number)).toBeChecked();
   expect(firstDeletes).toBe(1);
   await page.unroute(`**${endpoint}/issues/*`);
   await page.getByRole("button", { name: "Selected board issue actions", exact: true }).click();
@@ -214,13 +214,13 @@ test("board menu supports keyboard, range selection, bulk moves, drag and retrya
 
 test("board selection prunes search-hidden issues and bulk tagging works from board and table", async ({ page, baseURL }) => {
   const { project, issues } = await seed(page, baseURL!);
-  await select(page, 1).check();
-  await select(page, 2).check();
+  await select(page, issues[0].number).check();
+  await select(page, issues[1].number).check();
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("issue 4");
   await expect(page.getByRole("button", { name: "Tag selected issues" })).toBeDisabled();
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
-  await select(page, 1).check();
-  await select(page, 2).check();
+  await select(page, issues[0].number).check();
+  await select(page, issues[1].number).check();
   await page.getByRole("button", { name: "Tag selected issues" }).click();
   const dialog = page.getByRole("dialog", { name: "Tag teammates" });
   await dialog.getByRole("checkbox", { name: /Alex Morgan/ }).check();
@@ -239,10 +239,10 @@ test("board selection prunes search-hidden issues and bulk tagging works from bo
   await page.getByRole("link", { name: "List", exact: true }).click();
   // Wait for the list mount rather than checking the departing board's inputs.
   const table = page.getByRole("table");
-  await table.getByRole("checkbox", { name: "Select issue #1", exact: true }).check();
-  await table.getByRole("checkbox", { name: "Select issue #2", exact: true }).check();
+  await table.getByRole("checkbox", { name: `Select issue !${issues[0].number}`, exact: true }).check();
+  await table.getByRole("checkbox", { name: `Select issue !${issues[1].number}`, exact: true }).check();
   await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "#1 Selection issue 1", exact: true }).click();
+  await page.getByRole("link", { name: `!${issues[0].number} Selection issue 1`, exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   await editor.fill("Unsaved draft must survive cancellation");
   page.once("dialog", (prompt) => prompt.dismiss());

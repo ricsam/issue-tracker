@@ -289,7 +289,7 @@ function AppContent() {
                   <Link className="breadcrumb-project" to={`/projects/${breadcrumbProject.slug}`} title={breadcrumbProject.name}>{breadcrumbProject.name}</Link>
                   <ChevronRight size={14} aria-hidden="true" />
                 </>}
-                <strong aria-current="page">{currentIssue ? `Issue #${currentIssue.number}` : "Issue details"}</strong>
+                <strong aria-current="page">{currentIssue ? `Issue !${currentIssue.number}` : "Issue details"}</strong>
               </> : <strong aria-current="page">{location.pathname === "/admin" ? "Administration" : location.pathname === "/issues" ? "All issues" : "Projects"}</strong>}
             </nav>
             <span className="topbar-right">

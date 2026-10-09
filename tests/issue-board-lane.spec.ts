@@ -45,9 +45,9 @@ for (const width of [1440, 390]) {
     await expect(row(page, issues[1]).locator(".issue-board-lane")).toHaveText("Review (hidden)");
     await expect(row(page, issues[2]).locator(".issue-board-lane")).toHaveText("Not on board");
     await page.getByRole("button", { name: "Sort by board lane", exact: true }).click();
-    await expect(page.locator(".issue-row .issue-number")).toHaveText(["#3", "#2", "#1"]);
+    await expect(page.locator(".issue-row .issue-number")).toHaveText([`!${issues[2].number}`, `!${issues[1].number}`, `!${issues[0].number}`]);
     await page.getByRole("button", { name: "Sort by board lane", exact: true }).click();
-    await expect(page.locator(".issue-row .issue-number")).toHaveText(["#1", "#2", "#3"]);
+    await expect(page.locator(".issue-row .issue-number")).toHaveText([`!${issues[0].number}`, `!${issues[1].number}`, `!${issues[2].number}`]);
     await filterLane(page, boardLaneKey(a.id, review));
     await expect(page.locator(".issue-row")).toHaveCount(1);
     await expect(row(page, issues[1])).toBeVisible();
@@ -100,7 +100,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   await filterLane(page, boardLaneKey(a.id, "done"));
   await expect(row(page, issues[2]).locator(".issue-board-lane")).toHaveText("Done");
   // An embedded detail move also updates the list without reloading.
-  await row(page, issues[2]).getByRole("link", { name: /#3/ }).click();
+  await row(page, issues[2]).getByRole("link", { name: `!${issues[2].number} ${issues[2].title}`, exact: true }).click();
   const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
   await sidebar.getByRole("button", { name: "Send to board", exact: true }).click();
   await modal.getByRole("combobox", { name: `Lane for ${a.name}` }).selectOption("todo");
@@ -116,13 +116,13 @@ test("All Issues distinguishes same-named project lanes and updates its active f
 test("project list lane reflects board add, move and removal when switching views", async ({ page, baseURL }) => {
   const { a, issues } = await seed(page, baseURL!);
   await page.goto(`/projects/${a.slug}/board`);
-  await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
+  await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await page.getByRole("menuitem", { name: "Done", exact: true }).click();
   await expect(page.locator(".board-outcome")).toContainText("1 of 1 issues moved.");
   await page.getByRole("link", { name: "List", exact: true }).click();
   await expect(row(page, issues[0]).locator(".issue-board-lane")).toHaveText("Done");
   await page.getByRole("link", { name: "Board", exact: true }).click();
-  await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
+  await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await page.getByRole("menuitem", { name: "Remove from board", exact: true }).click();
   await expect(page.locator(".board-outcome")).toContainText("1 of 1 issues removed from board.");
   await page.getByRole("link", { name: "List", exact: true }).click();

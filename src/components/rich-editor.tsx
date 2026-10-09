@@ -64,7 +64,9 @@ import { MentionLinkNode, mentionLinkReplacement } from "./mention-link-node";
 import { MENTION_TRANSFORMER } from "./mention-transformer";
 import { MentionAutocomplete } from "./mention-autocomplete";
 import { TagAutocomplete } from "./tag-autocomplete";
-import { HashtagNode, HashtagPlugin } from "./hashtag-node";
+import { HashtagNode, HashtagPlugin, IssueReferenceNode } from "./hashtag-node";
+import { IssueReferenceAutocomplete } from "./issue-reference-autocomplete";
+import { issueReferenceId } from "../../shared/issue-references";
 import { ESCAPED_HASHTAG_TRANSFORMER } from "./hashtag-transformer";
 import type { Attachment, User } from "../../shared/types";
 import { IMAGE_TRANSFORMER, ImageNode } from "./image-node";
@@ -74,7 +76,7 @@ import "./editor.css";
 const transformers = [MENTION_TRANSFORMER, IMAGE_TRANSFORMER, ESCAPED_HASHTAG_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
 type Mode = "write" | "markdown" | "preview";
 function validLink(url: string) {
-  return !!mentionUserId(url) || /^(https?:\/\/|mailto:|\/api\/uploads\/)/i.test(url);
+  return !!mentionUserId(url) || !!issueReferenceId(url) || /^(https?:\/\/|mailto:|\/api\/uploads\/)/i.test(url);
 }
 
 function Tool({
@@ -228,6 +230,21 @@ function EditorContents({
       onClickCapture={(event) => {
         const link = (event.target as Element).closest?.('a[href^="mention:"]');
         if (link) event.preventDefault();
+        const reference = (event.target as Element).closest<HTMLElement>("[data-issue-reference-id]");
+        if (reference) {
+          event.preventDefault();
+          const url = `/issues/${reference.dataset.issueReferenceId}`;
+          if (event.ctrlKey || event.metaKey) window.open(url, "_blank", "noopener,noreferrer");
+          else window.location.assign(url);
+        }
+      }}
+      onKeyDownCapture={(event) => {
+        const reference = event.target as HTMLElement;
+        if (event.key === "Enter" && reference.dataset.issueReferenceId) {
+          event.preventDefault();
+          event.stopPropagation();
+          window.location.assign(`/issues/${reference.dataset.issueReferenceId}`);
+        }
       }}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("Files")) e.preventDefault();
@@ -379,6 +396,7 @@ function EditorContents({
       )}
       <MentionAutocomplete users={mentionUsers} mode={mode} source={source} onChange={onChange} />
       <TagAutocomplete tags={existingTags} mode={mode} source={source} onChange={onChange} />
+      <IssueReferenceAutocomplete mode={mode} source={source} onChange={onChange} />
       {autoFocus && <AutoFocusPlugin defaultSelection="rootStart" />}
       <HashtagPlugin />
       <HistoryPlugin />
@@ -446,6 +464,7 @@ export function RichEditor({
           MentionLinkNode,
           mentionLinkReplacement,
           HashtagNode,
+          IssueReferenceNode,
           ImageNode,
         ],
         editorState: () => $convertFromMarkdownString(value, transformers),

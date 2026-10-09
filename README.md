@@ -27,9 +27,11 @@ Upgrade migration v5 adds custom lane definitions without changing existing lane
 
 Upgrade migration v6 adds nullable issue close and project archive columns, so every existing issue stays open and every project stays active. It is transactional and runs once. Earlier releases cannot create issues or projects against the migrated schema; restore a pre-upgrade backup instead of rolling back the application alone.
 
-Migration v9 makes the project link optional, preserving existing issue numbers, content, comments, tags, lifecycle metadata, and board placements. Unlinked issues have their own number sequence and cannot join project boards. Back up your data before upgrading; existing issues cannot yet be reassigned.
+Migration v9 makes the project link optional, preserving existing issue numbers, content, comments, tags, lifecycle metadata, and board placements. At that version unlinked issues had their own number sequence; v11 replaces all per-project sequences with global issue numbers. Unlinked issues cannot join project boards. Back up your data before upgrading; existing issues cannot yet be reassigned.
 
 Migration v10 adds persistent board-card ordering, initially preserving every lane's previous issue-number order, including hidden and custom lanes. It does not change issue content or timestamps. Back up your data before upgrading.
+
+Migration v11 replaces issue UUID keys and per-project numbers with one global, auto-incrementing sequence across every project and unlinked issue. Existing issues are numbered in creation order; comments, board placements/order, tags, lifecycle, content, and timestamps are retained. Issue URLs use `/issues/12`-style numeric IDs; old UUID links are not supported. New IDs are never reused. Back up `DATA_DIR` before upgrading; rollback requires restoring the backup, not just the old application.
 
 ## Issue table and mentions
 
@@ -40,6 +42,8 @@ The project list view is a table with Number, Issue, Board lane, Tags, Tagged us
 The list shows 25 rows per page by default, with 10, 50, or 100 also available. Up/Down opens adjacent issues, including across page boundaries; Shift+Up/Down or Shift-click selects a range in the current filtered/sorted order. Select issues across pages and choose **Close selected issues** to close selected open issues without changing board placements, or **Tag selected issues** to add teammates. The header checkbox selects only the current page; filtering removes hidden issues from the selection. Failed closes remain selected for retry. When switching issue details, the previous editor stays visible but non-interactive until the next issue loads.
 
 Select issues in either list and choose **Send to board**, or use the same action in issue details. Choose a visible lane for each selected project; open issues are added and existing cards moved, including cards in hidden lanes. Unlinked issues have no board; archived projects stay read-only. Closed issues already on a board can move, but closed off-board issues must be reopened first. The dialog explains skipped issues. Each project's batch is atomic; successful issues are deselected, failures remain selected and can be retried without resending successes. Board placement never saves or discards unsaved issue/comment drafts.
+
+Issue references use **`!12`**, not `#12` (`#` is reserved for tags). Type `!` in an issue or comment in Write or Markdown mode to search all issues by number or title, including closed and archived issues. Choose with arrow keys and Enter/Tab, or click a suggestion; Escape dismisses it. References are saved as plain `!12` and rendered as links to `/issues/12`; code, images, URLs and existing links are not interpreted as references. Unknown numbers still render links and show the normal not-found page when opened.
 
 Type `@` in an issue or comment (Write or Markdown mode), then select a teammate by name or email. Use arrow keys and Enter/Tab, or click a suggestion; Escape dismisses it. Selected mentions use stable user IDs, not display names. Saving maintains one deduplicated **Tagged users** list across the issue and its comments. Editing or deleting the last mention removes that association. Plain `@name` text and examples in code do not create associations. Tagging does not assign roles or send notifications; there is no separate assignee.
 

@@ -276,7 +276,7 @@ function IssueDetailForm({
         >
           <div className="detail-heading">
             <div className="detail-title">
-              <span className="eyebrow">ISSUE #{issue.number}</span>
+              <span className="eyebrow">ISSUE !{issue.number}</span>
               <IssueStateBadge state={issue.state} />
               <span className="muted">{project ? project.name : "No project"}</span>
               <small className="issue-created-meta muted">

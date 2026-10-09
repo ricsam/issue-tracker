@@ -18,7 +18,7 @@ const directory = () => {
 };
 afterAll(() => { for (const dir of dirs) rmSync(dir, { recursive: true }); rmSync(manifest); });
 
-test("workspace creation, independent numbering, lifecycle, board rejection, auth and atomic cross-project bulk", async () => {
+test("workspace creation, global numbering, lifecycle, board rejection, auth and atomic cross-project bulk", async () => {
   const app = createApp({ dataDir: directory() });
   let cookie = "";
   const req = (path: string, method = "GET", body?: unknown, auth = cookie, origin = "http://localhost:3000") => app.request(path, {
@@ -41,7 +41,7 @@ test("workspace creation, independent numbering, lifecycle, board rejection, aut
     const d = await create({ title: "Legacy", body: "Body", labels: ["compatible"] }, `/api/projects/${project.slug}/issues`);
     const e = await create({ body: "Other", projectId: other.id });
     expect([a.projectId, b.projectId, c.projectId]).toEqual([null, null, project.id]);
-    expect([a.number, b.number, c.number, d.number, e.number]).toEqual([1, 2, 1, 2, 1]);
+    expect([a.number, b.number, c.number, d.number, e.number]).toEqual([1, 2, 3, 4, 5]);
     expect((await req("/api/issues", "POST", { body: "x", projectId: crypto.randomUUID() })).status).toBe(404);
     expect((await req("/api/issues", "POST", { body: "x", projectId: 1 })).status).toBe(400);
     expect((await req(`/api/issues/${a.id}`, "PATCH", { projectId: project.id })).status).toBe(400);
@@ -87,7 +87,7 @@ test("workspace creation, independent numbering, lifecycle, board rejection, aut
     expect((await req("/api/issues", "POST", { body: "x", projectId: project.id })).status).toBe(409);
     expect((await (await req("/api/issues")).json()).issues).toHaveLength(5);
     const before = app.db.query("SELECT * FROM issues ORDER BY id").all();
-    for (const target of [c.id, crypto.randomUUID()]) {
+    for (const target of [c.id, "999999"])  {
       const status = target === c.id ? 409 : 404;
       expect((await req("/api/issues/labels", "POST", { issueIds: [a.id, target], labels: ["rollback"] })).status).toBe(status);
       expect((await req("/api/issues/tagged-users", "POST", { issueIds: [b.id, target], userIds: [user.id] })).status).toBe(status);
@@ -99,7 +99,7 @@ test("workspace creation, independent numbering, lifecycle, board rejection, aut
 
 test("v9 rebuild preserves populated v8 tables, constraints, indexes, triggers and children; reopening is idempotent", () => {
   const path = join(directory(), "migration.sqlite");
-  let db = openDatabase(path);
+  let db = openDatabase(path, 10);
   // Reconstruct the exact pre-v9 NOT NULL schema while retaining all v8 additions.
   const schema = (db.query("SELECT sql FROM sqlite_schema WHERE name='issues'").get() as { sql: string }).sql;
   const indexes = db.query("SELECT sql FROM sqlite_schema WHERE tbl_name='issues' AND type='index' AND sql IS NOT NULL AND name!='issues_unlinked_number'").all() as { sql: string }[];
@@ -123,7 +123,7 @@ test("v9 rebuild preserves populated v8 tables, constraints, indexes, triggers a
   const rows = tables.map((table) => db.query(`SELECT * FROM ${table}`).all());
   db.close();
   for (let attempt = 0; attempt < 2; attempt++) {
-    db = openDatabase(path);
+    db = openDatabase(path, 10);
     expect(tables.map((table) => db.query(`SELECT * FROM ${table}`).all())).toEqual(rows);
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
@@ -132,7 +132,7 @@ test("v9 rebuild preserves populated v8 tables, constraints, indexes, triggers a
     expect(() => db.exec("UPDATE issues SET projectId='missing'")).toThrow();
     db.close();
   }
-  db = openDatabase(path);
+  db = openDatabase(path, 10);
   const insert = db.query("INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (?,1,?,'Title','Body','backlog','none','[]','u','time','time')");
   insert.run("unlinked", null);
   expect(() => insert.run("duplicate", null)).toThrow();

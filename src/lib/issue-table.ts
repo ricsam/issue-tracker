@@ -46,7 +46,7 @@ export function issueTableRows(issues: Issue[], users: User[], state: IssueTable
   return issues.filter((issue) => {
     const date = issueDateKey(issue.createdAt);
     return (
-      String(issue.number).includes(state.number.trim().replace(/^#/, "")) &&
+      String(issue.number).includes(state.number.trim().replace(/^!/, "")) &&
       issue.title.toLocaleLowerCase().includes(state.title.trim().toLocaleLowerCase()) &&
       (!state.label || (state.label === "none" ? issue.labels.length === 0 : issue.labels.includes(state.label.slice(6)))) &&
       (!state.tagged || (state.tagged === "none" ? issue.taggedUserIds.length === 0 : issue.taggedUserIds.includes(state.tagged))) &&

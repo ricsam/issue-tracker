@@ -21,8 +21,8 @@ export function mentionQuery(text: string) {
     else if (run.length === ticks) ticks = 0;
   }
   if (ticks) return null;
-  // A # trigger hands completion to tags rather than keeping a stale @ query.
-  const match = /(?:^|[\s(])@([^@#\n\r\[\]()`<>]{0,60})$/.exec(line);
+  // # and ! hand completion to tags/issues instead of keeping a stale @ query.
+  const match = /(?:^|[\s(])@([^@#!\n\r\[\]()`<>]{0,60})$/.exec(line);
   if (!match || /\]\([^)]*$/.test(line)) return null;
   return { query: match[1], start: text.length - match[1].length - 1, end: text.length };
 }

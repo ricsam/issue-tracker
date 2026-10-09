@@ -39,8 +39,16 @@ async function setup(page: Page, baseURL: string, board = false) {
   return { path, endpoint: `/api/projects/${project.slug}/issues` };
 }
 
+async function expectCreated(page: Page) {
+  await expect(editor(page)).toBeEmpty();
+  const href = await modal(page).getByRole("link", { name: "View issue" }).getAttribute("href");
+  const { issue } = await (await page.request.get(`/api${href}`)).json();
+  await expect(status(page)).toContainText(`Issue !${issue.number} created.`);
+  return issue;
+}
+
 async function expectReset(page: Page) {
-  await expect(status(page)).toContainText(/Issue #\d+ created\./);
+  await expect(status(page)).toContainText(/Issue !\d+ created\./);
   await expect(editor(page)).toBeVisible();
   await expect(editor(page)).toBeEmpty();
   await expect(editor(page)).toBeFocused();
@@ -61,14 +69,15 @@ test("repeat creation resets preview, Markdown and undo history, then Done revea
   await expectReset(page);
   await expect(page).toHaveURL(path);
   await page.screenshot({ path: "test-results/issue-created-desktop.png" });
+  const firstCreated = await expectCreated(page);
   const firstLink = await modal(page).getByRole("link", { name: "View issue" }).getAttribute("href");
   await editor(page).press("ControlOrMeta+z");
   await expect(editor(page)).toBeEmpty();
   await editor(page).fill("Second creation");
-  await expect(status(page)).toContainText("Issue #1 created.");
+  await expect(status(page)).toContainText(`Issue !${firstCreated.number} created.`);
   await modal(page).getByRole("button", { name: "Markdown", exact: true }).click();
   await submit(page).click();
-  await expect(status(page)).toContainText("Issue #2 created.");
+  await expectCreated(page);
   await expectReset(page);
   await expect(modal(page).getByRole("link", { name: "View issue" })).not.toHaveAttribute("href", firstLink!);
   await modal(page).getByRole("button", { name: "Dismiss notification" }).click();
@@ -207,7 +216,7 @@ test("a rejected submission retains the entire draft and can be retried", async 
   await page.unroute(`**${endpoint}`);
   await submit(page).click();
   await expectReset(page);
-  await expect(status(page)).toContainText("Issue #1 created.");
+  await expectCreated(page);
 });
 
 test("a refresh failure after POST remains a committed creation, not a retryable draft", async ({ page, baseURL }) => {
@@ -257,7 +266,7 @@ test("pending creation locks the draft and actions and only sends one request", 
   } finally {
     release();
   }
-  await expect(status(page)).toContainText("Issue #2 created.");
+  await expectCreated(page);
   await expectReset(page);
   expect((await (await page.request.get(endpoint)).json()).issues).toHaveLength(2);
 });
@@ -269,6 +278,7 @@ test("mobile board creation exposes actions without overflow and never adds boar
   await expect(submit(page)).toBeInViewport();
   await submit(page).click();
   await expectReset(page);
+  const created = await expectCreated(page);
   await expect(page).toHaveURL(path + "/board");
   for (const action of [modal(page).getByRole("link", { name: "View issue" }), modal(page).getByRole("button", { name: "Done", exact: true }), modal(page).getByRole("button", { name: "Dismiss notification" })]) {
     await expect(action).toBeInViewport();
@@ -295,5 +305,5 @@ test("mobile board creation exposes actions without overflow and never adds boar
   await modal(page).getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: /Add issue #1:.*Mobile board creation/ })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: new RegExp(`Add issue !${created.number}:.*Mobile board creation`) })).toBeVisible();
 });

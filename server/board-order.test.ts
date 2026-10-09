@@ -142,7 +142,7 @@ test("late storage error rolls back earlier order writes", async () => {
 
 test("v10 preserves v9 hidden/custom memberships, ascending-number lane order and all content; idempotent", () => {
   const entry = directory(); const path = join(entry.dir, "migration.sqlite");
-  let db = openDatabase(path);
+  let db = openDatabase(path, 10);
   db.exec("DROP INDEX board_issues_order; ALTER TABLE board_issues DROP COLUMN position; DELETE FROM migrations WHERE version=10");
   db.exec(`INSERT INTO users VALUES ('u','User','user@example.com','admin','time',NULL);
     INSERT INTO projects VALUES ('p','p','P','','time',NULL,NULL);
@@ -156,7 +156,7 @@ test("v10 preserves v9 hidden/custom memberships, ascending-number lane order an
   const content = tables.map((t) => db.query(`SELECT * FROM ${t}`).all());
   db.close();
   for (let attempt = 0; attempt < 2; attempt++) {
-    db = openDatabase(path);
+    db = openDatabase(path, 10);
     expect(tables.map((t) => db.query(`SELECT * FROM ${t}`).all())).toEqual(content);
     expect(db.query("SELECT issueId,lane FROM board_issues ORDER BY position").all()).toEqual([
       { issueId: "i1", lane: "custom_old" }, { issueId: "i2", lane: "custom_old" }, { issueId: "i3", lane: "custom_old" }, { issueId: "i4", lane: "todo" },

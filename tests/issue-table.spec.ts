@@ -17,9 +17,11 @@ test("table keyboard navigation and reversible ranges cross pages without confla
   await page.setViewportSize({ width: 1440, height: 1000 });
   const headers = { Origin: baseURL! };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Navigation ${randomUUID()}` } })).json();
+  const numbers: number[] = [];
   for (let index = 1; index <= 12; index++) {
     const response = await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: `Item ${String(index).padStart(2, "0")}` } });
     expect(response.ok()).toBeTruthy();
+    numbers.push((await response.json()).issue.number);
   }
   await page.goto(`/projects/${project.slug}`);
   const table = page.getByRole("table");
@@ -44,8 +46,8 @@ test("table keyboard navigation and reversible ranges cross pages without confla
   await page.keyboard.press("Shift+ArrowUp");
   await expect(table.locator("tbody input:checked")).toHaveCount(2);
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
-  await table.getByLabel("Select issue #9", { exact: true }).check();
-  await table.getByLabel("Select issue #10", { exact: true }).click({ modifiers: ["Shift"] });
+  await table.getByLabel(`Select issue !${numbers[8]}`, { exact: true }).check();
+  await table.getByLabel(`Select issue !${numbers[9]}`, { exact: true }).click({ modifiers: ["Shift"] });
   await expect(table.locator("tbody input:checked")).toHaveCount(2);
   await expect(links.nth(9)).toBeFocused();
   await page.keyboard.press("Shift+ArrowDown");
@@ -66,14 +68,14 @@ test("table keyboard navigation and reversible ranges cross pages without confla
 
   // Sorting invalidates the old range anchor; a first Shift-click starts anew.
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
-  await table.getByLabel("Select issue #9", { exact: true }).check();
+  await table.getByLabel(`Select issue !${numbers[8]}`, { exact: true }).check();
   await table.getByRole("button", { name: "Sort by issue", exact: true }).click();
   await table.getByRole("button", { name: "Sort by issue", exact: true }).click();
   await links.first().click({ modifiers: ["Shift"] });
   await expect(table.locator("tbody input:checked")).toHaveCount(2);
   await expect(sidebar).toContainText("Item 10");
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
-  await table.getByLabel("Select issue #12", { exact: true }).check();
+  await table.getByLabel(`Select issue !${numbers[11]}`, { exact: true }).check();
   const cell = table.locator("tbody tr").nth(2).locator("td").last();
   await cell.scrollIntoViewIfNeeded();
   const box = (await cell.boundingBox())!;
@@ -177,7 +179,7 @@ for (const width of [1440, 390]) {
     await table.getByLabel("Filter by issue", { exact: true }).fill("zeb");
     await page.keyboard.press("Escape");
     await table.getByRole("button", { name: "Number filters", exact: true }).click();
-    await table.getByLabel("Filter by number").fill("#1");
+    await table.getByLabel("Filter by number").fill(`!${created[0].number}`);
     await page.keyboard.press("Escape");
     await expect(titles).toHaveText(["Zebra"]);
     await table.getByRole("button", { name: "Created filters", exact: true }).click();
@@ -198,6 +200,8 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Clear column filters" }).click();
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("Alex Morgan");
     await expect(titles).toHaveText(["Zebra"]);
+    await page.getByRole("textbox", { name: "Search issues", exact: true }).fill(`!${created[0].number}`);
+    await expect(titles).toHaveText(["Zebra"]);
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
     const scroll = page.getByRole("region", { name: "Scrollable issues table" });
@@ -210,7 +214,7 @@ for (const width of [1440, 390]) {
       await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
       await table.getByLabel("Filter by tagged user").selectOption("none");
       await page.keyboard.press("Escape");
-      await table.getByRole("link", { name: "#2 Alpha", exact: true }).click();
+      await table.getByRole("link", { name: `!${created[1].number} Alpha`, exact: true }).click();
       const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
       const discussion = sidebar.locator(".comments");
       await discussion.getByRole("button", { name: "Markdown", exact: true }).click();

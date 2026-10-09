@@ -36,7 +36,7 @@ export function BoardAddIssuesDialog({
   const matches = available.filter((issue) =>
     `${issue.number} ${issue.title} ${issue.labels.join(" ")}`
       .toLowerCase()
-      .includes(query.toLowerCase()),
+      .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
 
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -130,7 +130,7 @@ export function BoardAddIssuesDialog({
               >
                 <input
                   type="checkbox"
-                  aria-label={`Add issue #${issue.number}: ${issue.title}`}
+                  aria-label={`Add issue !${issue.number}: ${issue.title}`}
                   checked={selected.has(issue.id)}
                   onChange={(event) => {
                     const checked = event.target.checked;
@@ -142,7 +142,7 @@ export function BoardAddIssuesDialog({
                     });
                   }}
                 />
-                <span className="issue-number">#{issue.number}</span>
+                <span className="issue-number">!{issue.number}</span>
                 <span className="board-option-title">{issue.title}</span>
               </label>
             ))}

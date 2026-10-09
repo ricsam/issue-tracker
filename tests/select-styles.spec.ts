@@ -51,13 +51,13 @@ for (const width of [1440, 390]) {
     await lane.selectOption("in_progress");
     await expect(lane).toHaveValue("in_progress");
     await lane.screenshot({ path: testInfo.outputPath("regular-select.png") });
-    await dialog.getByRole("checkbox", { name: /Add issue #1:/ }).check();
+    await dialog.getByRole("checkbox", { name: new RegExp(`Add issue !${issue.number}:`) }).check();
     await dialog.getByRole("button", { name: "Add to board", exact: true }).click();
     await expect(dialog).toBeHidden();
 
     await expect(page.locator(".board-card select")).toHaveCount(0);
-    await page.getByRole("button", { name: "Board actions for issue #1" }).click();
-    const menu = page.getByRole("menu", { name: "Board actions for issue #1" });
+    await page.getByRole("button", { name: `Board actions for issue !${issue.number}` }).click();
+    const menu = page.getByRole("menu", { name: `Board actions for issue !${issue.number}` });
     const box = (await menu.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(width);

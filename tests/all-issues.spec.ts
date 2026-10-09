@@ -157,7 +157,7 @@ test("all issues combines project filtering and bulk actions while archived rows
   await page.getByRole("link", { name: /^Open \d/ }).click();
   await filterProject(page, archived.id);
   await expect(rows(page)).toHaveCount(1);
-  await rows(page).getByRole("link", { name: /#\d+ Filter/ }).click();
+  await rows(page).getByRole("link", { name: /!\d+ Filter/ }).click();
   await expect(sidebar(page).getByText(/belongs to an archived project/)).toBeVisible();
   await page.keyboard.press("Alt+n");
   await expect(dialog(page)).toBeVisible();

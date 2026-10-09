@@ -96,7 +96,7 @@ test("unknown and foreign IDs, body size and aggregate labels roll back earlier 
   const many = await f.create(Array.from({ length: 30 }, (_, i) => `#label${i}`).join(" "));
   const other = (await (await f.req("/api/projects", "POST", { name: "Other" })).json()).project;
   const foreign = (await (await f.req(`/api/projects/${other.slug}/issues`, "POST", { body: "Foreign" })).json()).issue;
-  for (const [target, status] of [[full.id, 400], [many.id, 400], [foreign.id, 400], [crypto.randomUUID(), 404]] as const) {
+  for (const [target, status] of [[full.id, 400], [many.id, 400], [foreign.id, 400], ["999999", 404], [crypto.randomUUID(), 400]] as const) {
     expect((await f.label([a.id, target])).status).toBe(status);
     expect(await f.get(a.id)).toEqual(a);
   }

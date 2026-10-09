@@ -425,7 +425,7 @@ test("forward migration preserves explicit selection, translates backlog, exclud
     ids.push(projectIds);
   }
   db.exec(
-    "DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards; DELETE FROM migrations WHERE version>=4;",
+    "DROP TABLE board_issues; DROP INDEX issues_project_id; DROP TABLE project_boards; ALTER TABLE legacy_project_boards RENAME TO project_boards; DELETE FROM migrations WHERE version>=4 AND version<11;",
   );
   db.query("INSERT INTO project_boards VALUES (?,?,?)").run(
     projects[0].id,

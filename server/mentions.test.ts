@@ -61,7 +61,7 @@ test("bulk tagging rolls back all targets on invalid IDs, size, archive or stora
   const other = (await (await f.req("/api/projects", "POST", { name: "Other" })).json()).project;
   const foreign = (await (await f.req(`/api/projects/${other.slug}/issues`, "POST", { body: "Foreign" })).json()).issue;
   const tag = (issueIds: string[], userIds = [f.member.id]) => f.req(`${f.path}/issues/tag`, "POST", { issueIds, userIds });
-  for (const target of [full.id, foreign.id, crypto.randomUUID()]) {
+  for (const target of [full.id, foreign.id, "999999"]) {
     expect((await tag([a.id, target])).status).toBe(target === full.id || target === foreign.id ? 400 : 404);
     expect((await (await f.req(`/api/issues/${a.id}`)).json()).issue).toEqual(a);
   }
