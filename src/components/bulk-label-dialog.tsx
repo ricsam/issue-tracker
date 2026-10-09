@@ -6,7 +6,7 @@ import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import "./bulk-tag-dialog.css";
 
 export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClose }: {
-  slug: string;
+  slug?: string;
   issueIds: string[];
   existingLabels: string[];
   onSaved: (issues: Issue[]) => void;
@@ -32,7 +32,7 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
     setBusy(true);
     setError("");
     try {
-      const result = await api<{ issues: Issue[] }>(`/api/projects/${encodeURIComponent(slug)}/issues/labels`, {
+      const result = await api<{ issues: Issue[] }>(slug ? `/api/projects/${encodeURIComponent(slug)}/issues/labels` : "/api/issues/labels", {
         method: "POST",
         body: JSON.stringify({ issueIds: [...new Set(issueIds)], labels }),
       });

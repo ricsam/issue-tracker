@@ -344,6 +344,15 @@ fieldset > small {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sidebar-create-issue {
+  width: 100%;
+  border: 1px solid #ded5f0;
+  background: #f2edfc;
+  color: #7050ad;
+  text-align: left;
+  margin-bottom: 12px;
+}
+.sidebar-create-issue kbd { margin-left: auto; font-size: 10px; white-space: nowrap; color: #81758f; }
 .nav-item.active {
   background: #eae4f8;
   color: #7251c7;

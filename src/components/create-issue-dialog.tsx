@@ -5,6 +5,7 @@ import type { Issue, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
+import { useProjectTags } from "../lib/issue-tags";
 import { SAVE_ISSUE_KEYS, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { RichEditor } from "./rich-editor";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
@@ -15,16 +16,20 @@ export function CreateIssueDialog({
   onClose,
   canViewIssue,
   onViewIssue,
-  existingTags = [],
+  existingTags,
 }: {
-  project: Project;
+  project?: Project | null;
   existingTags?: string[];
   onCreated: (issue: Issue) => void;
   onClose: () => void;
   canViewIssue: () => boolean;
   onViewIssue?: (issue: Issue, source: HTMLAnchorElement) => void;
 }) {
-  const { users } = useWorkspace();
+  const { users, projects } = useWorkspace();
+  const [projectId, setProjectId] = useState(project?.id ?? "");
+  const selectedProject = projects.find((candidate) => candidate.id === projectId);
+  const catalog = useProjectTags(selectedProject?.slug, projectId === (project?.id ?? "") ? existingTags : undefined);
+  const [createdTags, setCreatedTags] = useState<string[]>([]);
   const submitting = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +54,7 @@ export function CreateIssueDialog({
     try {
       validateIssueBody(body);
       const { issue } = await api<{ issue: Issue }>(
-        `/api/projects/${encodeURIComponent(project.slug)}/issues`,
+        selectedProject ? `/api/projects/${encodeURIComponent(selectedProject.slug)}/issues` : "/api/issues",
         {
           method: "POST",
           body: JSON.stringify({ body }),
@@ -58,6 +63,7 @@ export function CreateIssueDialog({
       setCreated(issue);
       setShowNotice(true);
       setBody("");
+      setCreatedTags((current) => [...new Set([...current, ...issue.labels])]);
       onCreated(issue);
     } catch (cause) {
       setError(message(cause));
@@ -92,6 +98,8 @@ export function CreateIssueDialog({
     if (created && onViewIssue) {
       event.preventDefault();
       onViewIssue(created, event.currentTarget);
+    } else {
+      onClose();
     }
   }
 
@@ -106,6 +114,12 @@ export function CreateIssueDialog({
       <form ref={form} onSubmit={create} className="create-issue-form" aria-busy={busy}>
         <div ref={fields} className="create-issue-fields">
           <fieldset disabled={busy} inert={busy} className="form-stack">
+            <label>Project
+              <select aria-label="Project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setCreatedTags([]); }}>
+                <option value="">No project</option>
+                {projects.filter((candidate) => !candidate.archivedAt).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
             <div>
               <RichEditor
                 // A fresh editor clears undo history, attachments and preview/source mode,
@@ -114,7 +128,7 @@ export function CreateIssueDialog({
                 value={body}
                 onChange={setBody}
                 mentionUsers={users}
-                existingTags={existingTags}
+                existingTags={[...new Set([...catalog, ...createdTags])]}
                 ariaLabel="Issue"
                 autoFocus
                 placeholder="What needs to happen? Just start writing…"

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
@@ -192,6 +192,7 @@ export function createApp(options: AppOptions = {}) {
   };
   const activeIssue = (issueId: string) => {
     const i = issue(issueId);
+    if (i.projectId === null) return i;
     const { archivedAt } = db
       .query("SELECT archivedAt FROM projects WHERE id=?")
       .get(i.projectId) as { archivedAt: string | null };
@@ -565,16 +566,18 @@ export function createApp(options: AppOptions = {}) {
     }).immediate();
     return c.json({ board: board(p.id) });
   });
-  app.post("/api/projects/:slug/issues/tag", async (c) => {
+  const tagIssues = async (c: Context<Env>) => {
     const ids = z.array(z.string().uuid()).min(1).max(1000)
       .refine((values) => new Set(values).size === values.length);
     const input = z.object({ issueIds: ids, userIds: ids }).strict().parse(await json(c));
     const issues = db.transaction(() => {
-      const p = activeProject(c.req.param("slug"));
+      const slug = c.req.param("slug");
+      const p = slug ? activeProject(slug) : null;
       const users = input.userIds.map((userId) => publicUser(userId) ?? fail(400, "Unknown mentioned user"));
       return input.issueIds.map((issueId) => {
         const current = issue(issueId);
-        if (current.projectId !== p.id) fail(400, "Unknown project issue");
+        if (p && current.projectId !== p.id) fail(400, "Unknown project issue");
+        activeIssue(issueId);
         const body = appendIssueMentions(current.body, current.title, users);
         if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Tagged issue exceeds body length limit");
         if (body !== current.body) {
@@ -585,18 +588,22 @@ export function createApp(options: AppOptions = {}) {
       });
     }).immediate();
     return c.json({ issues });
-  });
-  app.post("/api/projects/:slug/issues/labels", async (c) => {
+  };
+  app.post("/api/projects/:slug/issues/tag", tagIssues);
+  app.post("/api/issues/tagged-users", tagIssues);
+  const labelIssues = async (c: Context<Env>) => {
     const input = z.object({
       issueIds: z.array(z.string().uuid()).min(1).max(1000)
         .refine((values) => new Set(values).size === values.length),
       labels: z.array(text(50)).min(1).max(30),
     }).strict().parse(await json(c));
     const issues = db.transaction(() => {
-      const p = activeProject(c.req.param("slug"));
+      const slug = c.req.param("slug");
+      const p = slug ? activeProject(slug) : null;
       return input.issueIds.map((issueId) => {
         const current = issue(issueId);
-        if (current.projectId !== p.id) fail(400, "Unknown project issue");
+        if (p && current.projectId !== p.id) fail(400, "Unknown project issue");
+        activeIssue(issueId);
         const body = appendIssueLabels(current.body, current.title, input.labels);
         if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Labeled issue exceeds body length limit");
         if (body !== current.body) {
@@ -607,7 +614,9 @@ export function createApp(options: AppOptions = {}) {
       });
     }).immediate();
     return c.json({ issues });
-  });
+  };
+  app.post("/api/projects/:slug/issues/labels", labelIssues);
+  app.post("/api/issues/labels", labelIssues);
   app.post("/api/projects/:slug/board/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const input = z
@@ -685,9 +694,15 @@ export function createApp(options: AppOptions = {}) {
       .all(p.id) as { id: string }[];
     return c.json({ issues: rows.map((r) => issue(r.id)) });
   });
-  app.post("/api/projects/:slug/issues", async (c) => {
-    const p = activeProject(c.req.param("slug"));
-    const input = issueFields.parse(await json(c));
+  app.get("/api/issues", (c) => {
+    const rows = db.query("SELECT id FROM issues ORDER BY createdAt,id").all() as { id: string }[];
+    return c.json({ issues: rows.map((r) => issue(r.id)) });
+  });
+  const createIssue = async (c: Context<Env>) => {
+    const slug = c.req.param("slug");
+    const input = (slug ? issueFields : issueFields.extend({ projectId: text(100).nullable().optional() }))
+      .parse(await json(c)) as z.infer<typeof issueFields> & { projectId?: string | null };
+    const projectId = slug ? activeProject(slug).id : input.projectId ?? null;
     const originalBody = input.title === undefined ? input.body : prependLegacyTitle(input.title, input.body);
     const body = appendIssueLabels(originalBody, deriveIssueTitle(originalBody), input.labels);
     if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
@@ -695,19 +710,23 @@ export function createApp(options: AppOptions = {}) {
     const uid = id();
     const time = now();
     db.transaction(() => {
-      activeProject(p.slug);
+      if (projectId !== null) {
+        const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
+        if (!p) return fail(404, "Project not found");
+        if (p.archivedAt) fail(409, "Project is archived");
+      }
       validateMentions(body);
       const n = db
         .query(
-          "SELECT COALESCE(MAX(number),0)+1 AS n FROM issues WHERE projectId=?",
+          "SELECT COALESCE(MAX(number),0)+1 AS n FROM issues WHERE projectId IS ?",
         )
-        .get(p.id) as { n: number };
+        .get(projectId) as { n: number };
       db.query(
         "INSERT INTO issues (id,number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       ).run(
         uid,
         n.n,
-        p.id,
+        projectId,
         deriveIssueTitle(originalBody),
         body,
         "backlog", // Archived legacy columns; not active issue state.
@@ -720,7 +739,9 @@ export function createApp(options: AppOptions = {}) {
       syncIssueTaggedUsers(db, uid);
     }).immediate();
     return c.json({ issue: issue(uid) });
-  });
+  };
+  app.post("/api/projects/:slug/issues", createIssue);
+  app.post("/api/issues", createIssue);
   app.get("/api/issues/:id", (c) =>
     c.json({
       issue: issue(c.req.param("id")),

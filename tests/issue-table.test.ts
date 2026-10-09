@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Issue, User } from "../shared/types";
-import { initialIssueTableState, issueDateKey, issueTableRows } from "../src/lib/issue-table";
+import type { Issue, Project, User } from "../shared/types";
+import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows } from "../src/lib/issue-table";
 
 const users: User[] = [
   { id: "a", name: "Alex", email: "alex@example.test", role: "member", createdAt: "2026-01-01" },
@@ -15,6 +15,25 @@ const issues = [
   issue(3, { title: "alpha", labels: ["bug", "design"], taggedUserIds: ["a", "b"] }),
 ];
 const numbers = (rows: Issue[]) => rows.map((row) => row.number);
+
+const projects: Project[] = [
+  { id: "p", name: "Alpha", slug: "alpha", description: "", createdAt: "2026-01-01", archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },
+  { id: "q", name: "Zebra", slug: "zebra", description: "", createdAt: "2026-01-01", archivedAt: "2026-01-02", archivedById: "a", issueCount: 0, openCount: 0 },
+];
+
+test("project filters distinguish unlinked and archived-project issues and combine with other filters", () => {
+  const rows = [issue(1, { id: "linked", projectId: "p", labels: ["bug"] }), issue(1, { id: "unlinked", projectId: null, labels: ["bug"] }), issue(1, { id: "archived", projectId: "q" })];
+  const ids = (state: Partial<typeof initialIssueTableState>) => issueTableRows(rows, users, { ...initialIssueTableState, ...state }, projects).map((row) => row.id);
+  expect(ids({ project: "none" })).toEqual(["unlinked"]);
+  expect(ids({ project: "q" })).toEqual(["archived"]);
+  expect(ids({ project: "p", label: "label:bug" })).toEqual(["linked"]);
+  expect(ids({ project: "none", label: "label:other" })).toEqual([]);
+  expect(ids({ sort: "project" })).toEqual(["linked", "unlinked", "archived"]);
+  expect(ids({ sort: "project", direction: "descending" })).toEqual(["archived", "unlinked", "linked"]);
+  expect(hasColumnFilters({ ...initialIssueTableState, project: "none" })).toBe(true);
+  // Duplicate per-project issue numbers still have a deterministic row order.
+  expect(issueTableRows([...rows].reverse(), users, initialIssueTableState)).toEqual(issueTableRows(rows, users, initialIssueTableState));
+});
 
 test("table sorts without mutation and breaks ties by number", () => {
   expect(numbers(issueTableRows(issues, users, initialIssueTableState))).toEqual([2, 3, 10]);

@@ -19,6 +19,8 @@ import {
   Layers3,
   FolderKanban,
   LayoutGrid,
+  List,
+  Plus,
   Settings,
   LogOut,
   Menu,
@@ -29,6 +31,8 @@ import type { AuthStatus, Issue, Project, User } from "../shared/types";
 import { api, AUTH_EXPIRED_EVENT, message } from "./lib/api";
 import { WorkspaceContext } from "./lib/workspace";
 import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
+import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
+import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
 import { Button, ErrorNotice, Loading } from "./components/ui/primitives";
 import { AuthPage } from "./pages/auth";
 import { ProjectsPage } from "./pages/projects";
@@ -41,6 +45,14 @@ const DetailPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./pages/admin").then((module) => ({ default: module.AdminPage })),
 );
+function SidebarCreateIssue() {
+  const open = useIssueCreation();
+  return <button type="button" className="nav-item sidebar-create-issue" onClick={open}
+    aria-label="Create issue (Alt+N)" title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+    <Plus size={18} /><span>Create issue</span><kbd>Alt N</kbd>
+  </button>;
+}
+
 function AppContent() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -158,6 +170,7 @@ function AppContent() {
     <WorkspaceContext.Provider
       value={{ user: auth.user, users, projects, refresh }}
     >
+      <IssueCreationProvider>
       <IssueBreadcrumbContext.Provider value={setBreadcrumbIssue}>
       <a className="skip-link" href="#main-content">
         Skip to content
@@ -194,6 +207,11 @@ function AppContent() {
             </div>
           </div>
           <nav aria-label="Workspace">
+            <SidebarCreateIssue />
+            <NavLink end to="/issues" className="nav-item">
+              <List size={18} />
+              All issues
+            </NavLink>
             <NavLink end to="/projects" className="nav-item">
               <LayoutGrid size={18} />
               All projects
@@ -262,14 +280,14 @@ function AppContent() {
               <span className="muted">Workspace</span>
               <ChevronRight size={14} aria-hidden="true" />
               {issueRoute ? <>
-                <Link to="/projects">Projects</Link>
+                {breadcrumbProject ? <Link to="/projects">Projects</Link> : <Link to="/issues">All issues</Link>}
                 <ChevronRight size={14} aria-hidden="true" />
                 {breadcrumbProject && <>
                   <Link className="breadcrumb-project" to={`/projects/${breadcrumbProject.slug}`} title={breadcrumbProject.name}>{breadcrumbProject.name}</Link>
                   <ChevronRight size={14} aria-hidden="true" />
                 </>}
                 <strong aria-current="page">{currentIssue ? `Issue #${currentIssue.number}` : "Issue details"}</strong>
-              </> : <strong aria-current="page">{location.pathname === "/admin" ? "Administration" : "Projects"}</strong>}
+              </> : <strong aria-current="page">{location.pathname === "/admin" ? "Administration" : location.pathname === "/issues" ? "All issues" : "Projects"}</strong>}
             </nav>
             <span className="topbar-right">
               <span className="online-dot" />
@@ -281,6 +299,7 @@ function AppContent() {
             <Suspense fallback={<Loading />}>
               <Routes>
                 <Route path="/projects" element={<ProjectsPage />} />
+                <Route path="/issues" element={<IssuesPage />} />
                 <Route path="/projects/:slug" element={<IssuesPage />} />
                 <Route path="/projects/:slug/board" element={<IssuesPage />} />
                 <Route path="/issues/:id" element={<DetailPage />} />
@@ -303,6 +322,7 @@ function AppContent() {
         </div>
       </div>
       </IssueBreadcrumbContext.Provider>
+      </IssueCreationProvider>
     </WorkspaceContext.Provider>
   );
 }

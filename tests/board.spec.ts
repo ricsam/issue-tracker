@@ -177,7 +177,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   const create = page.getByRole("dialog", { name: "Create issue" });
   const editor = create.getByRole("textbox", { name: "Issue", exact: true });
   await expect(editor).toBeFocused();
-  await expect(create.getByRole("combobox")).toHaveCount(0);
+  await expect(create.getByRole("combobox")).toHaveCount(1);
+  await expect(create.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
   await expect(
     create.getByRole("checkbox", { name: "Add to board", exact: true }),
   ).toHaveCount(0);

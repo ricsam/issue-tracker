@@ -78,7 +78,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     modal.getByRole("img", { name: "design (v1).png" }),
   ).toBeVisible();
-  await expect(modal.getByRole("combobox")).toHaveCount(0);
+  await expect(modal.getByRole("combobox")).toHaveCount(1);
+  await expect(modal.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
   await expect(editor).toContainText("#design #enhancement");
   await modal
     .getByRole("button", { name: "Create issue", exact: true })

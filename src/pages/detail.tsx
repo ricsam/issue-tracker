@@ -23,7 +23,8 @@ import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
-import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut, useNewIssueShortcut } from "../lib/issue-shortcuts";
+import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
+import { useIssueCreationHandler } from "../lib/issue-creation";
 import { useProjectTags } from "../lib/issue-tags";
 import {
   validateBody,
@@ -149,7 +150,7 @@ function IssueDetailForm({
   const catalog = useProjectTags(project?.slug, existingTags);
   const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
   useIssueSaveShortcut(form, !busy && !changingState && !archived, id);
-  useNewIssueShortcut(() => setCreating(true), !embedded && !!project && !archived);
+  useIssueCreationHandler(() => setCreating(true), !embedded);
   const setBreadcrumb = useIssueBreadcrumb();
   useEffect(() => {
     if (embedded) return;
@@ -271,6 +272,7 @@ function IssueDetailForm({
             <div className="detail-title">
               <span className="eyebrow">ISSUE #{issue.number}</span>
               <IssueStateBadge state={issue.state} />
+              <span className="muted">{project ? project.name : "No project"}</span>
               <small className="issue-created-meta muted">
                 Created <time dateTime={issue.createdAt}>{new Date(issue.createdAt).toLocaleDateString()}</time>
                 {" · by "}{users.find((u) => u.id === issue.authorId)?.name || "a teammate"}
@@ -366,7 +368,7 @@ function IssueDetailForm({
           </form>
         )}
       </section>
-      {creating && project && <CreateIssueDialog project={project} existingTags={tags}
+      {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}
         canViewIssue={() => !pending || window.confirm("Discard unsaved issue changes or comment?")} />}

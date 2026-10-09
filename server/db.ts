@@ -192,5 +192,36 @@ export function openDatabase(path: string) {
     }
     db.query("INSERT INTO migrations VALUES (8)").run();
   }).immediate();
+  // SQLite cannot drop NOT NULL in place. Disable FK actions *outside* the
+  // transaction so replacing the parent cannot cascade-delete child rows.
+  db.exec("PRAGMA foreign_keys=OFF");
+  try {
+    db.transaction(() => {
+      if (db.query("SELECT version FROM migrations WHERE version=9").get()) return;
+      const { sql } = db.query("SELECT sql FROM sqlite_schema WHERE type='table' AND name='issues'").get() as { sql: string };
+      const objects = db.query("SELECT sql FROM sqlite_schema WHERE tbl_name='issues' AND type IN ('index','trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+      // Preserve the original table definition (including legacy columns and
+      // constraints) and every explicit index/trigger instead of enumerating them.
+      const definition = sql.replace(/^CREATE TABLE\s+(?:"issues"|issues)/i, 'CREATE TABLE issues_nullable')
+        .replace(/\bprojectId\s+TEXT\s+NOT NULL\b/i, 'projectId TEXT');
+      if (definition === sql) throw new Error("Unexpected issues table definition");
+      db.exec(definition);
+      const columns = db.query("PRAGMA table_xinfo(issues)").all() as { name: string; hidden: number }[];
+      const names = columns.filter((c) => !c.hidden).map((c) => `"${c.name.replaceAll('"', '""')}"`).join(',');
+      db.exec(`INSERT INTO issues_nullable (${names}) SELECT ${names} FROM issues;
+        DROP TABLE issues;
+        ALTER TABLE issues_nullable RENAME TO issues;`);
+      for (const object of objects) db.exec(object.sql);
+      // SQLite's ordinary composite UNIQUE permits repeated NULL values.
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS issues_unlinked_number ON issues(number) WHERE projectId IS NULL");
+      if (db.query("PRAGMA foreign_key_check").all().length)
+        throw new Error("Foreign key violation during issues migration");
+      db.query("INSERT INTO migrations VALUES (9)").run();
+    }).immediate();
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  db.exec("PRAGMA foreign_keys=ON");
   return db;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
-import type { Issue, User } from "../../shared/types";
+import type { Issue, Project, User } from "../../shared/types";
 import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
 import { ClosedTag } from "./lifecycle";
@@ -43,8 +43,8 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   </>;
 }
 
-export function IssueTable({ issues, allIssues, users, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues }: {
-  issues: Issue[]; allIssues: Issue[]; users: User[]; state: IssueTableState;
+export function IssueTable({ issues, allIssues, users, projects, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues }: {
+  issues: Issue[]; allIssues: Issue[]; users: User[]; projects?: Project[]; state: IssueTableState;
   onChange: (state: IssueTableState) => void; selectedId: string | null; controls?: string;
   onOpen: (event: MouseEvent<HTMLAnchorElement>, issue: Issue) => void;
   onNavigate: (issue: Issue, opener: HTMLAnchorElement) => boolean;
@@ -60,7 +60,8 @@ export function IssueTable({ issues, allIssues, users, state, onChange, selected
   const page = paging.key === resetKey ? Math.min(paging.page, pageCount - 1) : 0;
   useEffect(() => { setPaging({ key: resetKey, page }); }, [resetKey, page]);
   const [selection, setSelection] = useState<string[]>([]);
-  const eligible = new Set(readOnly ? [] : issues.map((issue) => issue.id));
+  const archivedProjects = new Set(projects?.filter((project) => project.archivedAt).map((project) => project.id));
+  const eligible = new Set(readOnly ? [] : issues.filter((issue) => !issue.projectId || !archivedProjects.has(issue.projectId)).map((issue) => issue.id));
   const selected = selection.filter((id) => eligible.has(id));
   const selectedOpen = selected.filter((id) => issues.some((issue) => issue.id === id && issue.state === "open"));
   const eligibleKey = JSON.stringify([...eligible].sort());
@@ -134,7 +135,9 @@ export function IssueTable({ issues, allIssues, users, state, onChange, selected
   const labels = [...new Set(allIssues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b));
   const patch = (value: Partial<IssueTableState>) => onChange({ ...state, ...value });
   const empty = (label: string) => <span className="muted empty-cell" aria-label={label}>—</span>;
+  const visibleColumns = projects ? [columns[0], columns[1], { key: "project" as const, label: "Project" }, ...columns.slice(2)] : columns;
   const filters: Record<IssueColumn, { active: boolean; clear: () => void; content: ReactNode }> = {
+    project: { active: !!state.project, clear: () => patch({ project: "" }), content: <select aria-label="Filter by project" value={state.project} onChange={(e) => patch({ project: e.target.value })}><option value="">All projects</option><option value="none">No project</option>{projects?.map((project) => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? " (archived)" : ""}</option>)}</select> },
     number: { active: !!state.number, clear: () => patch({ number: "" }), content: <input aria-label="Filter by number" placeholder="#" inputMode="numeric" value={state.number} onChange={(e) => patch({ number: e.target.value })} /> },
     title: { active: !!state.title, clear: () => patch({ title: "" }), content: <input aria-label="Filter by issue" placeholder="Filter title…" value={state.title} onChange={(e) => patch({ title: e.target.value })} /> },
     labels: { active: !!state.label, clear: () => patch({ label: "" }), content: <select aria-label="Filter by tag" value={state.label} onChange={(e) => patch({ label: e.target.value })}><option value="">All tags</option><option value="none">No tags</option>{labels.map((label) => <option key={label} value={`label:${label}`}>{label}</option>)}</select> },
@@ -153,19 +156,20 @@ export function IssueTable({ issues, allIssues, users, state, onChange, selected
     </div>
     <p className="issue-bulk-outcome" role="status">{outcome}</p>
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
-      <table className="issue-table">
+      <table className={`issue-table${projects ? " all-issues-table" : ""}`}>
         <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
-        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" /><col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
+        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
-          {columns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
+          {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
         </tr></thead>
         <tbody>{rows.map((issue) => <tr key={issue.id} onClickCapture={(event) => { if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).matches('input[type="checkbox"]')) return; event.preventDefault(); event.stopPropagation(); selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); }} className={`issue-row${selectedId === issue.id ? " is-selected" : ""}${selected.includes(issue.id) ? " is-bulk-selected" : ""}`}>
           <td><input type="checkbox" aria-label={`Select issue #${issue.number}`} checked={selected.includes(issue.id)} disabled={pending || !eligible.has(issue.id)} onChange={(event) => { if ((event.nativeEvent as globalThis.MouseEvent).shiftKey) { selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); return; } const checked = event.target.checked; activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: selected.filter((id) => id !== issue.id) }; setSelection((current) => checked ? [...new Set([...current, issue.id])] : current.filter((id) => id !== issue.id)); }} /></td>
           <td className="issue-number">#{issue.number}</td><td><Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`#${issue.number} ${issue.title}`}><strong>{issue.title}</strong>{issue.state === "closed" && <ClosedTag />}</Link></td>
+          {projects && <td className="issue-project">{issue.projectId ? (() => { const project = projects.find((candidate) => candidate.id === issue.projectId); return project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project"; })() : <span className="muted">No project</span>}</td>}
           <td><div className="issue-meta">{issue.labels.length ? issue.labels.map((label) => <span className="tag" key={label} title={label}>{label}</span>) : empty("No tags")}</div></td>
           <td><div className="issue-meta">{issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => { const user = users.find((candidate) => candidate.id === id); return <span className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>; }) : empty("No tagged users")}</div></td>
           <td><time dateTime={issue.createdAt} title={new Date(issue.createdAt).toLocaleString()}>{new Date(issue.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time></td>
-        </tr>)}{!issues.length && <tr><td colSpan={6} className="table-empty">{allIssues.length ? "No matching issues. Adjust or clear your filters." : "No issues in this view."}</td></tr>}</tbody>
+        </tr>)}{!issues.length && <tr><td colSpan={visibleColumns.length + 1} className="table-empty">{allIssues.length ? "No matching issues. Adjust or clear your filters." : "No issues in this view."}</td></tr>}</tbody>
       </table>
     </div>
     <nav className="issue-pagination" aria-label="Issue list pagination"><label>Rows per page <select aria-label="Rows per page" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPaging({ key: resetKey, page: 0 }); }}>{[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><span>{issues.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, issues.length)} of {issues.length}</span><span>Page {page + 1} of {pageCount}</span><Button type="button" variant="ghost" aria-label="Previous page" disabled={page === 0} onClick={() => setPaging({ key: resetKey, page: page - 1 })}>Previous</Button><Button type="button" variant="ghost" aria-label="Next page" disabled={page + 1 >= pageCount} onClick={() => setPaging({ key: resetKey, page: page + 1 })}>Next</Button></nav>

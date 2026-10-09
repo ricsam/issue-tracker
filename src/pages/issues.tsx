@@ -52,7 +52,8 @@ import {
 } from "../components/lifecycle";
 import { useDesktopIssues } from "../lib/use-desktop-issues";
 import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
-import { NEW_ISSUE_KEYS, newIssueTooltip, useNewIssueShortcut } from "../lib/issue-shortcuts";
+import { NEW_ISSUE_KEYS, newIssueTooltip } from "../lib/issue-shortcuts";
+import { useGloballyCreatedIssues, useIssueCreationHandler } from "../lib/issue-creation";
 import { issueTags } from "../lib/issue-tags";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -77,11 +78,13 @@ interface LaneDrag {
 
 export function IssuesPage() {
   const { slug } = useParams();
-  return <ProjectIssues key={slug} slug={slug || ""} />;
+  return <ProjectIssues key={slug ? `project:${slug}` : "all"} slug={slug || ""} />;
 }
 
 function ProjectIssues({ slug }: { slug: string }) {
-  const { refresh, users } = useWorkspace();
+  const { refresh, users, projects } = useWorkspace();
+  const all = !slug;
+  const listPath = all ? "/issues" : `/projects/${slug}`;
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
   const showClosed = useSearchParams()[0].get("state") === "closed";
@@ -151,6 +154,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   const [project, setProject] = useState<Project | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const globallyCreated = useGloballyCreatedIssues();
   const [boardSettings, setBoardSettings] = useState<BoardSettings>({
     lanes: LANES.map((lane) => lane.value),
     cards: [],
@@ -160,11 +164,19 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [addToBoard, setAddToBoard] = useState(false);
   const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
-  useNewIssueShortcut(() => setOpen(true), !loading && !!project && !project.archivedAt);
+  useIssueCreationHandler(() => setOpen(true), !loading && !loadFailed && (all || !!project));
+  useEffect(() => {
+    if (loading) return;
+    setIssues((current) => {
+      const additions = globallyCreated.filter((issue) => (all || issue.projectId === project?.id) && !current.some((item) => item.id === issue.id));
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }, [globallyCreated, loading, all, project?.id]);
   const existingTags = issueTags(issues);
   const [saving, setSaving] = useState<string | null>(null);
   const boardBusy = useRef(false);
@@ -247,15 +259,16 @@ function ProjectIssues({ slug }: { slug: string }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadFailed(false);
     setError("");
     Promise.all([
-      api<{ project: Project }>(
-        `/api/projects/${encodeURIComponent(slug || "")}`,
+      all ? Promise.resolve({ project: null }) : api<{ project: Project }>(
+        `/api/projects/${encodeURIComponent(slug)}`,
       ),
-      api<{ issues: Issue[] }>(
-        `/api/projects/${encodeURIComponent(slug || "")}/issues`,
+      api<{ issues: Issue[] }>(all ? "/api/issues" :
+        `/api/projects/${encodeURIComponent(slug)}/issues`,
       ),
-      api<{ board: BoardSettings }>(
+      all ? Promise.resolve({ board: { lanes: [], cards: [], customLanes: [] } }) : api<{ board: BoardSettings }>(
         `/api/projects/${encodeURIComponent(slug)}/board`,
       ),
     ])
@@ -266,7 +279,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           setBoardSettings(b.board);
         }
       })
-      .catch((e) => active && setError(message(e)))
+      .catch((e) => { if (active) { setLoadFailed(true); setError(message(e)); } })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
@@ -343,7 +356,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   function issueCreated(issue: Issue) {
     // Creation is already committed. A workspace refresh failure must not invite
     // a duplicate submission or prevent the next draft from being started.
-    setIssues((current) => [...current, issue]);
+    if (all || issue.projectId === project?.id) setIssues((current) => [...current, issue]);
     void refresh().catch((e) =>
       setError(
         `Issue #${issue.number} was created, but workspace counts could not refresh: ${message(e)}`,
@@ -351,7 +364,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     );
   }
   if (loading) return <Loading />;
-  if (!project)
+  if (loadFailed || (!all && !project))
     return (
       <>
         <ErrorNotice error={error} />
@@ -359,7 +372,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       </>
     );
   // Archived projects are read-only until restored.
-  const readOnly = !!project.archivedAt;
+  const readOnly = !!project?.archivedAt;
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes);
   const canReorderLanes = lanes.length > 1 && !saving && !readOnly;
   const dragFrom = laneDrag
@@ -383,7 +396,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
-  const filtered = board ? searched : issueTableRows(searched, users, tableState);
+  const filtered = board ? searched : issueTableRows(searched, users, tableState, projects);
   const boardOrder = lanes.flatMap((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
   function selectBoardIssue(id: string, checked: boolean, range = false) {
@@ -480,15 +493,15 @@ function ProjectIssues({ slug }: { slug: string }) {
       <div className="project-issues-content" ref={collection} tabIndex={-1}>
         <header className="page-heading">
           <div>
-            <span className="eyebrow">PROJECT</span>
-            <h1>{project.name}</h1>
+            <span className="eyebrow">{all ? "WORKSPACE" : "PROJECT"}</span>
+            <h1>{all ? "All issues" : project!.name}</h1>
             <p className="muted">
-              {project.description || "Every step forward starts here."}
+              {all ? "Every issue across your workspace, with or without a project." : project!.description || "Every step forward starts here."}
             </p>
           </div>
           {!readOnly && (
             <div className="page-actions">
-              <ArchiveProjectButton project={project} onChange={setProject} />
+              {project && <ArchiveProjectButton project={project} onChange={setProject} />}
               <Button onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                 <Plus size={16} />
                 Create issue
@@ -496,11 +509,11 @@ function ProjectIssues({ slug }: { slug: string }) {
             </div>
           )}
         </header>
-        {readOnly && (
+        {readOnly && project && (
           <ArchivedProjectNotice project={project} onChange={setProject} />
         )}
         <div className="filter-bar">
-          <div className="view-toggle">
+          {!all && <div className="view-toggle">
             <Link className={!board ? "active" : ""} to={`/projects/${slug}`}>
               <List size={16} />
               List
@@ -512,13 +525,13 @@ function ProjectIssues({ slug }: { slug: string }) {
               <Columns3 size={16} />
               Board
             </Link>
-          </div>
+          </div>}
           {!board && (
             <nav className="view-toggle" aria-label="Issue state">
               <Link
                 className={!showClosed ? "active" : ""}
                 aria-current={!showClosed ? "page" : undefined}
-                to={`/projects/${slug}`}
+                to={listPath}
               >
                 <CircleDot size={15} />
                 Open <span className="toggle-count">{openIssues.length}</span>
@@ -526,7 +539,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               <Link
                 className={showClosed ? "active" : ""}
                 aria-current={showClosed ? "page" : undefined}
-                to={`/projects/${slug}?state=closed`}
+                to={`${listPath}?state=closed`}
               >
                 <CircleCheck size={15} />
                 Closed{" "}
@@ -693,6 +706,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             issues={filtered}
             allIssues={listIssues}
             users={users}
+            projects={all ? projects : undefined}
             state={tableState}
             onChange={setTableState}
             paginationKey={JSON.stringify([query, showClosed])}
@@ -756,9 +770,9 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
         </aside>
       )}
-      {tagging?.kind === "mentions" && <BulkTagDialog slug={slug} issueIds={tagging.ids} users={users}
+      {tagging?.kind === "mentions" && <BulkTagDialog slug={slug || undefined} issueIds={tagging.ids} users={users}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
-      {tagging?.kind === "labels" && <BulkLabelDialog slug={slug} issueIds={tagging.ids}
+      {tagging?.kind === "labels" && <BulkLabelDialog slug={slug || undefined} issueIds={tagging.ids}
         existingLabels={existingTags}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
       {configureBoard && (
@@ -780,12 +794,17 @@ function ProjectIssues({ slug }: { slug: string }) {
       )}
       {open && (
         <CreateIssueDialog
-          project={project}
-          existingTags={existingTags}
+          project={readOnly ? null : project}
+          existingTags={readOnly ? undefined : existingTags}
           onCreated={issueCreated}
           onClose={() => setOpen(false)}
           canViewIssue={canLeaveDetails}
           onViewIssue={desktop ? (issue, source) => {
+            if (!all && issue.projectId !== project?.id) {
+              setOpen(false);
+              navigate(`/issues/${issue.id}`);
+              return;
+            }
             pending.current = false;
             focusDetails.current = true;
             opener.current = source;

@@ -36,7 +36,7 @@ export interface BoardSettings {
 export interface Issue {
   id: string;
   number: number;
-  projectId: string;
+  projectId: string | null;
   title: string;
   body: string;
   labels: string[];

@@ -113,5 +113,8 @@ test("full-page shortcuts, project tag catalog, busy protection and archived gua
   await expect(page.getByText(/This issue belongs to an archived project/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
   await page.keyboard.press("Alt+n");
-  await expect(dialog).toHaveCount(0);
+  // Global creation still works, but never defaults to or offers the archived project.
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("combobox", { name: "Project", exact: true })).toHaveValue("");
+  await expect(dialog.locator(`option[value="${project.id}"]`)).toHaveCount(0);
 });

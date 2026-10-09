@@ -6,19 +6,19 @@ description: Create actionable issues, organize them with tags, and discuss work
 An issue holds one Markdown body, tags, tagged users, and an open or closed state. There is no assignee or assignment role.
 Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
-All authenticated users can read and update issues across all projects.
+All authenticated users can read and update issues across the workspace. Issues can belong to a project or be unlinked.
 
 ## Create an issue
 
-1. Open the project that should contain the work.
-2. Select **Create issue** from either **List** or **Board**.
+1. Select **Create issue** in the sidebar or press **Alt+N**. You can also create from a project's **List** or **Board**.
+2. Choose an active **Project** or **No project**. On project pages the current project is preselected; elsewhere creation defaults to no project.
 3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
 4. Optionally add tags such as `#bug` or `#needs-review` to the body.
 5. Select **Create issue** to save. The dialog clears and refocuses for another issue; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
 
 New issues are open and stay off the board until you [add them to it](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
-Numbers are allocated within each project, not across the entire workspace.
+Numbers are allocated within each project, with a separate sequence for unlinked issues. Existing issues cannot yet be reassigned; unlinked issues cannot join project boards.
 
 ## Tags and mentions
 
@@ -45,7 +45,7 @@ This automatic migration preserves the original description bytes, timestamps, a
 
 ## Edit and save
 
-Open an issue by selecting its title in the list or its card body on the board. Full-page issues have a top breadcrumb back to the project. Creation metadata appears beside the issue number and state; there is no separate properties card or tag list.
+Open an issue by selecting its title in the list or its card body on the board. Full-page issues have a top breadcrumb back to the project, or **All issues** when unlinked. Creation metadata appears beside the issue number and state; there is no separate properties card or tag list.
 Change the Markdown body, then select **Save changes**, or press Cmd+S on macOS / Ctrl+S elsewhere while focused on the issue.
 Edit the heading or first text line in the body to change the derived display title.
 Wait for **Changes saved** before leaving the page.
@@ -63,11 +63,13 @@ Wait for an upload to finish before saving the surrounding content.
 
 ## Keyboard shortcuts
 
-Hover **Create issue** or **Save changes** to see its shortcut. Cmd+N on macOS / Ctrl+N elsewhere opens a new issue in the current project when the browser allows it. Some browsers reserve that key for a new window; use **Alt+N** instead. Cmd/Ctrl+S saves the focused issue or creates the focused new draft, without submitting a comment or saving an issue behind another dialog.
+Hover **Create issue** or **Save changes** to see its shortcut. Cmd+N on macOS / Ctrl+N elsewhere opens a new issue anywhere in the workspace when the browser allows it. Choose a project or leave it unlinked. Some browsers reserve that key for a new window; use **Alt+N** instead. Cmd/Ctrl+S saves the focused issue or creates the focused new draft, without submitting a comment or saving an issue behind another dialog.
 
 ## Find an issue
 
-Within a project, **Search issues** matches title text, issue numbers, and tags without case sensitivity.
+Open **All issues** in the sidebar to see issues from every project and issues with no project. Use the filter beside the **Project** column heading to choose a specific project or **No project**. Archived-project issues remain visible but read-only, and their checkboxes are disabled. All other table controls, including bulk actions, work across projects and unlinked issues.
+
+Within either a project or **All issues**, **Search issues** matches title text, issue numbers, tagged users, and tags without case sensitivity.
 It does not search the full issue body or comments.
 The list shows **Open** issues by default; select **Closed** to see closed ones.
 Search applies within the selected state, so check **Closed** if an expected issue is missing.
