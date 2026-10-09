@@ -20,6 +20,8 @@ import { api, message } from "../lib/api";
 import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
+import { useNotification } from "../components/ui/snackbar";
+import { MoveIssueDialog } from "../components/move-issue-dialog";
 import { CopyIssueBody } from "../components/copy-issue-body";
 import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
@@ -146,7 +148,9 @@ function IssueDetailForm({
   const [changingState, setChangingState] = useState(false);
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
-  const [saved, setSaved] = useState("");
+  const notify = useNotification();
+  const [moving, setMoving] = useState(false);
+  const [moveBusy, setMoveBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [creating, setCreating] = useState(false);
@@ -154,9 +158,10 @@ function IssueDetailForm({
   const [newTags, setNewTags] = useState<string[]>([]);
   const project = projects.find((p) => p.id === issue.projectId);
   const archived = !!project?.archivedAt;
-  const catalog = useProjectTags(project?.slug, existingTags);
+  const catalog = useProjectTags(project?.slug, issue.projectId === initialDetail.issue.projectId ? existingTags : undefined);
   const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
-  useIssueSaveShortcut(form, !busy && !changingState && !archived, id);
+  const dirty = issue.body !== persisted.body;
+  useIssueSaveShortcut(form, dirty && !busy && !changingState && !moving && !archived, id);
   useIssueCreationHandler(() => setCreating(true), !embedded);
   const setBreadcrumb = useIssueBreadcrumb();
   useEffect(() => {
@@ -164,23 +169,20 @@ function IssueDetailForm({
     setBreadcrumb(persisted);
     return () => setBreadcrumb(null);
   }, [embedded, persisted, setBreadcrumb]);
-  const dirty = issue.body !== persisted.body;
-  const pending = dirty || !!comment.trim() || busy || posting || changingState;
+  const pending = dirty || !!comment.trim() || busy || posting || changingState || moveBusy;
   useEffect(() => {
     onPendingChange?.(pending);
     return () => onPendingChange?.(false);
   }, [pending, onPendingChange]);
   function update(p: Partial<Issue>) {
     setIssue((v) => (v ? { ...v, ...p } : v));
-    setSaved("");
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (submitting.current || busy || changingState || archived || form.current?.closest("[inert]")) return;
+    if (!dirty || submitting.current || busy || changingState || moving || archived || form.current?.closest("[inert]")) return;
     submitting.current = true;
     setBusy(true);
     setError("");
-    setSaved("");
     try {
       const { body } = issue;
       validateIssueBody(body);
@@ -193,7 +195,7 @@ function IssueDetailForm({
       setIssue(result.issue);
       setPersisted(result.issue);
       onSaved?.(result.issue);
-      setSaved("Changes saved");
+      notify("Changes saved");
       await refresh();
     } catch (e) {
       setError(message(e));
@@ -204,9 +206,9 @@ function IssueDetailForm({
   }
   // Close/reopen immediately without saving or discarding other unsaved edits.
   async function changeState(state: IssueState) {
+    if (busy || changingState || moving || archived) return;
     setChangingState(true);
     setError("");
-    setSaved("");
     try {
       const result = await api<{ issue: Issue }>(`/api/issues/${id}`, {
         method: "PATCH",
@@ -217,7 +219,7 @@ function IssueDetailForm({
       setIssue((v) => (v ? { ...v, ...lifecycle } : v));
       setPersisted((v) => (v ? { ...v, ...lifecycle } : v));
       onSaved?.(result.issue);
-      setSaved(state === "closed" ? "Issue closed" : "Issue reopened");
+      notify(state === "closed" ? "Issue closed" : "Issue reopened");
       await refresh();
     } catch (e) {
       setError(message(e));
@@ -288,9 +290,7 @@ function IssueDetailForm({
             </div>
             {!archived && (
               <div className="save-actions">
-                <span role="status" className="success">
-                  {saved}
-                </span>
+                <Button type="button" variant="secondary" disabled={busy || changingState || moving} onClick={() => setMoving(true)}>Move issue</Button>
                 {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                   <Plus size={15} /> Create issue
                 </Button>}
@@ -312,7 +312,8 @@ function IssueDetailForm({
                       ? "Reopen issue"
                       : "Close issue"}
                 </Button>
-                <Button disabled={busy || changingState} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
+                <Button type="button" variant="secondary" disabled={!dirty || busy || changingState || moving} onClick={() => { update({ body: persisted.body }); notify("Body changes discarded"); }}>Discard changes</Button>
+                <Button disabled={!dirty || busy || changingState || moving} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
                   <Save size={15} />
                   {busy ? "Saving…" : "Save changes"}
                 </Button>
@@ -380,9 +381,17 @@ function IssueDetailForm({
           </form>
         )}
       </section>
+      {moving && <MoveIssueDialog issue={persisted} onBusyChange={setMoveBusy} onClose={() => setMoving(false)} onMoved={(updated) => {
+        setIssue((current) => ({ ...updated, body: current.body }));
+        setPersisted(updated);
+        setNewTags([]);
+        onSaved?.(updated);
+        notify("Issue moved");
+        void refresh().catch((cause) => setError(`Issue moved, but workspace could not refresh: ${message(cause)}`));
+      }} />}
       {sending && <SendToBoardDialog issues={[persisted]} onClose={() => setSending(false)}
-        onPlaced={(projectId, board) => { onBoardChanged?.(projectId, board); setSaved("Board placement updated"); }} />}
-      {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags}
+        onPlaced={(projectId, board) => { onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />}
+      {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags} onBoardChanged={onBoardChanged}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}
         canViewIssue={() => !pending || window.confirm("Discard unsaved issue changes or comment?")} />}

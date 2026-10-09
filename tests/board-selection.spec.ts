@@ -161,7 +161,7 @@ test("snackbars restart for identical moves, pause for interaction, and clear wh
   await expect(status).toBeEmpty();
   await move(issues[0].number, "Done");
   await page.getByRole("link", { name: "List", exact: true }).click();
-  await expect(snackbar).toHaveCount(0);
+  await expect(snackbar).toHaveAttribute("data-open", "false");
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(status).toBeEmpty();
 });
@@ -268,6 +268,7 @@ test("only checkboxes or modifier clicks select board cards, while ordinary link
 
 test("board menu supports keyboard, range selection, bulk moves, drag and retryable remove", async ({ page, baseURL }) => {
   const { endpoint, issues } = await seed(page, baseURL!);
+  await page.setViewportSize({ width: 1600, height: 1600 });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const trigger = page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true });

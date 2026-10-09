@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.13.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.14.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.14.0
+
+Version 0.14.0 adds issue moves between active projects (or No project), optional board-lane assignment during creation, body-only discard, clean-save protection, unified visible notifications, equal-height lane drop targets, board filters and bulk closing, and tri-state/Shift-range selection in Add issues. Moves preserve global issue IDs, comments and lifecycle while removing the old board placement; unsaved body/comment drafts remain intact. Creating into a visible lane is atomic with issue creation.
+
+The API adds optional `projectId` to issue PATCH and optional `lane` to both issue-creation routes. This release introduces no database migration or deployment-value change. Back up `/data`, preserve the encryption-key Secret and existing values, and select the published SHA image matching the chart release commit. Upgrades from versions older than 0.12.0 still run migration v11 and carry its breaking ID/URL change and rollback restrictions below. Publishing this chart does not automatically upgrade running deployments.
 
 ### Upgrading to 0.13.0
 

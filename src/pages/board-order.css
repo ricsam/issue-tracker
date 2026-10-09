@@ -6,3 +6,6 @@
 .board-card.card-drop-before::before { top: -6px; }
 .board-card.card-drop-after::before { bottom: -6px; }
 .board-column.card-drop-end { box-shadow: inset 0 -3px #7050d9; }
+/* Stretch the actual drop target, not merely a decorative background. */
+.project-issues .board { align-items: stretch; }
+.project-issues .board > .board-column { align-self: stretch; }

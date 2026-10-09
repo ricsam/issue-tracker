@@ -3,7 +3,7 @@ title: Board
 description: Organize work in default or custom lanes, reorder cards and lanes, and resize the desktop issue panel.
 ---
 
-The board contains work explicitly added from a project's issue list. New boards start with **Todo**, **In progress**, and **Done**, with no cards. Board lanes and placements are saved per project and shared with your team.
+The board contains work explicitly placed in a project's lanes, during creation or afterward. New boards start with **Todo**, **In progress**, and **Done**, with no cards. Board lanes and placements are saved per project and shared with your team.
 
 ## Add work
 
@@ -11,7 +11,9 @@ The board contains work explicitly added from a project's issue list. New boards
 2. Select **Add issues**.
 3. Search or select issues, choose a destination lane, then select **Add to board**.
 
-**Create issue** captures Markdown content, including tags, in the project list. It does not automatically add the issue to the board. Use **Add issues** when it is ready for work. Only open issues are offered; reopen a closed issue to plan it again.
+The **Add issues** dialog's **Select all matching issues** header checkbox replaces separate select-all/clear buttons. It selects or deselects the current search matches while preserving selections outside the search. It is checked when all matches are selected and indeterminate when only some are selected. Shift-click an issue checkbox to select a range in the matching list.
+
+**Create issue** captures Markdown content, including tags. Its **Board lane** defaults to **Not on board**; choose a visible built-in or custom lane to create the issue and append it to that lane in one operation. The dialog keeps the project and lane for the next issue, but switching project resets the lane. Unlinked issues cannot have a lane. **Add issues** offers only existing open issues; reopen a closed off-board issue before adding it.
 
 Use the card's kebab menu beside its drag handle to remove only its board placement. The issue, comments, and attachments remain available in **List** and can be added back later.
 
@@ -30,7 +32,7 @@ Select **Save board** to apply your changes, or **Cancel** to discard them. Keep
   Removing a lane hides it without deleting its issues or placements. Add it back to see those cards again. The board summary shows how many cards are in hidden lanes.
 </Note>
 
-Wide boards scroll horizontally on desktop rather than squeezing the cards.
+Wide boards scroll horizontally on desktop rather than squeezing the cards. Lane drop areas share the same height, including empty lanes, so the space below cards remains a consistent drag target.
 
 ## Reorder lanes
 
@@ -46,15 +48,15 @@ For keyboard or mobile access, open a card's kebab menu and use **Move up**, **M
 
 Moves save immediately, persist across reloads, and are shared with your team. They do not change issue content, state, tags, timestamps, or unsaved edits.
 
-Move, reorder, and removal results appear in a snackbar at the bottom of the screen without shifting the board. It hides after five seconds, pauses while hovered or focused, and can be dismissed with **Dismiss notification**. Errors remain visible on the page so failed operations can be retried.
+Action results appear in shared toast notifications without shifting the board. Notifications can be dismissed with **Dismiss notification**; timed notifications pause while hovered or focused. Failed operations retain their retry state, and form validation stays with the relevant controls.
 
-The permanent selection bar combines the board/lane counts, **Select visible issues**, and bulk actions. Select individual cards with their checkboxes, Cmd/Ctrl-click anywhere on a card to toggle selection, or Shift-click to select a range. Ordinary clicks on the card body, padding, or metadata open issue details; checkboxes and the kebab menu keep their own actions. Then use the selection bar or a selected card's menu to move or remove the selection. Dragging a selected card’s handle moves the whole selection. Failed operations remain selected for retry; successful operations are kept. Changing search or hiding lanes removes hidden cards from the selection. Removing cards never deletes their issues.
+The permanent board selection bar combines board/lane counts, **Select visible issues**, **Clear selection**, and bulk actions. Each lane heading also has a checkbox for that lane's matching cards, preserving selection in other lanes. Select individual cards with their checkboxes, Cmd/Ctrl-click anywhere on a card to toggle selection, or Shift-click to select a range. Ordinary clicks on the card body, padding, or metadata open issue details; checkboxes and the kebab menu keep their own actions. Then use the selection bar or a selected card's menu to move or remove the selection, or **Close selected issues** to close selected open issues. Dragging a selected card’s handle moves the whole selection. Failed operations remain selected for retry; successful operations are kept. Changing search or filters, or hiding lanes, removes hidden cards from the selection. Removing cards never deletes their issues.
 
 Selected cards are kept in their displayed order when dragged as a group. Search filters do not remove hidden cards or scramble their relative order: drops are positioned relative to the visible target in the complete lane. Menu moves use the full lane order, including search-hidden cards. Failed reorders leave the saved order and selection intact for retry.
 
 New cards and cards moved from another lane using **Send to board** are appended; sending a card to its existing lane keeps its position. Existing boards retain their prior issue-number order on upgrade, until you rearrange them. Only the built-in **Done** lane counts as completed in project progress.
 
-Closing an issue does not move its card. A closed card keeps its lane, shows a **Closed** tag, and no longer counts as unfinished work. Move it to **Done** or remove it from the board when you no longer want to see it.
+Closing an issue does not move its card. A closed card keeps its lane and position, shows a **Closed** tag, and no longer counts as unfinished work. **Close selected issues** skips already-closed cards. If only some closes succeed, those remain saved and failures remain selected for retry; the batch is not all-or-nothing. Move cards to **Done** or remove them from the board when you no longer want to see them.
 
 The board of an [archived project](/guides/projects#archive-a-project) is read-only: cards, lanes, and **Manage lanes** cannot be changed until the project is restored.
 
@@ -71,6 +73,8 @@ The panel narrows automatically on smaller desktop screens while retaining your 
 
 ## Find a card
 
-**Search issues** matches titles, issue numbers, and tags, case-insensitively. Clear the search to see all cards in visible lanes. If work is missing, check **Manage lanes** for removed lanes, **Add issues** for unplaced work, or open **List** to see every open or closed project issue.
+**Search issues** combines with filters for **State**, **Lane**, **Tags**, **Tagged users**, and **Creator**. The board defaults to **All states**, including both open and closed cards; this differs from the issue list's default Open view. Choose Open or Closed when needed. Filters narrow the displayed cards without changing saved membership, lane visibility, or order; hidden lanes cannot be made visible by filtering.
+
+Clear the filters and search to see all cards in visible lanes. If work is missing, check **Manage lanes** for hidden lanes, **Add issues** for unplaced work, or open **List** to see every open or closed project issue. Project-wide board totals include closed cards and hidden lanes and do not shrink with search or filters.
 
 All authenticated workspace members can collaborate on boards. For issue content and discussion, see [issues](/guides/issues).

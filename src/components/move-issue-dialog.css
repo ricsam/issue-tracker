@@ -1,0 +1,3 @@
+.move-issue-dialog { max-width: 480px; }
+.move-issue-dialog select { width: 100%; }
+.move-issue-dialog .muted { font-size: 13px; line-height: 1.6; }

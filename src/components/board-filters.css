@@ -1,0 +1,6 @@
+.board-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; border: 1px solid var(--border, #e9e3f0); border-radius: 8px; margin: 0 0 16px; padding: 12px; min-width: 0; }
+.board-filters legend { font-size: 13px; padding: 0 5px; }
+.board-filters label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; min-width: 120px; max-width: 100%; }
+.board-filters select { max-width: 100%; min-height: 34px; padding: 5px 8px; border: 1px solid var(--border, #e9e3f0); border-radius: 5px; background: var(--surface, white); color: inherit; }
+.board-filters select[multiple] { height: 64px; }
+.board-filter-help { flex-basis: 100%; font-size: 12px; }

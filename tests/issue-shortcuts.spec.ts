@@ -65,7 +65,7 @@ for (const modifier of ["Control", "Meta"]) {
     let writes = 0;
     page.on("request", (request) => { if (request.method() === "PATCH" && request.url().endsWith(`/api/issues/${issue.id}`)) writes++; });
     await editor.press(`${modifier}+s`);
-    await expect(sidebar.getByText("Changes saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
     expect(writes).toBe(1);
     expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.body).toContain("Saved from rich mode");
 
@@ -73,7 +73,7 @@ for (const modifier of ["Control", "Meta"]) {
     const source = sidebar.locator(".detail-form").getByLabel("Markdown source");
     await source.fill("Saved from source mode #new-tag");
     await source.press(`${modifier}+s`);
-    await expect(sidebar.getByText("Changes saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
     expect(writes).toBe(2);
     await source.fill("Draft must stay unsaved under a modal");
     await source.press("Alt+n");
@@ -88,7 +88,7 @@ for (const modifier of ["Control", "Meta"]) {
     // A selected list row is also issue focus, even though the sidebar isn't focused.
     await page.locator(`a[data-issue-id="${issue.id}"]`).focus();
     await page.keyboard.press(`${modifier}+s`);
-    await expect(sidebar.getByText("Changes saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
     expect(writes).toBe(3);
   });
 }

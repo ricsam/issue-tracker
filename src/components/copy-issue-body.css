@@ -1,3 +1,3 @@
 .copy-issue-body { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.copy-issue-error { color: var(--danger, #dc2626); font-size: 12px; max-width: 360px; }
+.copy-issue-body > .notification { flex-basis: 100%; box-shadow: none; }
 .issue-created-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }

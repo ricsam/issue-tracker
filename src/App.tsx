@@ -34,6 +34,7 @@ import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
 import { Tooltip } from "./components/ui/tooltip";
+import { NotificationProvider } from "./components/ui/snackbar";
 import { Button, ErrorNotice, Loading } from "./components/ui/primitives";
 import { AuthPage } from "./pages/auth";
 import { ProjectsPage } from "./pages/projects";
@@ -332,7 +333,7 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <NotificationProvider><AppContent /></NotificationProvider>
     </BrowserRouter>
   );
 }

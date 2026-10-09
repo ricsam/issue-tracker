@@ -75,14 +75,14 @@ The OIDC callback keys identities by immutable issuer and subject. Verified emai
 | `GET` | `/api/projects/:slug` | One project |
 | `PATCH` | `/api/projects/:slug` | `{name?,description?}` edits active project metadata without changing its slug; `{archived: boolean}` separately archives or restores |
 | `GET` | `/api/projects/:slug/issues` | All project issues; UI filtering is client-side |
-| `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?}`; number increments globally across all issues |
+| `POST` | `/api/projects/:slug/issues` | `{body,labels?,title?,lane?}`; optional visible lane places the issue atomically; number increments globally across all issues |
 | `POST` | `/api/projects/:slug/issues/tag` | `{issueIds,userIds}` → `{issues}`; atomic addition of body mentions |
 | `POST` | `/api/projects/:slug/issues/labels` | `{issueIds,labels}` → `{issues}`; atomic addition of body hashtags |
 | `GET` | `/api/projects/:slug/board` | `{board: BoardSettings}` |
 | `PATCH` | `/api/projects/:slug/board` | `{lanes,customLanes?}`; returns `{board: BoardSettings}` |
 | `GET` | `/api/issues/references?q=...` | Up to 20 `{id,number,title,state}` suggestions in `{issues}` across all projects |
 | `GET` | `/api/issues/:id` | `{issue,comments}`; canonical decimal ID only; UUID URLs return 404 |
-| `PATCH` | `/api/issues/:id` | Any authenticated user may update supplied issue fields, including `state` |
+| `PATCH` | `/api/issues/:id` | Any authenticated user may update supplied issue fields, including `state` and `projectId` (active project ID or null); changing project removes old board placement |
 
 Issue IDs are global auto-incrementing integers, serialized as canonical positive decimal strings in `Issue.id`, `Comment.issueId`, and `BoardCard.issueId`. `Issue.number` is the numeric alias of the ID. Issue URLs use `/issues/12` and prose references use `!12`; `#` remains reserved for tags. Migration v11 numbers existing issues in creation order and preserves relationships/content/board order/lifecycle. Old UUID detail links are not supported. Back up before upgrading; rollback requires restoring the backup. Other entity IDs remain UUIDs.
 
@@ -92,7 +92,7 @@ Body-only creation and body updates require non-whitespace content, with a 101,0
 
 Legacy clients may still send a nonempty `title` of up to 300 characters: POST and PATCH with a body merge it as an escaped leading heading, avoiding an equivalent existing heading. Title-only PATCH replaces or adds the leading heading without losing the remainder. The final merged body must fit the body limit. On upgrade, transactional SQLite migration v3 moves old titles into escaped leading headings, preserves original body bytes and timestamps/metadata, and recomputes display titles. Reopening does not repeat the migration.
 
-`BoardSettings` is `{lanes: Lane[], customLanes: BoardLane[], cards: BoardCard[]}`, with definitions `{value,label}` and cards `{issueId,lane}`. New boards show `todo`, `in_progress`, and `done` with no cards. Settings PATCH changes visibility, order and custom definitions, never membership. Hidden lanes retain their cards. Issue creation rejects `addToBoard` and never adds board membership automatically.
+`BoardSettings` is `{lanes: Lane[], customLanes: BoardLane[], cards: BoardCard[]}`, with definitions `{value,label}` and cards `{issueId,lane}`. New boards show `todo`, `in_progress`, and `done` with no cards. Settings PATCH changes visibility, order and custom definitions, never membership. Hidden lanes retain their cards. Issue creation rejects `addToBoard`. An optional `lane` selects a currently visible built-in or custom lane on the selected project; creation and placement append atomically and return `{issue,board}`. Omitting `lane` (or null) leaves the issue off-board; unlinked issues cannot use a lane.
 
 Board membership uses `POST /api/projects/:slug/board/issues` with `{issueIds,lane}` (atomic add), `PATCH /api/projects/:slug/board/issues/:id` with `{lane}` (move), and `DELETE` on that same issue route (remove). Each returns `{board}`. Bulk moves/removals in the UI use individual requests, retaining failed selections for retry; they are not atomic batches.
 

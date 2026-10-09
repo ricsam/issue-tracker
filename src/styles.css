@@ -1126,6 +1126,13 @@ fieldset > small {
 .board-issue-option:hover {
   background: #fcfaff;
 }
+.board-select-all {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+  font-weight: 600;
+}
 .board-option-title {
   flex: 1;
   min-width: 0;
@@ -1158,45 +1165,16 @@ fieldset > small {
 }
 .create-issue-fields > fieldset > .settings-help { margin: 0; }
 .create-issue-fields { padding-bottom: 6px; }
-.issue-created-notice {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid #cfe9dd;
-  border-radius: 8px;
-  background: #f0faf5;
-  color: #27674f;
-  font-size: 12px;
-}
-.issue-created-notice > svg {
-  flex-shrink: 0;
-}
-.issue-created-message {
-  display: flex;
-  flex: 1;
-  min-width: 100px;
-  flex-direction: column;
-  gap: 2px;
-  overflow-wrap: anywhere;
-}
-.issue-created-message span {
-  font-size: 11px;
-}
-.issue-created-notice a {
-  color: #27674f;
+.issue-created-actions a {
+  color: inherit;
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
   padding: 8px 0;
 }
-.issue-created-notice a[aria-disabled="true"] {
+.issue-created-actions a[aria-disabled="true"] {
   opacity: 0.5;
   pointer-events: none;
-}
-.issue-created-notice .icon-button {
-  color: #27674f;
 }
 @media (min-width: 761px) {
   .create-issue-dialog {

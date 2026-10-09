@@ -70,6 +70,7 @@ const issueFields = z
 const issueUpdateFields = issueFields
   .extend({
     state: z.enum(["open", "closed"]),
+    projectId: text(100).nullable(),
   })
   .partial();
 // Metadata edits and lifecycle changes are separate actions; neither implicitly restores a project.
@@ -201,13 +202,14 @@ export function createApp(options: AppOptions = {}) {
     if (p.archivedAt) fail(409, "Project is archived");
     return p;
   };
+  const requireActiveProjectId = (projectId: string) => {
+    const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
+    if (!p) return fail(404, "Project not found");
+    if (p.archivedAt) fail(409, "Project is archived");
+  };
   const activeIssue = (issueId: string) => {
     const i = issue(issueId);
-    if (i.projectId === null) return i;
-    const { archivedAt } = db
-      .query("SELECT archivedAt FROM projects WHERE id=?")
-      .get(i.projectId) as { archivedAt: string | null };
-    if (archivedAt) fail(409, "Project is archived");
+    if (i.projectId !== null) requireActiveProjectId(i.projectId);
     return i;
   };
   const board = (projectId: string): BoardSettings => {
@@ -780,19 +782,20 @@ export function createApp(options: AppOptions = {}) {
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");
-    const input = (slug ? issueFields : issueFields.extend({ projectId: text(100).nullable().optional() }))
-      .parse(await json(c)) as z.infer<typeof issueFields> & { projectId?: string | null };
-    const projectId = slug ? activeProject(slug).id : input.projectId ?? null;
+    const fields = issueFields.extend({ lane: laneField.nullable().optional() });
+    const input = (slug ? fields : fields.extend({ projectId: text(100).nullable().optional() }))
+      .parse(await json(c)) as z.infer<typeof fields> & { projectId?: string | null };
     const originalBody = input.title === undefined ? input.body : prependLegacyTitle(input.title, input.body);
     const body = appendIssueLabels(originalBody, deriveIssueTitle(originalBody), input.labels);
     if (!body.trim() || body.length > ISSUE_BODY_MAX_LENGTH)
       fail(400, "Invalid issue body");
     const time = now();
-    const uid = db.transaction(() => {
-      if (projectId !== null) {
-        const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
-        if (!p) return fail(404, "Project not found");
-        if (p.archivedAt) fail(409, "Project is archived");
+    const result = db.transaction(() => {
+      const projectId = slug ? activeProject(slug).id : input.projectId ?? null;
+      if (projectId !== null) requireActiveProjectId(projectId);
+      if (input.lane != null) {
+        if (projectId === null) return fail(400, "Lane requires a project");
+        requireVisibleLane(projectId, input.lane);
       }
       validateMentions(body);
       const inserted = db.query(
@@ -811,9 +814,14 @@ export function createApp(options: AppOptions = {}) {
       const uid = String(inserted.id);
       db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
       syncIssueTaggedUsers(db, uid);
-      return uid;
+      if (input.lane != null && projectId !== null) {
+        db.query("INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)")
+          .run(projectId, uid, input.lane, nextBoardPosition(projectId, input.lane));
+        return { issue: issue(uid), board: board(projectId) };
+      }
+      return { issue: issue(uid) };
     }).immediate();
-    return c.json({ issue: issue(uid) });
+    return c.json(result);
   };
   app.post("/api/projects/:slug/issues", createIssue);
   app.post("/api/issues", createIssue);
@@ -838,8 +846,9 @@ export function createApp(options: AppOptions = {}) {
     });
   });
   app.patch("/api/issues/:id", async (c) => {
-    const current = activeIssue(issueIdField.parse(c.req.param("id")));
+    const issueId = issueIdField.parse(c.req.param("id"));
     const raw = await json(c);
+    const current = activeIssue(issueId);
     const parsed = issueUpdateFields.parse(raw);
     const input = Object.fromEntries(
       Object.entries(parsed).filter(([key]) => Object.hasOwn(raw, key)),
@@ -869,6 +878,11 @@ export function createApp(options: AppOptions = {}) {
     };
     db.transaction(() => {
       activeIssue(current.id);
+      if (input.projectId != null) requireActiveProjectId(input.projectId);
+      if (input.projectId !== undefined && input.projectId !== current.projectId) {
+        db.query("DELETE FROM board_issues WHERE issueId=?").run(current.id);
+        db.query("UPDATE issues SET projectId=? WHERE id=?").run(input.projectId, current.id);
+      }
       if (input.body !== undefined) validateMentions(body);
       else if (input.title !== undefined) validateMentions(input.title);
       db.query(

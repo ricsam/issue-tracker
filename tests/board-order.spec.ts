@@ -60,6 +60,7 @@ test("drag places cards before and after siblings, persists across reload, and p
 });
 
 test("selected cards move as an ordered block across lanes and filtered reordering keeps hidden cards", async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1600, height: 1600 });
   const { issues, endpoint } = await fixture(page, baseURL!);
   await card(page, issues[1]).getByRole("checkbox").check();
   await card(page, issues[3]).getByRole("checkbox").check();
@@ -72,6 +73,7 @@ test("selected cards move as an ordered block across lanes and filtered reorderi
   await card(page, issues[1]).locator(".board-card-handle").dragTo(column(page, "Todo"), { targetPosition: { x: 20, y: (await column(page, "Todo").boundingBox())!.height - 5 } });
   await expect(order(page, "Todo")).toHaveText(numbers(issues, [1, 3, 5, 2, 4]));
   await page.getByRole("textbox", { name: "Search issues" }).fill("Visible");
+  await expect(order(page, "Todo")).toHaveText(numbers(issues, [1, 3, 5]));
   await dragCard(page, issues[0], issues[4], true);
   await expect(order(page, "Todo")).toHaveText(numbers(issues, [3, 5, 1]));
   await page.getByRole("textbox", { name: "Search issues" }).fill("");

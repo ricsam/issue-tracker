@@ -58,11 +58,12 @@ import {
 import { useDesktopIssues } from "../lib/use-desktop-issues";
 import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "../lib/issue-shortcuts";
-import { useGloballyCreatedIssues, useIssueCreationHandler } from "../lib/issue-creation";
+import { useGloballyCreatedIssues, useGloballyCreatedBoards, useIssueCreationHandler } from "../lib/issue-creation";
 import { issueTags } from "../lib/issue-tags";
 import { boardLaneOptions, issueBoardLanes } from "../lib/issue-board-lanes";
 import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
 import { boardArrowTarget, boardSelectionRange, type BoardArrow } from "../lib/board-selection";
+import { BoardFilters, emptyBoardFilters, matchesBoardFilters } from "../components/board-filters";
 import "./board-order.css";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -163,7 +164,13 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   const [project, setProject] = useState<Project | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const movedOutIds = useRef(new Set<string>());
   const globallyCreated = useGloballyCreatedIssues();
+  const processedCreatedIssues = useRef(globallyCreated);
+  const globallyCreatedBoards = useGloballyCreatedBoards();
+  // Only creations observed during this mount may supersede the fetched board.
+  // Provider snapshots from earlier visits can predate later moves/reorders.
+  const processedCreatedBoards = useRef(globallyCreatedBoards);
   const [boardSettings, setBoardSettings] = useState<BoardSettings>({
     lanes: LANES.map((lane) => lane.value),
     cards: [],
@@ -184,20 +191,41 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [boardFilters, setBoardFilters] = useState(emptyBoardFilters);
+  const visibleBoardCards = boardSettings.cards.filter((card) => {
+    const issue = issues.find((item) => item.id === card.issueId);
+    return issue && boardSettings.lanes.includes(card.lane)
+      && matchesBoardFilters(issue, card.lane, boardFilters)
+      && `${issue.title} ${issue.number} ${issue.labels.join(" ")} ${users.filter((user) => issue.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`.toLowerCase().includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase());
+  });
+  const visibleBoardKey = JSON.stringify(visibleBoardCards.map((card) => card.issueId));
   const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [projectSaved, setProjectSaved] = useState("");
-  useIssueCreationHandler(() => setOpen(true), !loading && !loadFailed && (all || !!project));
+  const dismissProjectSaved = useCallback(() => setProjectSaved(""), []);
+  useIssueCreationHandler(() => { if (!bulkClosing.current && !boardBusy.current) setOpen(true); }, !loading && !loadFailed && (all || !!project));
   useEffect(() => {
     if (loading) return;
+    const previousIds = new Set(processedCreatedIssues.current.map((issue) => issue.id));
+    const newlyCreated = globallyCreated.filter((issue) => !previousIds.has(issue.id));
     setIssues((current) => {
-      const additions = globallyCreated.filter((issue) => (all || issue.projectId === project?.id) && !current.some((item) => item.id === issue.id));
+      const additions = newlyCreated.filter((issue) => !movedOutIds.current.has(issue.id) && (all || issue.projectId === project?.id) && !current.some((item) => item.id === issue.id));
       return additions.length ? [...current, ...additions] : current;
     });
+    processedCreatedIssues.current = globallyCreated;
   }, [globallyCreated, loading, all, project?.id]);
+  useEffect(() => {
+    if (loading) return;
+    const changed = Object.fromEntries(Object.entries(globallyCreatedBoards).filter(
+      ([id, settings]) => processedCreatedBoards.current[id] !== settings,
+    ));
+    if (all && Object.keys(changed).length) setWorkspaceBoards((current) => ({ ...current, ...changed }));
+    else if (project && changed[project.id]) setBoardSettings(changed[project.id]);
+    processedCreatedBoards.current = globallyCreatedBoards;
+  }, [globallyCreatedBoards, loading, all, project?.id]);
   const existingTags = issueTags(issues);
-  const [saving, setSaving] = useState<string | null>(null);
+  const [boardSaving, setSaving] = useState<string | null>(null);
   const boardBusy = useRef(false);
   const [boardSelection, setBoardSelection] = useState<string[]>([]);
   const boardAnchor = useRef<string | null>(null);
@@ -214,10 +242,13 @@ function ProjectIssues({ slug }: { slug: string }) {
     boardRange.current = null;
   }, [board, query, project?.archivedAt]);
   useEffect(() => {
-    const visible = new Set(boardSettings.cards.filter((card) => boardSettings.lanes.includes(card.lane)).map((card) => card.issueId));
+    const visible = new Set<string>(JSON.parse(visibleBoardKey));
+    boardRange.current = null;
+    cardDrag.current = [];
+    setCardDrop(null);
     setBoardSelection((current) => current.filter((id) => visible.has(id)));
     if (boardAnchor.current && !visible.has(boardAnchor.current)) boardAnchor.current = null;
-  }, [boardSettings]);
+  }, [visibleBoardKey]);
   function tagIssues(ids: string[], kind: "mentions" | "labels" = "mentions") {
     if (project?.archivedAt || bulkClosing.current || boardBusy.current || !ids.length) return;
     if (selectedId && ids.includes(selectedId)) {
@@ -234,8 +265,9 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [retry, setRetry] = useState(0);
   const bulkClosing = useRef(false);
   const [closingIssues, setClosingIssues] = useState(false);
+  const saving = closingIssues ? "closing" : boardSaving;
   async function closeIssues(ids: string[]): Promise<{ closedIds: string[]; error?: string }> {
-    if (bulkClosing.current || project?.archivedAt) return { closedIds: [] };
+    if (bulkClosing.current || boardBusy.current || project?.archivedAt) return { closedIds: [] };
     const targets = issues.filter((issue) => ids.includes(issue.id) && issue.state === "open");
     if (!targets.length) return { closedIds: [] };
     // Do not silently discard an editor draft when its issue is part of the batch.
@@ -310,11 +342,20 @@ function ProjectIssues({ slug }: { slug: string }) {
       active = false;
     };
   }, [slug, retry]);
+  async function closeBoardIssues(ids: string[]) {
+    if (boardBusy.current || bulkClosing.current) return;
+    setError("");
+    setBoardOutcome("");
+    const result = await closeIssues(ids);
+    setBoardSelection((current) => current.filter((id) => !result.closedIds.includes(id)));
+    if (result.closedIds.length) setBoardOutcome(`${result.closedIds.length} issue${result.closedIds.length === 1 ? "" : "s"} closed.`);
+    if (result.error) setError(result.error);
+  }
   async function changeBoard(ids: string[], next?: Lane) {
-    if (saving || boardBusy.current || project?.archivedAt || (next && !boardSettings.lanes.includes(next))) return;
+    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || (next && !boardSettings.lanes.includes(next))) return;
     const placed = new Map(boardSettings.cards.map((card) => [card.issueId, card.lane]));
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
-    const targets = ids.flatMap((id) => placed.has(id) && byId.has(id) ? [byId.get(id)!] : []);
+    const targets = ids.flatMap((id) => visibleBoardCards.some((card) => card.issueId === id) && placed.has(id) && byId.has(id) ? [byId.get(id)!] : []);
     if (!targets.length) return;
     boardRange.current = null;
     boardBusy.current = true;
@@ -353,7 +394,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     }
   }
   async function reorderCards(ids: string[], lane: Lane, beforeIssueId: string | null) {
-    if (saving || boardBusy.current || project?.archivedAt || !ids.length || !boardSettings.lanes.includes(lane)) return;
+    ids = ids.filter((id) => visibleBoardCards.some((card) => card.issueId === id));
+    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || !ids.length || !boardSettings.lanes.includes(lane)) return;
     boardRange.current = null;
     boardBusy.current = true;
     setSaving("cards");
@@ -379,10 +421,10 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   function reorderActions(ids: string[]) {
     const destinations = {
-      up: boardOrderTarget(boardSettings.cards, ids, "up"),
-      down: boardOrderTarget(boardSettings.cards, ids, "down"),
-      top: boardOrderTarget(boardSettings.cards, ids, "top"),
-      bottom: boardOrderTarget(boardSettings.cards, ids, "bottom"),
+      up: boardOrderTarget(visibleBoardCards, ids, "up"),
+      down: boardOrderTarget(visibleBoardCards, ids, "down"),
+      top: boardOrderTarget(visibleBoardCards, ids, "top"),
+      bottom: boardOrderTarget(visibleBoardCards, ids, "bottom"),
     };
     return {
       reorderAvailable: { up: !!destinations.up, down: !!destinations.down, top: !!destinations.top, bottom: !!destinations.bottom },
@@ -400,7 +442,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   async function reorderLane(lane: Lane, target: Lane) {
     const previous = boardSettings;
     const index = previous.lanes.indexOf(target);
-    if (saving || boardBusy.current || project?.archivedAt || lane === target || index < 0 || !previous.lanes.includes(lane))
+    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || lane === target || index < 0 || !previous.lanes.includes(lane))
       return;
     boardBusy.current = true;
     setSaving(`lane:${lane}`);
@@ -441,7 +483,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   // Archived projects are read-only until restored.
   const readOnly = !!project?.archivedAt;
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes);
-  const canReorderLanes = lanes.length > 1 && !saving && !readOnly;
+  const canReorderLanes = lanes.length > 1 && !saving && !closingIssues && !readOnly;
   const dragFrom = laneDrag
     ? lanes.findIndex((lane) => lane.value === laneDrag.lane)
     : -1;
@@ -464,10 +506,10 @@ function ProjectIssues({ slug }: { slug: string }) {
         .toLowerCase()
         .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
-  const filtered = board ? searched : issueTableRows(searched, users, tableState, projects, listBoardLanes);
+  const filtered = board ? searched.filter((issue) => matchesBoardFilters(issue, placements.get(issue.id), boardFilters)) : issueTableRows(searched, users, tableState, projects, listBoardLanes);
   const boardColumns = lanes.map((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const boardOrder = boardColumns.flat();
-  const boardOrderKey = JSON.stringify([query, boardSettings.lanes, boardColumns]);
+  const boardOrderKey = JSON.stringify([query, boardFilters, boardSettings.lanes, boardColumns]);
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
   function selectBoardIssue(id: string, checked: boolean, range = false) {
     if (saving || readOnly) return;
@@ -636,14 +678,14 @@ function ProjectIssues({ slug }: { slug: string }) {
                 <Button variant="secondary" onClick={() => { setProjectSaved(""); setEditingProject(true); }}>Edit project</Button>
                 <ArchiveProjectButton project={project} onChange={setProject} />
               </>}
-              <Button onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+              <Button disabled={!!saving} onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                 <Plus size={16} />
                 Create issue
               </Button>
             </div>
           )}
         </header>
-        {projectSaved && <p className="success" role="status">{projectSaved}</p>}
+        <Snackbar message={projectSaved} onDismiss={dismissProjectSaved} />
         {readOnly && project && (
           <ArchivedProjectNotice project={project} onChange={setProject} />
         )}
@@ -688,6 +730,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               aria-label="Search issues"
               placeholder="Search issues…"
               value={query}
+              disabled={board && !!saving}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
@@ -710,6 +753,10 @@ function ProjectIssues({ slug }: { slug: string }) {
           )}
           <span className="muted results-count">{filtered.length} issues</span>
         </div>
+        {board && <BoardFilters value={boardFilters} onChange={setBoardFilters}
+          onClear={() => { setBoardFilters(emptyBoardFilters); setQuery(""); }}
+          lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving}
+          active={!!query || JSON.stringify(boardFilters) !== JSON.stringify(emptyBoardFilters)} />}
         <ErrorNotice error={error} />
         {board ? (
           <>
@@ -725,6 +772,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 currentLane={selectedBoard.length && selectedBoard.every((id) => placements.get(id) === placements.get(selectedBoard[0])) ? placements.get(selectedBoard[0]) : undefined}
                 {...reorderActions(selectedBoard)}
                 disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
+              <Button variant="secondary" disabled={!!saving || closingIssues || readOnly || !selectedBoard.some((id) => issueById.get(id)?.state === "open")} onClick={() => void closeBoardIssues(selectedBoard)}>{closingIssues ? "Closing issues…" : "Close selected issues"}</Button>
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add tags</Button>
               <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; boardRange.current = null; }}>Clear selection</Button>
@@ -737,7 +785,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             )}
             {boardIssues.length > 0 && filtered.length === 0 && (
               <p className="board-empty-notice">
-                No visible issues. Check your search or restore a lane using
+                No visible issues. Clear filters, check your search or restore a lane using
                 Manage lanes.
               </p>
             )}
@@ -911,13 +959,28 @@ function ProjectIssues({ slug }: { slug: string }) {
               embedded
               onBoardChanged={listBoardChanged}
               onPendingChange={onPendingChange}
-              onSaved={(updated) =>
-                setIssues((current) =>
-                  current.map((issue) =>
-                    issue.id === updated.id ? updated : issue,
-                  ),
-                )
-              }
+              onSaved={(updated) => {
+                if (all) {
+                  setWorkspaceBoards((current) => Object.fromEntries(Object.entries(current).map(([projectId, settings]) => [
+                    projectId, projectId === updated.projectId ? settings : {
+                      ...settings, cards: settings.cards.filter((card) => card.issueId !== updated.id),
+                    },
+                  ])));
+                }
+                const belongsHere = all || updated.projectId === project?.id;
+                if (belongsHere) movedOutIds.current.delete(updated.id);
+                setIssues((current) => {
+                  if (!belongsHere) return current.filter((issue) => issue.id !== updated.id);
+                  return current.some((issue) => issue.id === updated.id)
+                    ? current.map((issue) => issue.id === updated.id ? updated : issue)
+                    : [...current, updated];
+                });
+                if (!all && updated.projectId !== project?.id) {
+                  movedOutIds.current.add(updated.id);
+                  setBoardSettings((current) => ({ ...current, cards: current.cards.filter((card) => card.issueId !== updated.id) }));
+                }
+                // Keep the detail mounted: moving a project must not discard its draft.
+              }}
             />
           </div>
         </aside>
@@ -952,6 +1015,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           project={readOnly ? null : project}
           existingTags={readOnly ? undefined : existingTags}
           onCreated={issueCreated}
+          onBoardChanged={listBoardChanged}
           onClose={() => setOpen(false)}
           canViewIssue={canLeaveDetails}
           onViewIssue={desktop ? (issue, source) => {

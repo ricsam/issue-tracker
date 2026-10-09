@@ -1,6 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Issue } from "../../shared/types";
+import type { BoardSettings, Issue } from "../../shared/types";
 import { message } from "./api";
 import { useNewIssueShortcut } from "./issue-shortcuts";
 import { useWorkspace } from "./workspace";
@@ -11,6 +11,7 @@ const IssueCreationContext = createContext<{
   open: () => void;
   register: (handler: () => void) => () => void;
   createdIssues: Issue[];
+  createdBoards: Record<string, BoardSettings>;
 } | null>(null);
 
 /** One shortcut owner, with page handlers preserving local drafts and detail panels. */
@@ -20,6 +21,7 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
   // A shortcut can open the global dialog while a route is still loading.
   // Retain those results so the eventual list cannot miss or overwrite them.
   const [createdIssues, setCreatedIssues] = useState<Issue[]>([]);
+  const [createdBoards, setCreatedBoards] = useState<Record<string, BoardSettings>>({});
   const [error, setError] = useState("");
   const { refresh } = useWorkspace();
   const navigate = useNavigate();
@@ -33,7 +35,7 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
     else setCreating(true);
   }, []);
   useNewIssueShortcut(open, true);
-  return <IssueCreationContext.Provider value={{ open, register, createdIssues }}>
+  return <IssueCreationContext.Provider value={{ open, register, createdIssues, createdBoards }}>
     {children}
     <ErrorNotice error={error} />
     {creating && <Suspense fallback={null}><CreateIssueDialog
@@ -41,6 +43,7 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
         setCreatedIssues((current) => [...current, issue]);
         void refresh().catch((cause) => setError(`Issue created, but workspace counts could not refresh: ${message(cause)}`));
       }}
+      onBoardChanged={(projectId, board) => setCreatedBoards((current) => ({ ...current, [projectId]: board }))}
       onClose={() => setCreating(false)}
       canViewIssue={() => true}
       onViewIssue={(issue) => { setCreating(false); navigate(`/issues/${issue.id}`); }}
@@ -56,6 +59,10 @@ export function useIssueCreation() {
 
 export function useGloballyCreatedIssues() {
   return useContext(IssueCreationContext)!.createdIssues;
+}
+
+export function useGloballyCreatedBoards() {
+  return useContext(IssueCreationContext)!.createdBoards;
 }
 
 export function useIssueCreationHandler(handler: () => void, enabled = true) {

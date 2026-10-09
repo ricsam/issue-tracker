@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
 import type { BoardSettings, Issue, Project, User } from "../../shared/types";
 import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
+import { useNotification } from "./ui/snackbar";
 import { ClosedTag } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
 import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
@@ -75,7 +76,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   useEffect(() => { setSelection((ids) => ids.filter((id) => eligible.has(id))); }, [eligibleKey]);
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
-  const [outcome, setOutcome] = useState("");
+  const notify = useNotification();
   const rows = issues.slice(page * pageSize, (page + 1) * pageSize);
   const pageIds = rows.filter((issue) => eligible.has(issue.id)).map((issue) => issue.id);
   const checkedCount = pageIds.filter((id) => selected.includes(id)).length;
@@ -83,14 +84,14 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   useEffect(() => { if (headerCheckbox.current) headerCheckbox.current.indeterminate = checkedCount > 0 && checkedCount < pageIds.length; }, [checkedCount, pageIds.length]);
   const closeSelected = async () => {
     if (inFlight.current || readOnly || !selectedOpen.length) return;
-    inFlight.current = true; setPending(true); setOutcome("");
+    inFlight.current = true; setPending(true);
     const ids = [...selectedOpen];
     try {
       const result = await onCloseIssues(ids);
       const closed = new Set(result.closedIds.filter((id) => ids.includes(id)));
       setSelection((current) => current.filter((id) => !closed.has(id)));
-      setOutcome(result.error ? `${closed.size} of ${ids.length} issues closed. ${result.error}` : closed.size ? `${closed.size} ${closed.size === 1 ? "issue" : "issues"} closed.${closed.size < ids.length ? ` ${ids.length - closed.size} not closed.` : ""}` : "No issues closed.");
-    } catch (error) { setOutcome(`Could not close issues. ${error instanceof Error ? error.message : "Please try again."}`); }
+      notify(result.error ? `${closed.size} of ${ids.length} issues closed. ${result.error}` : closed.size ? `${closed.size} ${closed.size === 1 ? "issue" : "issues"} closed.${closed.size < ids.length ? ` ${ids.length - closed.size} not closed.` : ""}` : "No issues closed.", result.error ? "error" : "success");
+    } catch (error) { notify(`Could not close issues. ${error instanceof Error ? error.message : "Please try again."}`, "error"); }
     finally { inFlight.current = false; setPending(false); }
   };
   const links = useRef(new Map<string, HTMLAnchorElement>());
@@ -164,7 +165,6 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
       {hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}
     </div>
-    <p className="issue-bulk-outcome" role="status">{outcome}</p>
     {sending && <SendToBoardDialog issues={sending} onClose={() => setSending(null)}
       onPlaced={(projectId, board, issueIds) => {
         setSelection((current) => current.filter((id) => !issueIds.includes(id)));

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 import {
   type BoardSettings,
@@ -26,6 +26,7 @@ export function BoardAddIssuesDialog({
   const [lane, setLane] = useState<Lane>(settings.lanes[0]);
   const [selected, setSelected] = useState(() => new Set<string>());
   const [query, setQuery] = useState("");
+  const anchor = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const placed = new Set(settings.cards.map((card) => card.issueId));
@@ -38,6 +39,28 @@ export function BoardAddIssuesDialog({
       .toLowerCase()
       .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
+
+  const availableKey = available.map((issue) => issue.id).join(",");
+  useEffect(() => {
+    const valid = new Set(available.map((issue) => issue.id));
+    setSelected((current) => new Set([...current].filter((id) => valid.has(id))));
+    if (anchor.current && !valid.has(anchor.current)) anchor.current = null;
+  }, [availableKey]);
+  const allMatching = matches.length > 0 && matches.every((issue) => selected.has(issue.id));
+  const someMatching = matches.some((issue) => selected.has(issue.id));
+  function selectIssue(id: string, checked: boolean, shift: boolean) {
+    const start = matches.findIndex((issue) => issue.id === anchor.current);
+    const end = matches.findIndex((issue) => issue.id === id);
+    const ids = shift && start >= 0 && end >= 0
+      ? matches.slice(Math.min(start, end), Math.max(start, end) + 1).map((issue) => issue.id)
+      : [id];
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const issueId of ids) checked ? next.add(issueId) : next.delete(issueId);
+      return next;
+    });
+    if (!shift || start < 0) anchor.current = id;
+  }
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,7 +87,7 @@ export function BoardAddIssuesDialog({
   return (
     <Modal
       title="Add issues to board"
-      description="Choose work from the issue list and place it in a lane. New issues are never added automatically."
+      description="Choose open issues and place them in a lane. Shift-click to select a range."
       open
       onOpenChange={(open) => !open && !busy && onClose()}
       className="board-settings-dialog"
@@ -94,35 +117,32 @@ export function BoardAddIssuesDialog({
                 aria-label="Search issues to add to board"
                 placeholder="Find issues by title, number, or tag…"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => { setQuery(event.target.value); anchor.current = null; }}
               />
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={!matches.length}
-              onClick={() =>
-                setSelected(
-                  (current) =>
-                    new Set([...current, ...matches.map((issue) => issue.id)]),
-                )
-              }
-            >
-              Select matching
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setSelected(new Set())}
-            >
-              Clear selection
-            </Button>
           </div>
           <p className="settings-help muted" role="status">
             {selected.size} selected · {available.length} open issues not on
             board
           </p>
           <div className="board-issue-options">
+            <label className="checkbox-option board-issue-option board-select-all">
+              <input type="checkbox" aria-label="Select all matching issues"
+                checked={allMatching}
+                ref={(element) => { if (element) element.indeterminate = someMatching && !allMatching; }}
+                disabled={!matches.length}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  anchor.current = null;
+                  setSelected((current) => {
+                    const next = new Set(current);
+                    for (const issue of matches) checked ? next.add(issue.id) : next.delete(issue.id);
+                    return next;
+                  });
+                }} />
+              <span>Select all matching issues</span>
+              <span className="muted">({matches.length})</span>
+            </label>
             {matches.map((issue) => (
               <label
                 className="checkbox-option board-issue-option"
@@ -132,15 +152,7 @@ export function BoardAddIssuesDialog({
                   type="checkbox"
                   aria-label={`Add issue !${issue.number}: ${issue.title}`}
                   checked={selected.has(issue.id)}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setSelected((current) => {
-                      const next = new Set(current);
-                      if (checked) next.add(issue.id);
-                      else next.delete(issue.id);
-                      return next;
-                    });
-                  }}
+                  onChange={(event) => selectIssue(issue.id, event.target.checked, (event.nativeEvent as MouseEvent).shiftKey)}
                 />
                 <span className="issue-number">!{issue.number}</span>
                 <span className="board-option-title">{issue.title}</span>

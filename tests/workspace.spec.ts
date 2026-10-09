@@ -78,7 +78,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     modal.getByRole("img", { name: "design (v1).png" }),
   ).toBeVisible();
-  await expect(modal.getByRole("combobox")).toHaveCount(1);
+  await expect(modal.getByRole("combobox")).toHaveCount(2);
+  await expect(modal.getByRole("combobox", { name: "Board lane", exact: true })).toHaveValue("");
   await expect(modal.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
   await expect(editor).toContainText("#design #enhancement");
   await modal
@@ -105,8 +106,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   ).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Assignee", exact: true })).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
   const commentEditor = page.locator(".comments .rich-editor");
   await commentEditor
     .locator("[contenteditable=true]")
@@ -161,6 +161,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   const done = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /Done/ }) });
+  // Keep the board drop target inside the viewport after the filter controls.
+  await page.setViewportSize({ width: 1440, height: 1200 });
   // Start the native drag with small moves over the narrow handle before
   // crossing the board (one large jump can skip Chromium's drag threshold).
   const handle = inProgress.locator(".board-card-handle");
@@ -279,6 +281,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
     page.locator(".comment").getByRole("button", { name: /edit|delete/i }),
   ).toHaveCount(0);
   // Expired sessions return to the login gate rather than leaving workspace data onscreen.
+  await page.getByRole("textbox", { name: "Issue", exact: true }).fill("Changed after session expiry");
   await page.context().clearCookies();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(

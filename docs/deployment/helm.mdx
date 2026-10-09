@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.13.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.14.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.13.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.13.0 adds a sortable/filterable Creator column, copying issue Markdown without saving, styled button tooltips, board Shift-arrow and Cmd/Ctrl+Shift-arrow selection, per-lane select-all checkboxes, and assigned/total/unassigned issue counts. No database migration, API change, or deployment-value change is added in this release.
+Verify `0.14.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.14.0 adds project moves, atomic lane-on-create, body-only discard, clean-save protection, unified notifications, equal-height board drop targets, board filters and bulk closing, and tri-state/Shift-range selection when adding issues. Issue PATCH now accepts optional `projectId`; both creation routes accept optional `lane`. No database migration or deployment-value change is added in this release.
 
 When upgrading from before 0.12.0, migration v11 runs once transactionally, replacing UUID issue IDs with global sequential numbers in creation order while preserving content, comments, tagged users, lifecycle, timestamps and board membership/order. API issue IDs are now canonical positive decimal strings; `Issue.number` is their numeric equivalent. **Old UUID issue URLs are not supported.** Other entity IDs remain UUIDs, and historical prose is not rewritten. Back up all of `/data` and retain the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** older images cannot safely use the new issue IDs. Recovery requires the pre-upgrade backup with its matching image/chart, preserving newer writes separately first. Existing deployment values remain valid.
 
@@ -45,7 +45,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.13.0 --namespace issue-tracker \
+  --version 0.14.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -85,9 +85,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.13.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.14.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.13.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.14.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

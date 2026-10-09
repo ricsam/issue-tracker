@@ -59,8 +59,7 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: `test-results/issue-preview-${width}.png` });
 
     // Merely viewing an issue must not normalize its source through rich editing.
-    await mode(editor, "Save changes").click();
-    await expect(editor.getByRole("status")).toHaveText("Changes saved");
+    await expect(mode(editor, "Save changes")).toBeDisabled();
     expect((await (await page.request.get(endpoint)).json()).issue.body).toBe(body);
     await expectPreview(editor, "Preview first");
     await mode(editor, "Markdown").click();
@@ -71,7 +70,7 @@ for (const width of [1440, 390]) {
     await mode(editor, "Preview").click();
     await expect(editor.getByRole("table")).toContainText("Updated in Markdown");
     await mode(editor, "Save changes").click();
-    await expect(editor.getByRole("status")).toHaveText("Changes saved");
+    await expect(page.locator('.snackbar [role="status"]')).toHaveText("Changes saved");
     expect((await (await page.request.get(endpoint)).json()).issue.body).toBe(edited);
     await page.reload();
     await expectPreview(detail(page), "Preview first");
@@ -127,7 +126,7 @@ test("Write still edits existing issues while new issues and comments start in W
   await mode(editor, "Write").click();
   await expect(input).toHaveText("Edited in Write");
   await mode(editor, "Save changes").click();
-  await expect(editor.getByRole("status")).toHaveText("Changes saved");
+  await expect(page.locator('.snackbar [role="status"]')).toHaveText("Changes saved");
   // Saving does not kick the user out of their chosen editing mode.
   await expect(mode(editor, "Write")).toHaveAttribute("aria-pressed", "true");
   await mode(editor, "Preview").click();

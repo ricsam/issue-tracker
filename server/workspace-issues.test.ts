@@ -44,7 +44,7 @@ test("workspace creation, global numbering, lifecycle, board rejection, auth and
     expect([a.number, b.number, c.number, d.number, e.number]).toEqual([1, 2, 3, 4, 5]);
     expect((await req("/api/issues", "POST", { body: "x", projectId: crypto.randomUUID() })).status).toBe(404);
     expect((await req("/api/issues", "POST", { body: "x", projectId: 1 })).status).toBe(400);
-    expect((await req(`/api/issues/${a.id}`, "PATCH", { projectId: project.id })).status).toBe(400);
+    expect((await req(`/api/issues/${a.id}`, "PATCH", { projectId: 1 })).status).toBe(400);
     expect((await req(`/api/projects/${project.slug}/board/issues`, "POST", { issueIds: [a.id], lane: "todo" })).status).toBe(400);
     expect((await req(`/api/issues/${a.id}/comments`, "POST", { body: mentionMarkdown(user) })).status).toBe(200);
     let detail = await (await req(`/api/issues/${a.id}`)).json();

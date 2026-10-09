@@ -4,6 +4,7 @@ import { orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
+import { Notification } from "./ui/snackbar";
 import "./send-to-board-dialog.css";
 
 type ProjectGroup = {
@@ -130,7 +131,7 @@ export function SendToBoardDialog({ issues, onPlaced, onClose }: {
           </>}
         </section>;
       })}
-      <p role="status" className="success">{notice}</p>
+      {notice && <Notification message={notice} />}
       <ErrorNotice error={warning} />
       <div className="form-actions">
         <Button type="button" variant="secondary" disabled={busy} onClick={() => !submitting.current && onClose()}>{hasSuccess ? "Done" : "Cancel"}</Button>

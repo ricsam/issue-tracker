@@ -132,7 +132,7 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await page.reload();
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   const add = page.getByRole("dialog", { name: "Add issues to board" });
-  await expect(add.getByRole("checkbox")).toHaveCount(0);
+  await expect(add.getByRole("checkbox", { name: /^Add issue/ })).toHaveCount(0);
   await expect(add.getByText("All open issues are already on the board.")).toBeVisible();
   expect(errors).toEqual([]);
 });

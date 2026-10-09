@@ -169,7 +169,7 @@ test("desktop sidebar width is resizable, remembered, clamped, and keyboard acce
   await expect(resizer).toHaveAttribute("aria-valuenow", "820");
   await assertLayout(page, 1440);
   await sidebar(page).getByRole("button", { name: "Save changes" }).click();
-  await expect(sidebar(page).getByText("Changes saved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
   await issueLink(page, "Sidebar beta").click();
   await expect(resizer).toHaveAttribute("aria-valuenow", "820");
@@ -237,9 +237,7 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
   await sidebar(page)
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
-  await expect(
-    sidebar(page).getByText("Changes saved", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   await expect(issueLink(page, "Renamed sidebar issue")).toBeVisible();
   await expect(issueLink(page, "Sidebar alpha")).toHaveCount(0);
   await expect(
@@ -294,9 +292,7 @@ test("sidebar saves synchronize titles without affecting board lanes; cards swit
   await sidebar(page)
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
-  await expect(
-    sidebar(page).getByText("Changes saved", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
   await expect(
     progress.getByRole("link", { name: /Keep this draft while moving/ }),
   ).toBeVisible();

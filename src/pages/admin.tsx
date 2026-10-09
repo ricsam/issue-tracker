@@ -4,13 +4,14 @@ import type { OidcSettings } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
+import { useNotification } from "../components/ui/snackbar";
 export function AdminPage() {
   const { user, refresh, users } = useWorkspace();
   const [settings, setSettings] = useState<OidcSettings | null>(null);
   const [secret, setSecret] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const notify = useNotification();
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (user.role !== "admin") return;
@@ -21,10 +22,9 @@ export function AdminPage() {
   }, [user.role, retry]);
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!settings) return;
+    if (!settings || busy) return;
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const { enabled, name, issuer, clientId, allowSignup } = settings;
       setSettings(
@@ -41,7 +41,7 @@ export function AdminPage() {
         }),
       );
       setSecret("");
-      setNotice("Single sign-on settings saved.");
+      notify("Single sign-on settings saved.");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -53,7 +53,6 @@ export function AdminPage() {
     const form = e.currentTarget;
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       await api("/api/admin/users", {
         method: "POST",
@@ -61,7 +60,7 @@ export function AdminPage() {
       });
       form.reset();
       await refresh();
-      setNotice("Local user created. Share their credentials securely.");
+      notify("Local user created. Share their credentials securely.");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -86,9 +85,6 @@ export function AdminPage() {
         </div>
       </header>
       <ErrorNotice error={error} />
-      <p className="success" role="status">
-        {notice}
-      </p>
       <div className="admin-grid">
         <section className="settings-card">
           <h2>

@@ -353,7 +353,6 @@ test("lanes independent from issue edits; hidden cards retained; removing member
     { priority: "high" },
     { assigneeId: null },
     { addToBoard: false },
-    { lane: "todo" },
   ])
     expect((await f.create(extra)).status).toBe(400);
   for (const extra of [

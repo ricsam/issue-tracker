@@ -1,23 +1,27 @@
 .snackbar {
   position: fixed;
-  z-index: 70;
+  z-index: 200;
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
-  width: min(360px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: 12px;
   pointer-events: none;
 }
-.snackbar[data-open="true"] {
-  padding: 12px 14px;
+.snackbar[data-open="true"] { pointer-events: auto; }
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
   border: 1px solid #ddd6e8;
   border-radius: 9px;
   background: #fff;
   color: #302a3c;
   box-shadow: 0 6px 24px #20133326;
-  pointer-events: auto;
 }
-.snackbar p { flex: 1; min-width: 0; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-.snackbar .icon-button { flex-shrink: 0; }
+.notification > svg { flex-shrink: 0; margin-top: 1px; color: #287447; }
+.notification[data-variant="error"] > svg { color: #b42318; }
+.notification-content { flex: 1; min-width: 0; }
+.notification p { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.notification .icon-button { flex-shrink: 0; }
+.notification-content > :not(:first-child) { margin-top: 10px; }

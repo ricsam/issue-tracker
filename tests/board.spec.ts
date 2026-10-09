@@ -64,10 +64,10 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   });
   await expect(addButton).toBeDisabled();
   await add.getByLabel("Search issues to add to board").fill(`!${issues[0].number}`);
-  await expect(add.getByRole("checkbox")).toHaveCount(1);
+  await expect(add.getByRole("checkbox", { name: /^Add issue/ })).toHaveCount(1);
   await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[0].number}:`) }).check();
   await add.getByLabel("Search issues to add to board").fill("Review");
-  await expect(add.getByRole("checkbox")).toHaveCount(1);
+  await expect(add.getByRole("checkbox", { name: /^Add issue/ })).toHaveCount(1);
   await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[1].number}:`) }).check();
   await add.getByLabel("Search issues to add to board").fill("");
   await expect(
@@ -77,7 +77,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   await add.getByLabel("Search issues to add to board").fill("release");
-  await add.getByRole("button", { name: "Select matching" }).click();
+  await add.getByRole("checkbox", { name: "Select all matching issues", exact: true }).check();
   await add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[2].number}:`) }).uncheck();
   await add.getByLabel("Lane", { exact: true }).selectOption("todo");
   await page.route(`**${endpoint}/issues`, async (route) => {
@@ -118,7 +118,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(done.locator(".board-card")).toHaveCount(1);
   await expect(todo.locator(".board-card")).toHaveCount(1);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
-  await expect(add.getByRole("checkbox")).toHaveCount(1);
+  await expect(add.getByRole("checkbox", { name: /^Add issue/ })).toHaveCount(1);
   await expect(
     add.getByRole("checkbox", { name: new RegExp(`Add issue !${issues[2].number}:`) }),
   ).toBeVisible();
@@ -181,7 +181,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   const create = page.getByRole("dialog", { name: "Create issue" });
   const editor = create.getByRole("textbox", { name: "Issue", exact: true });
   await expect(editor).toBeFocused();
-  await expect(create.getByRole("combobox")).toHaveCount(1);
+  await expect(create.getByRole("combobox")).toHaveCount(2);
+  await expect(create.getByRole("combobox", { name: "Board lane", exact: true })).toHaveValue("");
   await expect(create.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
   await expect(
     create.getByRole("checkbox", { name: "Add to board", exact: true }),
@@ -400,7 +401,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
-  await expect(add.getByRole("checkbox")).toHaveCount(0);
+  await expect(add.getByRole("checkbox", { name: /^Add issue/ })).toHaveCount(0);
   await expect(add.getByText(/No issues yet/)).toBeVisible();
   expect(errors).toEqual([]);
 });

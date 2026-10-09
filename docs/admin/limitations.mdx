@@ -11,7 +11,7 @@ They describe current behavior, not a roadmap or a promise of future features.
 
 Every authenticated user can access every project and upload.
 There are no per-project access controls or private projects.
-Assigning an issue to someone does not restrict who can read or update it.
+Tagging a user in an issue does not restrict who can read or update it; there is no assignee role. Moving an issue to another project does not change who can access it.
 The workspace user directory, including names and email addresses, is also visible to authenticated users.
 Anonymous visitors cannot access application data.
 
@@ -50,6 +50,14 @@ Deleting a comment does not imply that its uploaded attachments are removed.
 Uploads remain stored even when no issue or comment references them.
 There is no automatic orphan-upload cleanup in the current release.
 Plan storage capacity for retained files, and include uploads in backups rather than saving only SQLite.
+
+## Projects, boards and bulk actions
+
+Issues can move between active projects or become unlinked without changing their global number or URL. A changed project removes the old board placement; it does not transfer the lane or add the issue to the destination board. Archived source and destination projects must be restored first. Unlinked issues cannot join project boards.
+
+Creation defaults to **Not on board**. Explicit lane-on-create requires a visible lane in the selected active project; hidden lanes and another project's custom lanes are not valid destinations. Issue creation and that initial placement are atomic.
+
+Closing an issue does not remove or move its card. Board filters only change what is displayed, and the board defaults to all states. Bulk closing in lists and boards is not one atomic batch: successful closes remain saved if others fail, and failures can be retried. These action-result toasts are local interface feedback, not email or mention notifications.
 
 ## Single-instance deployment
 

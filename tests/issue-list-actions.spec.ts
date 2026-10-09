@@ -137,13 +137,13 @@ test("bulk close keeps failures selected, disables duplicate actions and clamps 
   await expect(page.getByRole("button", { name: "Tag selected issues" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Add tags" })).toBeDisabled();
   release();
-  await expect(page.locator(".issue-bulk-outcome")).toContainText("1 of 2 issues closed");
+  await expect(page.locator('.snackbar [role="alert"]')).toContainText("1 of 2 issues closed");
   await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Issue list pagination" })).toContainText("Page 1 of 1");
   await expect(page.getByRole("checkbox", { name: `Select issue !${numbers[0]}`, exact: true })).toBeChecked();
   await page.unroute(`**/api/issues/${ids[0]}`);
   await page.getByRole("button", { name: "Close selected issues" }).click();
-  await expect(page.locator(".issue-bulk-outcome")).toHaveText("1 issue closed.");
+  await expect(page.locator('.snackbar [role="status"]')).toHaveText("1 issue closed.");
   await expect(page.getByRole("button", { name: "Close selected issues" })).toBeDisabled();
 });
 

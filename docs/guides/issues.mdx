@@ -12,13 +12,14 @@ All authenticated users can read and update issues across the workspace. Issues 
 
 1. Select **Create issue** in the sidebar or press **Alt+N**. You can also create from a project's **List** or **Board**.
 2. Choose an active **Project** or **No project**. On project pages the current project is preselected; elsewhere creation defaults to no project.
-3. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
-4. Optionally add tags such as `#bug` or `#needs-review` to the body.
-5. Select **Create issue** to save. The dialog clears and refocuses for another issue; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
+3. Leave **Board lane** at **Not on board**, or choose a visible lane in the selected project, including custom lanes. Changing project resets this choice; **No project** has no board.
+4. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
+5. Optionally add tags such as `#bug` or `#needs-review` to the body.
+6. Select **Create issue** to save. The dialog clears and refocuses for another issue, keeping the selected project and lane; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
 
-New issues are open and stay off the board until you [add them to it](/guides/board).
+New issues are open. **Not on board** is the default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
-Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Existing issues cannot yet be reassigned; unlinked issues cannot join project boards.
+Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Moving an issue between projects keeps its number and URL; unlinked issues cannot join project boards.
 
 ## Tags, mentions and issue references
 
@@ -51,8 +52,8 @@ This automatic migration preserves the original description bytes, timestamps, a
 
 Open an issue by selecting its title in the list or its card body on the board. Full-page issues have a top breadcrumb back to the project, or **All issues** when unlinked. Creation metadata appears beside the issue number and state; there is no separate properties card or tag list.
 The issue body opens in **Preview**, both on the full page and in the desktop side panel. Select **Write** or **Markdown** to edit it, then select **Save changes**, or press Cmd+S on macOS / Ctrl+S elsewhere while focused on the issue. New issues and comment editors still start in **Write** mode.
-Edit the heading or first text line in the body to change the derived display title.
-Wait for **Changes saved** before leaving the page.
+Edit the heading or first text line in the body to change the derived display title. **Save changes** is disabled when the body has no unsaved changes. **Discard changes** restores the last saved issue body only: it leaves new-comment drafts and comment edits alone, and does not undo saved state or project changes.
+Wait for the **Changes saved** toast before leaving the page. Action results use shared toast notifications without shifting the editor; validation and retry controls remain beside the relevant form.
 Edits on the detail page are not automatically saved.
 When switching issues in the desktop side panel, the previous issue remains visible but non-interactive while the new one loads. A failed load shows an error and **Retry** without replacing the previous content.
 
@@ -92,6 +93,12 @@ Select issues in the list or board and choose **Add tags** to tag them together.
 
 Tags are appended to each selected issue’s latest saved body without replacing text or duplicating existing tags. If an unclosed Markdown block would hide the tags, they are inserted near the top instead. Closed issues can be tagged; archived projects are read-only. If a selected issue has an unsaved draft, you are asked before discarding it. A failed batch leaves all issues unchanged and keeps the dialog open for retry.
 
+## Move an issue to another project
+
+Use **Move issue** in full-page details or the desktop detail panel. Choose an active project or **No project**, then confirm. The source project must also be active; restore an archived project before moving its issues.
+
+Moving preserves the issue's global number, URL, saved body, comments, tags, tagged users and open/closed history. Unsaved issue and comment drafts stay in the editor: moving neither saves nor discards them. A changed project removes the old board placement without adding the issue to the destination board; use **Send to board** afterward if needed. Choosing the same project keeps the existing lane and card order. Failed moves leave the issue and board unchanged.
+
 ## Send issues to a board lane
 
 Select one or more issues in a project list or **All issues**, then choose **Send to board**. The same action is available in full-page issue details and the desktop detail panel.
@@ -128,7 +135,7 @@ The issue shows a **Closed** badge, records who closed it and when, and moves fr
 It keeps its content and comments, can still be edited, and still counts toward the project's total issue count.
 Select **Reopen issue** to return it to the open list.
 
-To close several open issues, select their checkboxes and choose **Close selected issues**. The header checkbox selects issues on the current page only; selections persist across pages but filtering removes hidden issues. Only selected open issues are closed. **Clear selection** deselects everything. If some closes fail, successful ones stay closed and failed ones remain selected for retry. Closing an issue with a pending draft in the side panel asks before discarding that draft. Closed issues can be selected for tagging, but cannot be closed again. Archived projects cannot use bulk actions.
+To close several open issues from the list or board, select their checkboxes and choose **Close selected issues**. In the list, the header checkbox selects issues on the current page only; selections persist across pages but filtering removes hidden issues. On the board, selection uses the cards matching its filters in visible lanes, and the board defaults to all states. Only selected open issues are closed. **Clear selection** deselects everything. If some closes fail, successful ones stay closed and failed ones remain selected for retry. Closing an issue with a pending draft in the side panel asks before discarding that draft. Closed issues can be selected for tagging, but cannot be closed again. Archived projects cannot use bulk actions.
 
 Closing never changes the board: a closed issue keeps its lane, and its card shows a **Closed** tag.
 Move the card to **Done** or remove it from the board if you want it out of the way.

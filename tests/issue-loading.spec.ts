@@ -100,7 +100,7 @@ test("bulk close confirms pending drafts and keeps board membership", async ({ p
   await page.getByRole("button", { name: "Close selected issues" }).click();
   await expect(sidebar(page)).toHaveCount(0);
   await expect(page.locator(".issue-row")).toHaveCount(1);
-  await expect(page.locator(".issue-bulk-outcome")).toHaveText("2 issues closed.");
+  await expect(page.locator('.snackbar [role="status"]')).toHaveText("2 issues closed.");
   const { board } = await (await page.request.get(`/api/projects/${project.slug}/board`)).json();
   expect(board.cards.map((card: { issueId: string }) => card.issueId).sort()).toEqual(ids.slice(0, 2).sort());
   const { issue } = await (await page.request.get(`/api/issues/${ids[0]}`)).json();

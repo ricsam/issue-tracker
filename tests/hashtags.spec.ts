@@ -60,7 +60,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   const save = page.waitForRequest((request) => request.method() === "PATCH" && request.url().endsWith(`/api/issues/${issues[0].id}`));
   await form.getByRole("button", { name: "Save changes", exact: true }).click();
   expect((await save).postDataJSON()).toEqual({ body });
-  await expect(form.getByRole("status")).toHaveText("Changes saved");
+  await expect(page.locator('.snackbar [role="status"]')).toHaveText("Changes saved");
   expect((await (await page.request.get(`/api/issues/${issues[0].id}`)).json()).issue.labels).toEqual(["triage", "release"]);
   await page.reload();
   await expect(form.locator(".editor-preview")).toContainText("#triage");
@@ -71,6 +71,6 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await expect(form.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(page.getByText("No labels", { exact: true })).toHaveCount(0);
   await form.getByRole("button", { name: "Save changes", exact: true }).click();
-  await expect(form.getByRole("status")).toHaveText("Changes saved");
+  await expect(page.locator('.snackbar [role="status"]')).toHaveText("Changes saved");
   expect((await (await page.request.get(`/api/issues/${issues[0].id}`)).json()).issue.labels).toEqual([]);
 });
