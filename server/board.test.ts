@@ -129,7 +129,7 @@ test("v4 migration retains default visibility and populated hidden lane placemen
   await f.add([issue.id], "done");
   await f.set({ lanes: ["todo"] });
   const before = await f.get();
-  f.entry.app.db.exec("ALTER TABLE project_boards DROP COLUMN customLanes; DELETE FROM migrations WHERE version=5;");
+  f.entry.app.db.exec("ALTER TABLE project_boards DROP COLUMN customLanes; DROP INDEX board_issues_order; ALTER TABLE board_issues DROP COLUMN position; DELETE FROM migrations WHERE version IN (5,10);");
   for (let run = 0; run < 2; run++) {
     f.entry.app.close();
     f.entry.app = createApp({ dataDir: f.entry.dir });
@@ -330,7 +330,7 @@ test("strict selection validation, atomic add, project isolation and database co
   const db = f.entry.app.db;
   expect(() =>
     db
-      .query("INSERT INTO board_issues VALUES (?,?,?)")
+      .query("INSERT INTO board_issues (projectId,issueId,lane) VALUES (?,?,?)")
       .run(f.project.id, foreign.id, "todo"),
   ).toThrow();
   // Arbitrary lanes are rejected by the API; the DB retains project/issue constraints.

@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, EllipsisVertical, X } from "lucide-react";
 import type { BoardLane, Lane } from "../../shared/types";
+import type { BoardOrderAction } from "../lib/board-order";
 
 /** A top-layer menu, so the horizontally scrolling board never clips it. */
-export function BoardActionsMenu({ label, text, count = 1, lanes, currentLane, disabled, onMove, onRemove }: {
+export function BoardActionsMenu({ label, text, count = 1, lanes, currentLane, disabled, onMove, onRemove, onReorder, reorderAvailable }: {
   label: string;
   text?: string;
   count?: number;
@@ -12,6 +13,8 @@ export function BoardActionsMenu({ label, text, count = 1, lanes, currentLane, d
   disabled: boolean;
   onMove: (lane: Lane) => void;
   onRemove: () => void;
+  onReorder?: (action: BoardOrderAction) => void;
+  reorderAvailable?: Partial<Record<BoardOrderAction, boolean>>;
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -78,6 +81,15 @@ export function BoardActionsMenu({ label, text, count = 1, lanes, currentLane, d
         }}>
         <span>{lane.label}</span>{lane.value === currentLane && <><Check size={14} /><span className="sr-only"> (current lane)</span></>}
       </button>)}
+      {onReorder && <>
+        <div role="separator" />
+        <span className="board-menu-heading">Order in lane</span>
+        {([ ["up", "Move up"], ["down", "Move down"], ["top", "Move to top"], ["bottom", "Move to bottom"] ] as const).map(([action, name]) =>
+          <button key={action} type="button" role="menuitem" tabIndex={-1} aria-disabled={disabled || !reorderAvailable?.[action]}
+            onClick={() => { if (disabled || !reorderAvailable?.[action]) return; close(); onReorder(action); }}>{name}</button>,
+        )}
+        {!currentLane && count > 1 && <span className="board-menu-help">Select issues in one lane to reorder with these controls.</span>}
+      </>}
       <div role="separator" />
       <button type="button" role="menuitem" tabIndex={-1} aria-disabled={disabled} onClick={() => {
         if (disabled) return;

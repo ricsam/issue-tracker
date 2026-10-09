@@ -1,0 +1,8 @@
+.board-card.card-drop-before, .board-card.card-drop-after { position: relative; }
+.board-card.card-drop-before::before, .board-card.card-drop-after::before {
+  content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 3px;
+  background: #7050d9; pointer-events: none; z-index: 4;
+}
+.board-card.card-drop-before::before { top: -6px; }
+.board-card.card-drop-after::before { bottom: -6px; }
+.board-column.card-drop-end { box-shadow: inset 0 -3px #7050d9; }

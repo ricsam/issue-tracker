@@ -11,7 +11,7 @@
     "build": "vite build",
     "start": "bun server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test server tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-table.test.ts tests/tag-autocomplete.test.ts",
+    "test": "bun test server tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-table.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

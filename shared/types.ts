@@ -31,6 +31,7 @@ export interface BoardCard {
 export interface BoardSettings {
   lanes: Lane[];
   customLanes: BoardLane[];
+  /** Array order defines the saved card order within each lane. */
   cards: BoardCard[];
 }
 export interface Issue {

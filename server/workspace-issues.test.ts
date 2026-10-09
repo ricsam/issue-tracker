@@ -106,7 +106,7 @@ test("v9 rebuild preserves populated v8 tables, constraints, indexes, triggers a
     INSERT INTO issues VALUES ('i',1,'p','Legacy title','Body','todo','high','[]','u','u','time','time','closed','u');
     INSERT INTO comments VALUES ('c','i','u','Comment','time','time');
     INSERT INTO issue_tagged_users VALUES ('i','u');
-    INSERT INTO board_issues VALUES ('p','i','custom_lane');
+    INSERT INTO board_issues (projectId,issueId,lane) VALUES ('p','i','custom_lane');
     CREATE INDEX custom_issue_index ON issues(priority);
     CREATE TRIGGER preserve_trigger BEFORE UPDATE OF priority ON issues BEGIN SELECT RAISE(ABORT,'preserved'); END;`);
   const tables = ["issues", "comments", "issue_tagged_users", "board_issues"];
@@ -127,7 +127,7 @@ test("v9 rebuild preserves populated v8 tables, constraints, indexes, triggers a
   insert.run("unlinked", null);
   expect(() => insert.run("duplicate", null)).toThrow();
   expect(() => insert.run("duplicate-project", "p")).toThrow();
-  expect(() => db.exec("INSERT INTO board_issues VALUES ('p','unlinked','todo')")).toThrow();
+  expect(() => db.exec("INSERT INTO board_issues (projectId,issueId,lane) VALUES ('p','unlinked','todo')")).toThrow();
   expect(() => db.exec("DELETE FROM issues WHERE id='i'")).toThrow();
   db.close();
 });

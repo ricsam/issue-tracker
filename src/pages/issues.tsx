@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent,
+  type DragEvent,
 } from "react";
 import {
   Link,
@@ -56,6 +57,8 @@ import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "../lib/issue-shortcuts";
 import { useGloballyCreatedIssues, useIssueCreationHandler } from "../lib/issue-creation";
 import { issueTags } from "../lib/issue-tags";
+import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
+import "./board-order.css";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
@@ -186,6 +189,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [boardSelection, setBoardSelection] = useState<string[]>([]);
   const boardAnchor = useRef<string | null>(null);
   const cardDrag = useRef<string[]>([]);
+  const [cardDrop, setCardDrop] = useState<{ lane: Lane; targetId: string | null; after: boolean } | null>(null);
   const [boardOutcome, setBoardOutcome] = useState("");
   const [tagging, setTagging] = useState<{ ids: string[]; kind: "mentions" | "labels" } | null>(null);
   useEffect(() => {
@@ -291,7 +295,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   async function changeBoard(ids: string[], next?: Lane) {
     if (saving || boardBusy.current || project?.archivedAt || (next && !boardSettings.lanes.includes(next))) return;
     const placed = new Map(boardSettings.cards.map((card) => [card.issueId, card.lane]));
-    const targets = issues.filter((issue) => ids.includes(issue.id) && placed.has(issue.id));
+    const byId = new Map(issues.map((issue) => [issue.id, issue]));
+    const targets = ids.flatMap((id) => placed.has(id) && byId.has(id) ? [byId.get(id)!] : []);
     if (!targets.length) return;
     boardBusy.current = true;
     setSaving("cards");
@@ -327,6 +332,45 @@ function ProjectIssues({ slug }: { slug: string }) {
       boardBusy.current = false;
       setSaving(null);
     }
+  }
+  async function reorderCards(ids: string[], lane: Lane, beforeIssueId: string | null) {
+    if (saving || boardBusy.current || project?.archivedAt || !ids.length || !boardSettings.lanes.includes(lane)) return;
+    boardBusy.current = true;
+    setSaving("cards");
+    setError("");
+    setBoardOutcome("");
+    try {
+      const result = await api<{ board: BoardSettings }>(`/api/projects/${encodeURIComponent(slug)}/board/issues/reorder`, {
+        method: "POST", body: JSON.stringify({ issueIds: ids, lane, beforeIssueId }),
+      });
+      setBoardSettings(result.board);
+      setBoardSelection((current) => current.filter((id) => !ids.includes(id)));
+      boardAnchor.current = null;
+      setBoardOutcome(`${ids.length} issue${ids.length === 1 ? "" : "s"} reordered.`);
+      try { await refresh(); }
+      catch (cause) { setError(`Board reordered, but workspace counts could not refresh: ${message(cause)}`); }
+    } catch (cause) {
+      // Keep the saved order and selection on failure; never manufacture a successful drop.
+      setError(`Could not reorder issues: ${message(cause)}`);
+    } finally {
+      boardBusy.current = false;
+      setSaving(null);
+    }
+  }
+  function reorderActions(ids: string[]) {
+    const destinations = {
+      up: boardOrderTarget(boardSettings.cards, ids, "up"),
+      down: boardOrderTarget(boardSettings.cards, ids, "down"),
+      top: boardOrderTarget(boardSettings.cards, ids, "top"),
+      bottom: boardOrderTarget(boardSettings.cards, ids, "bottom"),
+    };
+    return {
+      reorderAvailable: { up: !!destinations.up, down: !!destinations.down, top: !!destinations.top, bottom: !!destinations.bottom },
+      onReorder: (action: BoardOrderAction) => {
+        const target = destinations[action];
+        if (target) void reorderCards(boardSettings.cards.filter((card) => ids.includes(card.issueId)).map((card) => card.issueId), target.lane, target.beforeIssueId);
+      },
+    };
   }
   function boardSaved(settings: BoardSettings) {
     setBoardSettings(settings);
@@ -384,7 +428,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const placements = new Map(
     boardSettings.cards.map((card) => [card.issueId, card.lane]),
   );
-  const boardIssues = issues.filter((issue) => placements.has(issue.id));
+  const issueById = new Map(issues.map((issue) => [issue.id, issue]));
+  const boardIssues = boardSettings.cards.flatMap((card) => issueById.get(card.issueId) ?? []);
   const hiddenCount = boardIssues.filter(
     (issue) => !boardSettings.lanes.includes(placements.get(issue.id)!),
   ).length;
@@ -414,10 +459,33 @@ function ProjectIssues({ slug }: { slug: string }) {
     const checked = selectedBoard.includes(i.id);
     const targets = checked ? selectedBoard : [i.id];
     const currentLane = targets.every((id) => placements.get(id) === placements.get(i.id)) ? placements.get(i.id) : undefined;
+    const dropClass = cardDrop?.targetId === i.id ? cardDrop.after ? " card-drop-after" : " card-drop-before" : "";
+    const dropOnCard = (event: DragEvent<HTMLElement>, commit: boolean) => {
+      if (laneDrag || !cardDrag.current.length || saving || readOnly) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (cardDrag.current.includes(i.id)) { setCardDrop(null); return; }
+      const box = event.currentTarget.getBoundingClientRect();
+      const after = event.clientY >= box.top + box.height / 2;
+      const lane = placements.get(i.id)!;
+      if (!commit) {
+        event.dataTransfer.dropEffect = "move";
+        setCardDrop({ lane, targetId: i.id, after });
+        return;
+      }
+      const ids = [...cardDrag.current];
+      const before = boardDropAnchor(boardSettings.cards, ids, lane, i.id, after);
+      cardDrag.current = [];
+      setCardDrop(null);
+      if (before !== undefined) void reorderCards(ids, lane, before);
+    };
     return (
       <article
         key={i.id}
-        className={`board-card${selectedId === i.id ? " is-selected" : ""}${checked ? " is-bulk-selected" : ""}${i.state === "closed" ? " is-closed" : ""}`}
+        className={`board-card${selectedId === i.id ? " is-selected" : ""}${checked ? " is-bulk-selected" : ""}${i.state === "closed" ? " is-closed" : ""}${dropClass}`}
+        onDragOver={(event) => dropOnCard(event, false)}
+        onDrop={(event) => dropOnCard(event, true)}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCardDrop((current) => current?.targetId === i.id ? null : current); }}
         onClickCapture={(event) => {
           if (event.button !== 0 || event.altKey || !(event.metaKey || event.ctrlKey || event.shiftKey)) return;
           // Checkboxes keep their native toggle; popover items are not card surfaces.
@@ -442,11 +510,12 @@ function ProjectIssues({ slug }: { slug: string }) {
           <span
             className="board-card-handle"
             aria-label={`Drag issue #${i.number}`}
-            title="Drag to move issue; use Board actions for keyboard controls"
+            title="Drag to reorder or move issue; use Board actions for keyboard controls"
             draggable={!saving && !readOnly}
             onDragStart={(event) => {
               if (saving || readOnly) { event.preventDefault(); return; }
               cardDrag.current = [...targets];
+              setCardDrop(null);
               event.dataTransfer.setData("text/plain", i.id);
               event.dataTransfer.effectAllowed = "move";
               const card = event.currentTarget.closest<HTMLElement>(".board-card");
@@ -455,10 +524,10 @@ function ProjectIssues({ slug }: { slug: string }) {
                 event.dataTransfer.setDragImage(card, event.clientX - box.left, event.clientY - box.top);
               }
             }}
-            onDragEnd={() => { cardDrag.current = []; }}
+            onDragEnd={() => { cardDrag.current = []; setCardDrop(null); }}
           ><GripVertical size={14} className="drag-hint" /></span>
           <BoardActionsMenu label={`Board actions for issue #${i.number}`} lanes={lanes} currentLane={currentLane}
-            count={targets.length} disabled={!!saving || readOnly}
+            count={targets.length} disabled={!!saving || readOnly} {...reorderActions(targets)}
             onMove={(lane) => void changeBoard(targets, lane)} onRemove={() => void changeBoard(targets)} />
         </div>
         <Link
@@ -594,6 +663,8 @@ function ProjectIssues({ slug }: { slug: string }) {
               <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => setBoardSelection(boardOrder)}>Select visible issues</Button>
               <span className="issue-selection-count">{selectedBoard.length} selected</span>
               <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
+                currentLane={selectedBoard.length && selectedBoard.every((id) => placements.get(id) === placements.get(selectedBoard[0])) ? placements.get(selectedBoard[0]) : undefined}
+                {...reorderActions(selectedBoard)}
                 disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add tags</Button>
@@ -613,7 +684,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             )}
             <p className="board-outcome" role="status">{boardOutcome}</p>
             <p className="sr-only">
-              Drag issues by their handle between lanes, or use each issue’s board actions menu. Drag a selected issue’s handle to move the selection.
+              Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
               Drag a lane by its heading to reorder lanes, or use Manage lanes.
             </p>
             <div
@@ -632,10 +703,12 @@ function ProjectIssues({ slug }: { slug: string }) {
                 );
                 return (
                   <section
-                    className={`board-column${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}`}
+                    className={`board-column${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}${cardDrop?.lane === s.value && cardDrop.targetId === null ? " card-drop-end" : ""}`}
                     key={s.value}
                     onDragOver={(e) => {
+                      if (saving || readOnly || (!laneDrag && !cardDrag.current.length)) return;
                       e.preventDefault();
+                      if (!laneDrag) setCardDrop({ lane: s.value, targetId: null, after: true });
                       e.dataTransfer.dropEffect = "move";
                       if (laneDrag)
                         setLaneDrag((current) =>
@@ -646,6 +719,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                         );
                     }}
                     onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setCardDrop((current) => current?.lane === s.value ? null : current);
                       if (
                         !laneDrag ||
                         e.currentTarget.contains(e.relatedTarget as Node | null)
@@ -664,11 +738,10 @@ function ProjectIssues({ slug }: { slug: string }) {
                         void reorderLane(laneDrag.lane, s.value);
                         return;
                       }
-                      const i = boardIssues.find(
-                        (i) => i.id === e.dataTransfer.getData("text/plain"),
-                      );
-                      if (i) void changeBoard(cardDrag.current.includes(i.id) ? cardDrag.current : [i.id], s.value);
+                      const ids = [...cardDrag.current];
                       cardDrag.current = [];
+                      setCardDrop(null);
+                      if (ids.length) void reorderCards(ids, s.value, null);
                     }}
                   >
                     <h2

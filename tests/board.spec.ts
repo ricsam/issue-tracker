@@ -477,7 +477,7 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
   await page.reload();
   await expect(names).toHaveText(["Done", "In progress", "In review", "Todo"]);
   await page.getByRole("button", { name: "Board actions for issue #1", exact: true }).click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Done", "In progress", "In review", "Todo (current lane)", "Remove from board"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Done", "In progress", "In review", "Todo (current lane)", "Move up", "Move down", "Move to top", "Move to bottom", "Remove from board"]);
   await page.keyboard.press("Escape");
 
   // While dragging, the lane is dimmed and its destination edge is marked.

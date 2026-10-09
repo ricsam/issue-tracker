@@ -210,7 +210,7 @@ export function createApp(options: AppOptions = {}) {
       .get(projectId) as { lanes: string; customLanes: string } | null;
     const cards = db
       .query(
-        "SELECT b.issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY i.number",
+        "SELECT b.issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY b.position,i.number",
       )
       .all(projectId) as BoardCard[];
     return {
@@ -219,6 +219,9 @@ export function createApp(options: AppOptions = {}) {
       cards,
     };
   };
+  const nextBoardPosition = (projectId: string, lane: string) =>
+    (db.query("SELECT COALESCE(MAX(position),0)+1 AS position FROM board_issues WHERE projectId=? AND lane=?")
+      .get(projectId, lane) as { position: number }).position;
   const requireVisibleLane = (projectId: string, lane: string) => {
     const state = board(projectId);
     if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
@@ -662,14 +665,47 @@ export function createApp(options: AppOptions = {}) {
             .get(p.id, issueId)
         )
           fail(409, "Issue already on board");
-        db.query("INSERT INTO board_issues VALUES (?,?,?)").run(
+        db.query("INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)").run(
           p.id,
           issueId,
           input.lane,
+          nextBoardPosition(p.id, input.lane),
         );
       }
     }).immediate();
     return c.json({ board: board(p.id) });
+  });
+  app.post("/api/projects/:slug/board/issues/reorder", async (c) => {
+    const input = z.object({
+      issueIds: z.array(z.string().uuid()).min(1).max(1000)
+        .refine((ids) => new Set(ids).size === ids.length),
+      lane: laneField,
+      beforeIssueId: z.string().uuid().nullable(),
+    }).strict().parse(await json(c));
+    const result = db.transaction(() => {
+      const p = activeProject(c.req.param("slug"));
+      requireVisibleLane(p.id, input.lane);
+      const current = board(p.id).cards;
+      const selected = new Set(input.issueIds);
+      if (input.issueIds.some((id) => !current.some((card) => card.issueId === id)))
+        fail(400, "Unknown board member");
+      if (input.beforeIssueId !== null && (selected.has(input.beforeIssueId) ||
+        !current.some((card) => card.issueId === input.beforeIssueId && card.lane === input.lane)))
+        fail(400, "Invalid destination anchor");
+      const destination = current.filter((card) => card.lane === input.lane && !selected.has(card.issueId)).map((card) => card.issueId);
+      const index = input.beforeIssueId === null ? destination.length : destination.indexOf(input.beforeIssueId);
+      destination.splice(index, 0, ...input.issueIds);
+      const previous = current.filter((card) => card.lane === input.lane).map((card) => card.issueId);
+      if (previous.length !== destination.length || previous.some((id, i) => id !== destination[i])) {
+        // Only the destination needs renumbering. Source gaps retain the exact
+        // relative order of all remaining cards, including hidden/filter-excluded ones.
+        for (const [position, issueId] of destination.entries())
+          db.query("UPDATE board_issues SET lane=?,position=? WHERE projectId=? AND issueId=? AND (lane!=? OR position!=?)")
+            .run(input.lane, position + 1, p.id, issueId, input.lane, position + 1);
+      }
+      return board(p.id);
+    }).immediate();
+    return c.json({ board: result });
   });
   app.put("/api/projects/:slug/board/issues", async (c) => {
     const p = activeProject(c.req.param("slug"));
@@ -691,9 +727,9 @@ export function createApp(options: AppOptions = {}) {
           fail(409, "Reopen closed issue before adding it to the board");
       }
       for (const issueId of input.issueIds)
-        db.query(`INSERT INTO board_issues (projectId,issueId,lane) VALUES (?,?,?)
-          ON CONFLICT(projectId,issueId) DO UPDATE SET lane=excluded.lane
-          WHERE board_issues.lane != excluded.lane`).run(p.id, issueId, input.lane);
+        db.query(`INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)
+          ON CONFLICT(projectId,issueId) DO UPDATE SET lane=excluded.lane,position=excluded.position
+          WHERE board_issues.lane != excluded.lane`).run(p.id, issueId, input.lane, nextBoardPosition(p.id, input.lane));
     }).immediate();
     return c.json({ board: board(p.id) });
   });
@@ -714,8 +750,8 @@ export function createApp(options: AppOptions = {}) {
         fail(404, "Board member not found");
       requireVisibleLane(p.id, lane);
       db.query(
-        "UPDATE board_issues SET lane=? WHERE projectId=? AND issueId=?",
-      ).run(lane, p.id, c.req.param("id"));
+        "UPDATE board_issues SET lane=?,position=? WHERE projectId=? AND issueId=? AND lane!=?",
+      ).run(lane, nextBoardPosition(p.id, lane), p.id, c.req.param("id"), lane);
     }).immediate();
     return c.json({ board: board(p.id) });
   });

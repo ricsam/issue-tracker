@@ -29,6 +29,8 @@ Upgrade migration v6 adds nullable issue close and project archive columns, so e
 
 Migration v9 makes the project link optional, preserving existing issue numbers, content, comments, tags, lifecycle metadata, and board placements. Unlinked issues have their own number sequence and cannot join project boards. Back up your data before upgrading; existing issues cannot yet be reassigned.
 
+Migration v10 adds persistent board-card ordering, initially preserving every lane's previous issue-number order, including hidden and custom lanes. It does not change issue content or timestamps. Back up your data before upgrading.
+
 ## Issue table and mentions
 
 **All issues** in the sidebar lists issues across the whole workspace, including unlinked issues and read-only issues from archived projects. Its **Project** column can be sorted or filtered to a specific project or **No project**. The normal Open/Closed views, search, column filters, pagination, detail panel, and bulk actions work here too; archived rows cannot be selected for changes.
@@ -43,7 +45,7 @@ Type `@` in an issue or comment (Write or Markdown mode), then select a teammate
 
 Migration v7 adds and backfills the association table without changing issue/comment content or timestamps. Back up your data before upgrading as usual.
 
-Board cards have a kebab menu next to the drag handle for moving to a lane or removing board membership. Select cards with checkboxes or Shift-click, then use the selection toolbar (or a selected card’s menu) to move/remove the selection. Drag only by the card’s handle; dragging a selected card’s handle moves the whole selection. Ordinary clicks on the rest of a card open its issue. Failed operations stay selected for retry. Changing search or hiding lanes removes hidden selections.
+Drag board cards by their handles before or after other cards to rearrange a lane, or drop in a lane's empty space to append. The saved order is shared and persists across reloads. The kebab menu offers **Move up/down**, **Move to top/bottom**, lane moves, and removal. Reordering selected cards keeps their relative order; same-lane selections can use the menu controls too. Search-hidden cards retain their order. New or cross-lane cards added through **Send to board** append; same-lane placement keeps its position. Select cards with checkboxes or Shift-click, then use the selection toolbar (or a selected card’s menu) to move/remove the selection. Drag only by the card’s handle; dragging a selected card’s handle moves the whole selection. Ordinary clicks on the rest of a card open its issue. Failed operations stay selected for retry. Changing search or hiding lanes removes hidden selections.
 
 **Tag selected issues** is available on both views. Choose one or more teammates to add canonical @mentions without replacing existing content. Existing body mentions are not duplicated; if an unclosed Markdown block would swallow a trailing mention, it is inserted near the top instead. The batch is atomic, and an open unsaved draft requires confirmation before tagging that issue.
 

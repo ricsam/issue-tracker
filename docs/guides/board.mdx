@@ -1,6 +1,6 @@
 ---
 title: Board
-description: Organize work in default or custom lanes, reorder lanes, add and remove cards, and resize the desktop issue panel.
+description: Organize work in default or custom lanes, reorder cards and lanes, and resize the desktop issue panel.
 ---
 
 The board contains work explicitly added from a project's issue list. New boards start with **Todo**, **In progress**, and **Done**, with no cards. Board lanes and placements are saved per project and shared with your team.
@@ -40,11 +40,17 @@ To reorder with a keyboard or on a touch screen, use the move buttons in **Manag
 
 ## Move work
 
-Drag a card by its handle into another lane, or choose a lane from its kebab menu for keyboard and mobile access. Only the handle starts a drag. Moves save immediately and do not change issue content, tags, or tagged users.
+Drag a card by its handle before or after another card, in the same lane or another lane. A highlighted line shows where it will land. Drop in the lane's empty space to put it at the end. Only the handle starts a drag; dragging a lane heading still moves the whole lane.
+
+For keyboard or mobile access, open a card's kebab menu and use **Move up**, **Move down**, **Move to top**, or **Move to bottom**. These controls also work on a same-lane selection. Choosing a different lane from the menu appends the cards there.
+
+Moves save immediately, persist across reloads, and are shared with your team. They do not change issue content, state, tags, timestamps, or unsaved edits.
 
 The permanent selection bar combines the board/lane counts, **Select visible issues**, and bulk actions. Select individual cards with their checkboxes, Cmd/Ctrl-click anywhere on a card to toggle selection, or Shift-click to select a range. Ordinary clicks on the card body, padding, or metadata open issue details; checkboxes and the kebab menu keep their own actions. Then use the selection bar or a selected card's menu to move or remove the selection. Dragging a selected card’s handle moves the whole selection. Failed operations remain selected for retry; successful operations are kept. Changing search or hiding lanes removes hidden cards from the selection. Removing cards never deletes their issues.
 
-Cards stay ordered by issue number within each lane; manual ranking and workflow rules are not supported. Only the built-in **Done** lane counts as completed in project progress.
+Selected cards are kept in their displayed order when dragged as a group. Search filters do not remove hidden cards or scramble their relative order: drops are positioned relative to the visible target in the complete lane. Menu moves use the full lane order, including search-hidden cards. Failed reorders leave the saved order and selection intact for retry.
+
+New cards and cards moved from another lane using **Send to board** are appended; sending a card to its existing lane keeps its position. Existing boards retain their prior issue-number order on upgrade, until you rearrange them. Only the built-in **Done** lane counts as completed in project progress.
 
 Closing an issue does not move its card. A closed card keeps its lane, shows a **Closed** tag, and no longer counts as unfinished work. Move it to **Done** or remove it from the board when you no longer want to see it.
 

@@ -223,5 +223,14 @@ export function openDatabase(path: string) {
     throw error;
   }
   db.exec("PRAGMA foreign_keys=ON");
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=10").get()) return;
+    db.exec("ALTER TABLE board_issues ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+    // Issue numbers are unique within a project, so using them as initial
+    // positions preserves each old lane's ascending-number subsequence.
+    db.exec(`UPDATE board_issues SET position=(SELECT number FROM issues WHERE id=board_issues.issueId);
+      CREATE INDEX board_issues_order ON board_issues(projectId,lane,position);
+      INSERT INTO migrations VALUES (10);`);
+  }).immediate();
   return db;
 }
