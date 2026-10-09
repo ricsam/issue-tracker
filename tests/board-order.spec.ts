@@ -51,6 +51,7 @@ test("drag places cards before and after siblings, persists across reload, and p
   expect(saved.cards.filter((item: { lane: string }) => item.lane === "todo").map((item: { issueId: string }) => item.issueId)).toEqual([4, 1, 2, 0, 3].map((index) => issues[index].id));
   await card(page, issues[0]).getByRole("link").click();
   const editor = page.getByRole("complementary", { name: "Issue details", exact: true }).getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Keep this unsaved text");
   await menuMove(page, issues[0], "Move to top");
   await expect(order(page, "Todo")).toHaveText(numbers(issues, [1, 5, 2, 3, 4]));

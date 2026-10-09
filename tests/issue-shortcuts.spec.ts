@@ -54,6 +54,7 @@ for (const modifier of ["Control", "Meta"]) {
     const save = sidebar.getByRole("button", { name: "Save changes", exact: true });
     await expect(save).toHaveAttribute("title", /Save issue \((Ctrl\+|⌘)S\)/);
     await expect(sidebar).not.toContainText("#hashtags outside code become labels automatically.");
+    await sidebar.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await editor.fill("Saved from rich mode");
     let writes = 0;
     page.on("request", (request) => { if (request.method() === "PATCH" && request.url().endsWith(`/api/issues/${issue.id}`)) writes++; });
@@ -92,6 +93,7 @@ for (const modifier of ["Control", "Meta"]) {
     await page.getByRole("link", { name: `!${issue.number} Existing issue`, exact: true }).click();
     const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
     const existing = sidebar.getByRole("textbox", { name: "Issue", exact: true });
+    await sidebar.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await existing.fill("Unsaved existing issue");
     let patches = 0;
     let creates = 0;
@@ -159,6 +161,7 @@ test("full-page shortcuts, project tag catalog, busy protection and archived gua
   const { project, issue, headers } = await seed(page, baseURL!);
   await page.goto(`/issues/${issue.id}`);
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Full page #bu");
   await expect(page.getByRole("option", { name: "#bug", exact: true })).toBeVisible();
   await editor.press("Tab");

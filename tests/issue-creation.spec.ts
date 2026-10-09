@@ -103,7 +103,7 @@ for (const width of [1440, 1024, 1023, 390]) {
       page.on("dialog", async (dialog) => { prompts.push(dialog.message()); await dialog.dismiss(); });
       await link.click();
       await expect(modal(page)).toBeHidden();
-      await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open created issue");
+      await expect(page.locator(".detail-form .editor-preview")).toContainText("Open created issue");
       if (width >= 1024) {
         await expect(page).toHaveURL(path + (board ? "/board" : ""));
         await expect(sidebar(page)).toBeVisible();
@@ -145,7 +145,7 @@ for (const mobile of [false, true]) {
       await link.click();
       await expect(modal(page)).toBeHidden();
       await expect(page).toHaveURL(mobile ? href! : path);
-      await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Saved issue");
+      await expect(page.locator(".detail-form .editor-preview")).toContainText("Saved issue");
       if (!mobile) await expect(sidebar(page)).toBeVisible();
     });
   }
@@ -164,7 +164,7 @@ test("View issue preserves new-tab behavior and the current draft on desktop", a
   const popup = await popupPromise;
   try {
     await expect(popup).toHaveURL(href!);
-    await expect(popup.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Open in another tab");
+    await expect(popup.locator(".detail-form .editor-preview")).toContainText("Open in another tab");
     await expect(page).toHaveURL(path);
     await expect(editor(page)).toContainText("Keep this draft");
     await expect(sidebar(page)).toHaveCount(0);
@@ -179,6 +179,7 @@ test("View issue protects an existing sidebar draft before replacing it", async 
   await submit(page).click();
   await expectReset(page);
   await modal(page).getByRole("link", { name: "View issue" }).click();
+  await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await sidebar(page).getByRole("textbox", { name: "Issue", exact: true }).fill("Unsaved sidebar draft");
   await page.getByRole("button", { name: "Create issue", exact: true }).click();
   await editor(page).fill("Replacement issue");
@@ -195,7 +196,7 @@ test("View issue protects an existing sidebar draft before replacing it", async 
   await modal(page).getByRole("link", { name: "View issue" }).click();
   await expect(modal(page)).toBeHidden();
   await expect(page).toHaveURL(path);
-  await expect(sidebar(page).getByRole("textbox", { name: "Issue", exact: true })).toContainText("Replacement issue");
+  await expect(sidebar(page).locator(".detail-form .editor-preview")).toContainText("Replacement issue");
   await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
   await expect(sidebar(page)).toBeHidden();
 });

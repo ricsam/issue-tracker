@@ -26,6 +26,7 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   expect(unlinked.id).toMatch(/^[1-9]\d*$/);
   await page.goto(`/issues/${unlinked.id}`);
   await expect(page.locator(".eyebrow")).toHaveText(`ISSUE !${unlinked.number}`);
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   const picker = page.getByRole("listbox", { name: "Issue suggestions" });
   await editor.fill(`Related issue\n\nSee !Reference target ${suffix}`);
@@ -76,6 +77,8 @@ test("rich references can be extended, saved, followed and used in comments", as
   const target = (await (await page.request.post("/api/issues", { headers, data: { body: `Clickable target ${randomUUID()}` } })).json()).issue;
   const issue = (await (await page.request.post("/api/issues", { headers, data: { body: `Reference editing\n\n!${target.number}` } })).json()).issue;
   await page.goto(`/issues/${issue.id}`);
+  await expect(page.locator(".detail-form .editor-preview .issue-reference-chip")).toHaveAttribute("href", `/issues/${target.id}`);
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   const reference = editor.locator(".issue-reference-chip");
   await expect(reference).toHaveText(`!${target.number}`);

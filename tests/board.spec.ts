@@ -208,7 +208,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await expect(create).toBeHidden();
   await expect(page).toHaveURL(projectPath + "/board");
   await expect(page.getByRole("complementary", { name: "Issue details", exact: true })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toContainText("#design #idea");
+  await expect(page.locator(".detail-form .editor-preview")).toContainText("#design #idea");
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Priority", { exact: true })).toHaveCount(0);
   await page.goto(projectPath + "/board");

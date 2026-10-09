@@ -109,6 +109,7 @@ test("editing project keeps sidebar issue drafts and archived projects require r
   await page.goto(path);
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const editor = page.getByRole("complementary", { name: "Issue details", exact: true }).getByRole("textbox", { name: "Issue", exact: true });
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Unsaved issue stays");
   await page.getByRole("button", { name: "Edit project", exact: true }).click();
   await modal(page).getByRole("textbox", { name: "Project name" }).fill("Changed with draft");

@@ -62,7 +62,6 @@ for (const mobile of [false, true]) test(`explicit mentions survive creation, so
   await expect(dialog.getByRole("link", { name: "View issue" })).toBeVisible();
   await dialog.getByRole("link", { name: "View issue" }).click();
   await expect(page.getByRole("list", { name: "Tagged users", exact: true })).toHaveCount(0);
-  await page.locator(".detail-form").getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.locator(".detail-form .editor-preview .mention-chip")).toHaveCount(2);
   await page.screenshot({ path: `test-results/mention-saved-preview-${mobile ? "mobile" : "desktop"}.png`, fullPage: true });
 });
@@ -74,6 +73,7 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   await page.goto(`/issues/${issue.id}`);
   const input = page.getByRole("textbox", { name: "Issue", exact: true });
   const draft = "Unsaved issue draft must survive every comment mutation #unsaved-label";
+  await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await input.fill(draft);
   const tagged = page.getByRole("list", { name: "Tagged users", exact: true });
   await expect(tagged).toHaveCount(0);

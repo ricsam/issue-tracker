@@ -61,6 +61,8 @@ Full-page issues use the top breadcrumb for returning to the project, or **All i
 
 ## Markdown editing
 
+Existing issues open in **Preview** in both full-page details and the side panel. Select **Write** or **Markdown** to edit the body, then **Save changes**. New issues and comment editors still start in **Write** mode.
+
 Threadline stores canonical Markdown, not HTML. Rich **Write** mode round-trips the supported subset: paragraphs, headings, block quotes, bold, italic, strikethrough, inline and fenced code, links, ordered, unordered and task lists, plus uploaded attachment links and images. Markdown **source** mode preserves GFM source, and **Preview** renders GFM such as tables. Keep unsupported rich-mode structures in source mode because switching through Write mode may normalize them.
 
 See [the API contract](docs/api-contract.md) for the HTTP surface.
