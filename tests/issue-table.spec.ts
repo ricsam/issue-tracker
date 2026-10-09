@@ -130,7 +130,7 @@ for (const width of [1440, 390]) {
     const table = page.getByRole("table");
     const titles = table.locator("tbody .issue-link");
     await expect(titles).toHaveText(["Zebra", "Alpha", "Beta"]);
-    await expect(table.getByRole("columnheader")).toHaveCount(6);
+    await expect(table.getByRole("columnheader")).toHaveCount(7);
     await expect(table.locator(".avatar")).toHaveCount(0);
     await expect(table.locator("time").first()).toHaveAttribute("datetime", created[0].createdAt);
     await expect(table.locator(".user-tag")).toHaveText(["Alex Morgan"]);

@@ -57,6 +57,7 @@ import { useIssueSidebarWidth } from "../lib/use-issue-sidebar-width";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "../lib/issue-shortcuts";
 import { useGloballyCreatedIssues, useIssueCreationHandler } from "../lib/issue-creation";
 import { issueTags } from "../lib/issue-tags";
+import { boardLaneOptions, issueBoardLanes } from "../lib/issue-board-lanes";
 import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
 import "./board-order.css";
 
@@ -164,6 +165,14 @@ function ProjectIssues({ slug }: { slug: string }) {
     cards: [],
     customLanes: [],
   });
+  const [workspaceBoards, setWorkspaceBoards] = useState<Record<string, BoardSettings>>({});
+  const listBoards = all ? workspaceBoards : project ? { [project.id]: boardSettings } : {};
+  const listBoardLanes = issueBoardLanes(listBoards);
+  const laneOptions = boardLaneOptions(listBoards, projects, all);
+  function listBoardChanged(projectId: string, settings: BoardSettings) {
+    if (all) setWorkspaceBoards((current) => ({ ...current, [projectId]: settings }));
+    else if (projectId === project?.id) setBoardSettings(settings);
+  }
   const [configureBoard, setConfigureBoard] = useState(false);
   const [addToBoard, setAddToBoard] = useState(false);
   const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
@@ -272,7 +281,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       all ? Promise.resolve({ project: null }) : api<{ project: Project }>(
         `/api/projects/${encodeURIComponent(slug)}`,
       ),
-      api<{ issues: Issue[] }>(all ? "/api/issues" :
+      api<{ issues: Issue[]; boards?: Record<string, BoardSettings> }>(all ? "/api/issues" :
         `/api/projects/${encodeURIComponent(slug)}/issues`,
       ),
       all ? Promise.resolve({ board: { lanes: [], cards: [], customLanes: [] } }) : api<{ board: BoardSettings }>(
@@ -284,6 +293,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           setProject(p.project);
           setIssues(i.issues);
           setBoardSettings(b.board);
+          setWorkspaceBoards(i.boards ?? {});
         }
       })
       .catch((e) => { if (active) { setLoadFailed(true); setError(message(e)); } })
@@ -444,7 +454,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
-  const filtered = board ? searched : issueTableRows(searched, users, tableState, projects);
+  const filtered = board ? searched : issueTableRows(searched, users, tableState, projects, listBoardLanes);
   const boardOrder = lanes.flatMap((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
   function selectBoardIssue(id: string, checked: boolean, range = false) {
@@ -787,6 +797,8 @@ function ProjectIssues({ slug }: { slug: string }) {
             allIssues={listIssues}
             users={users}
             projects={all ? projects : undefined}
+            boardLanes={listBoardLanes}
+            laneOptions={laneOptions}
             state={tableState}
             onChange={setTableState}
             paginationKey={JSON.stringify([query, showClosed])}
@@ -798,7 +810,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             onNavigate={navigateIssue}
             onTagIssues={tagIssues}
             onLabelIssues={(ids) => tagIssues(ids, "labels")}
-            onBoardChanged={(projectId, settings) => { if (projectId === project?.id) setBoardSettings(settings); }}
+            onBoardChanged={listBoardChanged}
           />
         )}
       </div>
@@ -839,7 +851,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               id={selectedId}
               existingTags={existingTags}
               embedded
-              onBoardChanged={(projectId, settings) => { if (projectId === project?.id) setBoardSettings(settings); }}
+              onBoardChanged={listBoardChanged}
               onPendingChange={onPendingChange}
               onSaved={(updated) =>
                 setIssues((current) =>

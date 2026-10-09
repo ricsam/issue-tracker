@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { Issue, Project, User } from "../shared/types";
 import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows } from "../src/lib/issue-table";
+import { boardLaneKey, boardLaneOptions, issueBoardLanes } from "../src/lib/issue-board-lanes";
 
 const users: User[] = [
   { id: "a", name: "Alex", email: "alex@example.test", role: "member", createdAt: "2026-01-01" },
@@ -15,6 +16,26 @@ const issues = [
   issue(3, { title: "alpha", labels: ["bug", "design"], taggedUserIds: ["a", "b"] }),
 ];
 const numbers = (rows: Issue[]) => rows.map((row) => row.number);
+
+test("board lane display, filter and sort reflect membership including hidden custom lanes and project identity", () => {
+  const boards = {
+    p: { lanes: ["todo", "done"], customLanes: [{ value: "review", label: "Review" }], cards: [{ issueId: "1", lane: "todo" }, { issueId: "2", lane: "review" }] },
+    q: { lanes: ["todo"], customLanes: [{ value: "review", label: "Review" }], cards: [{ issueId: "3", lane: "todo" }, { issueId: "4", lane: "review" }] },
+  };
+  const lanes = issueBoardLanes(boards);
+  expect(lanes.get("2")).toEqual({ value: boardLaneKey("p", "review"), label: "Review", hidden: true });
+  const rows = [issue(1, {}), issue(2, { state: "closed", labels: ["bug"] }), issue(3, { projectId: "q" }), issue(4, { projectId: "q" }), issue(5, {}), issue(6, { projectId: null })];
+  const filtered = (state: Partial<typeof initialIssueTableState>) => numbers(issueTableRows(rows, users, { ...initialIssueTableState, ...state }, projects, lanes));
+  expect(filtered({ lane: boardLaneKey("p", "todo") })).toEqual([1]);
+  expect(filtered({ lane: boardLaneKey("p", "review"), label: "label:bug" })).toEqual([2]);
+  expect(filtered({ lane: boardLaneKey("p", "review"), project: "q" })).toEqual([]);
+  expect(filtered({ lane: "none" })).toEqual([5, 6]);
+  expect(filtered({ sort: "lane" })).toEqual([5, 6, 2, 4, 1, 3]);
+  expect(filtered({ sort: "lane", direction: "descending" })).toEqual([1, 3, 2, 4, 5, 6]);
+  expect(hasColumnFilters({ ...initialIssueTableState, lane: "none" })).toBe(true);
+  expect(boardLaneOptions(boards, projects, true)).toContainEqual({ value: boardLaneKey("p", "review"), label: "Alpha · Review (hidden)" });
+  expect(boardLaneOptions(boards, projects, true)).toContainEqual({ value: boardLaneKey("q", "review"), label: "Zebra · Review (hidden)" });
+});
 
 const projects: Project[] = [
   { id: "p", name: "Alpha", slug: "alpha", description: "", createdAt: "2026-01-01", archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },

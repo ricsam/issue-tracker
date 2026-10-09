@@ -30,7 +30,7 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | PUT | `/api/projects/:slug/board/issues` | `{issueIds:string[],lane:Lane}` → `{board:BoardSettings}`; atomic add-or-move placement |
 | PATCH | `/api/projects/:slug/board/issues/:id` | `{lane:Lane}` → `{board:BoardSettings}`; move member |
 | DELETE | `/api/projects/:slug/board/issues/:id` | No body → `{board:BoardSettings}`; remove membership only |
-| GET | `/api/issues` | `{issues:Issue[]}`; all linked/unlinked issues, including archived projects, ordered by createdAt then id |
+| GET | `/api/issues` | `{issues:Issue[],boards:Record<string,BoardSettings>}`; all linked/unlinked issues, including archived projects, ordered by createdAt then id; boards keyed by project ID for projects represented in the result (including hidden lanes/cards) |
 | POST | `/api/issues` | `{body,projectId?:string|null,title?,labels?}` → `{issue:Issue}`; omitted/null projectId creates unlinked |
 | POST | `/api/issues/tagged-users` | `{issueIds:string[],userIds:string[]}` → `{issues:Issue[]}`; atomic cross-project/unlinked body mentions |
 | POST | `/api/issues/labels` | `{issueIds:string[],labels:string[]}` → `{issues:Issue[]}`; atomic cross-project/unlinked body hashtags |

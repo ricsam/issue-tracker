@@ -771,8 +771,10 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ issues: rows.map((r) => issue(r.id)) });
   });
   app.get("/api/issues", (c) => {
-    const rows = db.query("SELECT id FROM issues ORDER BY createdAt,id").all() as { id: string }[];
-    return c.json({ issues: rows.map((r) => issue(r.id)) });
+    // Return board metadata with the list so clients need no request per project.
+    const rows = db.query("SELECT id,projectId FROM issues ORDER BY createdAt,id").all() as { id: string; projectId: string | null }[];
+    const projectIds = [...new Set(rows.flatMap((row) => row.projectId ? [row.projectId] : []))];
+    return c.json({ issues: rows.map((r) => issue(r.id)), boards: Object.fromEntries(projectIds.map((id) => [id, board(id)])) });
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");

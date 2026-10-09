@@ -73,7 +73,17 @@ test("workspace creation, independent numbering, lifecycle, board rejection, aut
     expect((await req("/api/issues", "GET", undefined, "")).status).toBe(401);
     expect((await req("/api/issues", "POST", { body: "x" }, "")).status).toBe(401);
     expect((await req("/api/issues", "POST", { body: "x" }, cookie, "https://evil.example")).status).toBe(403);
+    const custom = `custom_${crypto.randomUUID()}`;
+    expect((await req(`/api/projects/${project.slug}/board`, "PATCH", { lanes: ["todo", custom], customLanes: [{ value: custom, label: "Review" }] })).status).toBe(200);
+    expect((await req(`/api/projects/${project.slug}/board/issues`, "POST", { issueIds: [c.id], lane: custom })).status).toBe(200);
+    expect((await req(`/api/projects/${project.slug}/board`, "PATCH", { lanes: ["todo"] })).status).toBe(200);
     await req(`/api/projects/${project.slug}`, "PATCH", { archived: true });
+    const listing = await (await req("/api/issues")).json();
+    expect(Object.keys(listing.boards).sort()).toEqual([project.id, other.id].sort());
+    expect(listing.boards[project.id]).toEqual({ lanes: ["todo"], customLanes: [{ value: custom, label: "Review" }], cards: [{ issueId: c.id, lane: custom }] });
+    expect(listing.boards[other.id].cards).toEqual([]);
+    expect(listing.boards[project.id]).toEqual((await (await req(`/api/projects/${project.slug}/board`)).json()).board);
+    expect(listing.issues.find((issue: { id: string }) => issue.id === a.id).projectId).toBeNull();
     expect((await req("/api/issues", "POST", { body: "x", projectId: project.id })).status).toBe(409);
     expect((await (await req("/api/issues")).json()).issues).toHaveLength(5);
     const before = app.db.query("SELECT * FROM issues ORDER BY id").all();

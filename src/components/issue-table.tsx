@@ -6,10 +6,12 @@ import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueT
 import { Button } from "./ui/primitives";
 import { ClosedTag } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
+import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
 import "./issue-table.css";
 
 const columns: { key: IssueColumn; label: string }[] = [
   { key: "number", label: "Number" }, { key: "title", label: "Issue" },
+  { key: "lane", label: "Board lane" },
   { key: "labels", label: "Tags" }, { key: "tagged", label: "Tagged users" },
   { key: "created", label: "Created" },
 ];
@@ -44,8 +46,10 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   </>;
 }
 
-export function IssueTable({ issues, allIssues, users, projects, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
+export function IssueTable({ issues, allIssues, users, projects, boardLanes, laneOptions, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
   issues: Issue[]; allIssues: Issue[]; users: User[]; projects?: Project[]; state: IssueTableState;
+  boardLanes: ReadonlyMap<string, IssueBoardLane>;
+  laneOptions: BoardLaneOption[];
   onChange: (state: IssueTableState) => void; selectedId: string | null; controls?: string;
   onOpen: (event: MouseEvent<HTMLAnchorElement>, issue: Issue) => void;
   onNavigate: (issue: Issue, opener: HTMLAnchorElement) => boolean;
@@ -141,6 +145,7 @@ export function IssueTable({ issues, allIssues, users, projects, state, onChange
   const visibleColumns = projects ? [columns[0], columns[1], { key: "project" as const, label: "Project" }, ...columns.slice(2)] : columns;
   const filters: Record<IssueColumn, { active: boolean; clear: () => void; content: ReactNode }> = {
     project: { active: !!state.project, clear: () => patch({ project: "" }), content: <select aria-label="Filter by project" value={state.project} onChange={(e) => patch({ project: e.target.value })}><option value="">All projects</option><option value="none">No project</option>{projects?.map((project) => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? " (archived)" : ""}</option>)}</select> },
+    lane: { active: !!state.lane, clear: () => patch({ lane: "" }), content: <select aria-label="Filter by board lane" value={state.lane} onChange={(event) => patch({ lane: event.target.value })}><option value="">All board lanes</option><option value="none">Not on board</option>{laneOptions.map((lane) => <option key={lane.value} value={lane.value}>{lane.label}</option>)}</select> },
     number: { active: !!state.number, clear: () => patch({ number: "" }), content: <input aria-label="Filter by number" placeholder="#" inputMode="numeric" value={state.number} onChange={(e) => patch({ number: e.target.value })} /> },
     title: { active: !!state.title, clear: () => patch({ title: "" }), content: <input aria-label="Filter by issue" placeholder="Filter title…" value={state.title} onChange={(e) => patch({ title: e.target.value })} /> },
     labels: { active: !!state.label, clear: () => patch({ label: "" }), content: <select aria-label="Filter by tag" value={state.label} onChange={(e) => patch({ label: e.target.value })}><option value="">All tags</option><option value="none">No tags</option>{labels.map((label) => <option key={label} value={`label:${label}`}>{label}</option>)}</select> },
@@ -167,7 +172,7 @@ export function IssueTable({ issues, allIssues, users, projects, state, onChange
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className={`issue-table${projects ? " all-issues-table" : ""}`}>
         <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
-        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
+        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="lane-column" /><col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
         </tr></thead>
@@ -175,6 +180,7 @@ export function IssueTable({ issues, allIssues, users, projects, state, onChange
           <td><input type="checkbox" aria-label={`Select issue #${issue.number}`} checked={selected.includes(issue.id)} disabled={pending || !eligible.has(issue.id)} onChange={(event) => { if ((event.nativeEvent as globalThis.MouseEvent).shiftKey) { selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); return; } const checked = event.target.checked; activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: selected.filter((id) => id !== issue.id) }; setSelection((current) => checked ? [...new Set([...current, issue.id])] : current.filter((id) => id !== issue.id)); }} /></td>
           <td className="issue-number">#{issue.number}</td><td><Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`#${issue.number} ${issue.title}`}><strong>{issue.title}</strong>{issue.state === "closed" && <ClosedTag />}</Link></td>
           {projects && <td className="issue-project">{issue.projectId ? (() => { const project = projects.find((candidate) => candidate.id === issue.projectId); return project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project"; })() : <span className="muted">No project</span>}</td>}
+          <td className="issue-board-lane">{(() => { const lane = boardLanes.get(issue.id); return lane ? <span className="tag" title={`${lane.label}${lane.hidden ? " (hidden lane)" : ""}`}>{lane.label}{lane.hidden && <span className="muted"> (hidden)</span>}</span> : <span className="muted">Not on board</span>; })()}</td>
           <td><div className="issue-meta">{issue.labels.length ? issue.labels.map((label) => <span className="tag" key={label} title={label}>{label}</span>) : empty("No tags")}</div></td>
           <td><div className="issue-meta">{issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => { const user = users.find((candidate) => candidate.id === id); return <span className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>; }) : empty("No tagged users")}</div></td>
           <td><time dateTime={issue.createdAt} title={new Date(issue.createdAt).toLocaleString()}>{new Date(issue.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time></td>
