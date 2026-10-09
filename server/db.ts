@@ -12,7 +12,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 = 11) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 = 12) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -276,5 +276,27 @@ export function openDatabase(path: string, targetVersion: 10 | 11 = 11) {
     throw error;
   }
   db.exec("PRAGMA foreign_keys=ON");
+  if (targetVersion < 12) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=12").get()) return;
+    // Additive only: do not invent events for existing content, or reset history.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS issue_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issueId TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        actorId TEXT NOT NULL REFERENCES users(id),
+        createdAt TEXT NOT NULL,
+        action TEXT NOT NULL,
+        changes TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS issue_history_page ON issue_history(issueId,id DESC);
+      CREATE TABLE IF NOT EXISTS favorite_projects (
+        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        projectId TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        PRIMARY KEY(userId,projectId)
+      );
+      INSERT INTO migrations VALUES (12);
+    `);
+  }).immediate();
   return db;
 }

@@ -126,7 +126,7 @@ export function CommentItem({
         )}
         <Modal
           title="Delete comment?"
-          description="This permanently removes the comment. This action cannot be undone."
+          description="This removes the comment from the discussion and cannot be undone. Its content remains in the issue’s change history."
           open={deleting}
           onOpenChange={(v) => !busy && setDeleting(v)}
         >

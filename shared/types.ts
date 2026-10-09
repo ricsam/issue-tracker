@@ -53,6 +53,18 @@ export interface Issue {
   createdAt: string;
   updatedAt: string;
 }
+export interface IssueHistoryEntry {
+  id: number;
+  issueId: string;
+  actorId: string;
+  createdAt: string;
+  action: "created" | "updated" | "commented" | "comment_edited" | "comment_deleted";
+  changes: {
+    field: "body" | "state" | "project" | "boardLane" | "comment";
+    before: string | null;
+    after: string | null;
+  }[];
+}
 export interface Comment {
   id: string;
   issueId: string;

@@ -117,12 +117,12 @@ test("global lane creation survives a stale load, then moving updates All issues
   await expect(row).toContainText("Not on board");
   await page.getByRole("button", { name: "Close issue details", exact: true }).click();
   // SPA route changes keep the creation provider mounted: its old snapshots must be ignored.
-  await page.locator(`.project-nav a[href="/projects/${project.slug}"]`).click();
+  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: project.name, exact: true }).click();
   await expect(page.locator(`a[data-issue-id="${id}"]`)).toHaveCount(0);
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(0);
   await expect(page.locator(".board-summary")).toContainText("0 of 0 issues assigned to board");
-  await page.locator(`.project-nav a[href="/projects/${target.slug}"]`).click();
+  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: target.name, exact: true }).click();
   await expect(page.locator(`a[data-issue-id="${id}"]`)).toBeVisible();
 });
 

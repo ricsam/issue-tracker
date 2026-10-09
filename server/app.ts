@@ -26,6 +26,7 @@ import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { moveLaneTo } from "../shared/board";
 import { openDatabase, syncIssueTaggedUsers } from "./db";
 import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
+import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
 
@@ -591,11 +592,27 @@ export function createApp(options: AppOptions = {}) {
     }).immediate();
     return c.json({ board: board(p.id) });
   });
+  const historyTransaction = <T>(c: Context<Env>, ids: string[], mutate: () => T) => ({
+    immediate: () => withIssueHistory(db, c.get("user").id, ids, mutate),
+  });
+  const favoriteProjects = (userId: string) => ({ projectIds: (db.query("SELECT projectId FROM favorite_projects WHERE userId=? ORDER BY projectId").all(userId) as { projectId: string }[]).map((row) => row.projectId) });
+  app.get("/api/me/favorite-projects", (c) => c.json(favoriteProjects(c.get("user").id)));
+  for (const method of ["put", "delete"] as const) app[method]("/api/me/favorite-projects/:projectId", (c) => {
+    const projectId = c.req.param("projectId");
+    const userId = c.get("user").id;
+    const result = db.transaction(() => {
+      if (!db.query("SELECT id FROM projects WHERE id=?").get(projectId)) fail(404, "Project not found");
+      if (method === "put") db.query("INSERT OR IGNORE INTO favorite_projects (userId,projectId) VALUES (?,?)").run(userId, projectId);
+      else db.query("DELETE FROM favorite_projects WHERE userId=? AND projectId=?").run(userId, projectId);
+      return favoriteProjects(userId);
+    }).immediate();
+    return c.json(result);
+  });
   const tagIssues = async (c: Context<Env>) => {
     const ids = z.array(z.string().uuid()).min(1).max(1000)
       .refine((values) => new Set(values).size === values.length);
     const input = z.object({ issueIds: issueIdsField, userIds: ids }).strict().parse(await json(c));
-    const issues = db.transaction(() => {
+    const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");
       const p = slug ? activeProject(slug) : null;
       const users = input.userIds.map((userId) => publicUser(userId) ?? fail(400, "Unknown mentioned user"));
@@ -621,7 +638,7 @@ export function createApp(options: AppOptions = {}) {
       issueIds: issueIdsField,
       labels: z.array(text(50)).min(1).max(30),
     }).strict().parse(await json(c));
-    const issues = db.transaction(() => {
+    const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");
       const p = slug ? activeProject(slug) : null;
       return input.issueIds.map((issueId) => {
@@ -650,7 +667,7 @@ export function createApp(options: AppOptions = {}) {
       })
       .strict()
       .parse(await json(c));
-    db.transaction(() => {
+    historyTransaction(c, input.issueIds, () => {
       requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
         if (
@@ -685,7 +702,7 @@ export function createApp(options: AppOptions = {}) {
       lane: laneField,
       beforeIssueId: issueIdField.nullable(),
     }).strict().parse(await json(c));
-    const result = db.transaction(() => {
+    const result = historyTransaction(c, input.issueIds, () => {
       const p = activeProject(c.req.param("slug"));
       requireVisibleLane(p.id, input.lane);
       const current = board(p.id).cards;
@@ -716,7 +733,7 @@ export function createApp(options: AppOptions = {}) {
       issueIds: issueIdsField,
       lane: laneField,
     }).strict().parse(await json(c));
-    db.transaction(() => {
+    historyTransaction(c, input.issueIds, () => {
       activeProject(p.slug);
       requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
@@ -742,7 +759,7 @@ export function createApp(options: AppOptions = {}) {
       .object({ lane: laneField })
       .strict()
       .parse(await json(c));
-    db.transaction(() => {
+    historyTransaction(c, [c.req.param("id")], () => {
       if (
         !db
           .query(
@@ -761,10 +778,10 @@ export function createApp(options: AppOptions = {}) {
   app.delete("/api/projects/:slug/board/issues/:id", (c) => {
     issueIdField.parse(c.req.param("id"));
     const p = activeProject(c.req.param("slug"));
-    const result = db
-      .query("DELETE FROM board_issues WHERE projectId=? AND issueId=?")
-      .run(p.id, c.req.param("id"));
-    if (!result.changes) fail(404, "Board member not found");
+    historyTransaction(c, [c.req.param("id")], () => {
+      const result = db.query("DELETE FROM board_issues WHERE projectId=? AND issueId=?").run(p.id, c.req.param("id"));
+      if (!result.changes) fail(404, "Board member not found");
+    }).immediate();
     return c.json({ board: board(p.id) });
   });
   app.get("/api/projects/:slug/issues", (c) => {
@@ -817,8 +834,10 @@ export function createApp(options: AppOptions = {}) {
       if (input.lane != null && projectId !== null) {
         db.query("INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)")
           .run(projectId, uid, input.lane, nextBoardPosition(projectId, input.lane));
+        recordIssueChange(db, uid, c.get("user").id, null);
         return { issue: issue(uid), board: board(projectId) };
       }
+      recordIssueChange(db, uid, c.get("user").id, null);
       return { issue: issue(uid) };
     }).immediate();
     return c.json(result);
@@ -835,6 +854,17 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null }[]).map((row) => ({
       id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const,
     })) });
+  });
+  app.get("/api/issues/:id/history", (c) => {
+    const canonical = issueIdField.safeParse(c.req.param("id"));
+    if (!canonical.success) return fail(404, "Issue not found");
+    const current = issue(canonical.data);
+    const before = c.req.query("before");
+    const limit = c.req.query("limit");
+    const cursor = before === undefined ? null : Number(issueIdField.parse(before));
+    const size = limit === undefined ? 50 : Number(issueIdField.parse(limit));
+    if (size > 100) fail(400, "Limit must be between 1 and 100");
+    return c.json(readHistory(db, current.id, cursor, size));
   });
   app.get("/api/issues/:id", (c) => {
     const canonical = issueIdField.safeParse(c.req.param("id"));
@@ -876,7 +906,7 @@ export function createApp(options: AppOptions = {}) {
           : current.title,
       updatedAt: now(),
     };
-    db.transaction(() => {
+    historyTransaction(c, [current.id], () => {
       activeIssue(current.id);
       if (input.projectId != null) requireActiveProjectId(input.projectId);
       if (input.projectId !== undefined && input.projectId !== current.projectId) {
@@ -923,6 +953,7 @@ export function createApp(options: AppOptions = {}) {
         uid, i.id, c.get("user").id, body, time, time,
       );
       syncIssueTaggedUsers(db, i.id);
+      recordHistory(db, i.id, c.get("user").id, "commented", [{ field: "comment", before: null, after: body }]);
     }).immediate();
     return c.json({
       comment: db
@@ -950,7 +981,9 @@ export function createApp(options: AppOptions = {}) {
     db.transaction(() => {
       activeIssue(row.issueId);
       validateMentions(body);
+      const previous = ownedComment(c);
       db.query("UPDATE comments SET body=?,updatedAt=? WHERE id=?").run(body, now(), row.id);
+      if (previous.body !== body) recordHistory(db, row.issueId, c.get("user").id, "comment_edited", [{ field: "comment", before: previous.body, after: body }]);
       syncIssueTaggedUsers(db, row.issueId);
     }).immediate();
     return c.json({
@@ -965,7 +998,9 @@ export function createApp(options: AppOptions = {}) {
     activeIssue(row.issueId);
     db.transaction(() => {
       activeIssue(row.issueId);
+      const previous = ownedComment(c);
       db.query("DELETE FROM comments WHERE id=?").run(row.id);
+      recordHistory(db, row.issueId, c.get("user").id, "comment_deleted", [{ field: "comment", before: previous.body, after: null }]);
       syncIssueTaggedUsers(db, row.issueId);
     }).immediate();
     return c.json({ ok: true, issue: issue(row.issueId) });

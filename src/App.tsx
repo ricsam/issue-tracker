@@ -17,7 +17,6 @@ import {
 } from "react-router-dom";
 import {
   Layers3,
-  FolderKanban,
   LayoutGrid,
   List,
   Plus,
@@ -30,6 +29,8 @@ import {
 import type { AuthStatus, Issue, Project, User } from "../shared/types";
 import { api, AUTH_EXPIRED_EVENT, message } from "./lib/api";
 import { WorkspaceContext } from "./lib/workspace";
+import { FavoriteProjectsProvider } from "./lib/favorite-projects";
+import { SidebarProjects } from "./components/favorite-projects";
 import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
@@ -166,8 +167,6 @@ function AppContent() {
         )}
       </main>
     );
-  // Archived projects stay in workspace data for links/details, not navigation.
-  const activeProjects = projects.filter((p) => !p.archivedAt);
   const issueRoute = location.pathname.startsWith("/issues/");
   const currentIssue = issueRoute && location.pathname === `/issues/${breadcrumbIssue?.id}` ? breadcrumbIssue : null;
   const breadcrumbProject = currentIssue ? projects.find((p) => p.id === currentIssue.projectId) : null;
@@ -175,6 +174,7 @@ function AppContent() {
     <WorkspaceContext.Provider
       value={{ user: auth.user, users, projects, refresh, updateProject }}
     >
+      <FavoriteProjectsProvider key={auth.user.id}>
       <IssueCreationProvider>
       <IssueBreadcrumbContext.Provider value={setBreadcrumbIssue}>
       <a className="skip-link" href="#main-content">
@@ -205,12 +205,6 @@ function AppContent() {
           >
             <X size={20} />
           </button>
-          <div className="workspace-label">
-            <span className="workspace-avatar">T</span>
-            <div>
-              Team workspace<small>Let’s make progress</small>
-            </div>
-          </div>
           <nav aria-label="Workspace">
             <SidebarCreateIssue />
             <NavLink end to="/issues" className="nav-item">
@@ -221,28 +215,7 @@ function AppContent() {
               <LayoutGrid size={18} />
               All projects
             </NavLink>
-            <div className="nav-label">
-              PROJECTS <span>{activeProjects.length}</span>
-            </div>
-            <div className="project-nav">
-              {activeProjects.map((p) => (
-                <NavLink
-                  key={p.id}
-                  to={`/projects/${p.slug}`}
-                  className="nav-item"
-                >
-                  <FolderKanban size={17} />
-                  <span>{p.name}</span>
-                </NavLink>
-              ))}
-              {!activeProjects.length && (
-                <p className="sidebar-empty">
-                  {projects.length
-                    ? "Archived projects are under All projects."
-                    : "Your projects will appear here."}
-                </p>
-              )}
-            </div>
+            <SidebarProjects projects={projects} />
           </nav>
           <div className="sidebar-bottom">
             {auth.user.role === "admin" && (
@@ -281,8 +254,6 @@ function AppContent() {
               <Menu size={20} />
             </button>
             <nav className="main-breadcrumbs" aria-label="Breadcrumb">
-              <span className="muted">Workspace</span>
-              <ChevronRight size={14} aria-hidden="true" />
               {issueRoute ? <>
                 {breadcrumbProject ? <Link to="/projects">Projects</Link> : <Link to="/issues">All issues</Link>}
                 <ChevronRight size={14} aria-hidden="true" />
@@ -327,6 +298,7 @@ function AppContent() {
       </div>
       </IssueBreadcrumbContext.Provider>
       </IssueCreationProvider>
+      </FavoriteProjectsProvider>
     </WorkspaceContext.Provider>
   );
 }

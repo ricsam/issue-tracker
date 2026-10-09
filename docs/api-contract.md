@@ -14,6 +14,9 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | POST | `/api/admin/users` | `{name,email,password}` → `{user}`; admin-created member |
 | GET | `/api/admin/oidc` | `OidcSettings` |
 | PUT | `/api/admin/oidc` | `{enabled,name,issuer,clientId,allowSignup,clientSecret?:string}` → `OidcSettings`; omitted/empty secret preserves; encrypt stored secret, never expose |
+| GET | `/api/me/favorite-projects` | `{projectIds:string[]}`; current authenticated user's favorites |
+| PUT | `/api/me/favorite-projects/:projectId` | No body → `{projectIds:string[]}`; idempotently favorite an existing project |
+| DELETE | `/api/me/favorite-projects/:projectId` | No body → `{projectIds:string[]}`; idempotently unfavorite an existing project |
 | GET | `/api/projects` | `{projects:Project[]}` |
 | POST | `/api/projects` | `{name,description?}` → `{project:Project}` |
 | GET | `/api/projects/:slug` | `{project:Project}` |
@@ -36,6 +39,7 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | POST | `/api/issues/labels` | `{issueIds:string[],labels:string[]}` → `{issues:Issue[]}`; atomic cross-project/unlinked body hashtags |
 | GET | `/api/issues/references?q=...` | `{issues:IssueReference[]}`; up to 20 number/title matches across all issues, including closed/archived |
 | GET | `/api/issues/:id` | `IssueDetail`; canonical numeric ID only; UUID URLs return 404 |
+| GET | `/api/issues/:id/history?before=123&limit=50` | `{history:IssueHistoryEntry[],hasMore:boolean}`; newest-first, exclusive history-ID cursor |
 | PATCH | `/api/issues/:id` | `{title?,body?,labels?,state?,projectId?:string\|null}` → `{issue:Issue}`; signed-in workspace collaboration |
 | POST | `/api/issues/:id/comments` | `{body}` → `{comment:Comment,issue:Issue}` |
 | PATCH | `/api/comments/:id` | `{body}` → `{comment:Comment,issue:Issue}`; author/admin only |
@@ -43,6 +47,12 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | POST | `/api/uploads` | Multipart field `file` → `{attachment:Attachment}`; max 10 MiB, authenticated access |
 | GET | `/api/uploads/:id/:name` | Authenticated download; raster images inline, other files forced attachment with nosniff and restrictive CSP |
 | GET | `/healthz`, `/readyz` | Public minimal probes |
+
+Favorites are stored per authenticated user, never on the shared `Project` object. PUT/DELETE require same-origin protection and use the session user only; a body cannot select another user. Both return the complete saved project-ID list sorted by ID. Unknown projects return 404 on either write. Archived projects can be favorited/unfavorited, and archiving never deletes favorites; clients hide archived favorites until restoration.
+
+Issue history is authenticated and readable for archived projects. `IssueHistoryEntry` contains `id:number`, `issueId:string`, `actorId:string`, `createdAt:string` (ISO timestamp), `action` (`created`, `updated`, `commented`, `comment_edited`, `comment_deleted`), and `changes` (`{field,before,after}[]`). Fields are `body`, `state`, `project`, `boardLane`, or `comment`; values are string or null. Bodies/comments retain complete Markdown snapshots, state is open/closed, and project/lane values snapshot readable names (null means no project/not on board). Creation records initial non-null values with null before; subsequent combined edits are one event per changed issue. Identity changes between equally named projects still record an event. All board membership routes record additions/removals/lane changes; ordering alone, lane visibility/order, project renaming, and no-op writes do not. Bulk body labels/mentions record body changes. Comments record their create/edit/delete snapshots. Events commit in the same transaction as mutations; failed writes cannot leave events. Pagination orders by history ID descending, not timestamp; `before` is an exclusive positive safe-integer decimal cursor. `limit` defaults to 50 and accepts 1–100; invalid cursors/limits return 400. Missing/malformed issue IDs return 404. Fetch the next page using the last returned event ID; `hasMore` is computed using one extra row.
+
+Migration v12 additively creates history and user/project favorite tables and a history pagination index. It never backfills fictional pre-upgrade events, truncates saved history, or resets favorites. Historical migration fixtures may still request targetVersion 10 or 11; normal startup upgrades to 12.
 
 Project metadata PATCH requires at least one of `name` (trimmed, 1–100 characters) or `description` (0–10,000 characters, empty clears it). Omitted fields are preserved. Unknown keys, empty payloads and combining metadata with `archived` return 400. Any authenticated member may edit an active project, with same-origin CSRF protection; archived metadata edits return 409 until restored separately. Updates are transactional and preserve `id`, `slug`, `createdAt`, lifecycle fields, counts, issues, comments and board configuration/membership. Renaming never changes existing URLs.
 

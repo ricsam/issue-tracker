@@ -1,0 +1,18 @@
+.issue-history { border-top: 1px solid #e9e4ef; padding-top: 18px; margin: 22px 0; font-size: 12px; min-width: 0; }
+.issue-history > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #635277; }
+.issue-history > summary::after { content: "+"; margin-left: auto; }
+.issue-history[open] > summary::after { content: "−"; }
+.issue-history summary:focus-visible { outline: 2px solid #9774df; outline-offset: 4px; border-radius: 3px; }
+.issue-history-content { padding-top: 14px; }
+.issue-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.issue-history-heading .btn { flex-shrink: 0; }
+.issue-history-list { list-style: none; padding: 0; margin: 12px 0; }
+.issue-history-list > li { border-left: 2px solid #e8e0f3; padding: 8px 0 16px 14px; overflow-wrap: anywhere; }
+.issue-history-meta { display: flex; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.issue-history-meta time { color: #82778d; font-size: 11px; }
+.issue-history-changes { list-style: none; padding: 0; margin: 8px 0 0; }
+.issue-history-changes > li { margin-top: 5px; }
+.issue-history-changes summary { cursor: pointer; color: #7452b4; }
+.issue-history-snapshots { margin-top: 8px; display: grid; gap: 10px; }
+.issue-history-snapshots pre { font-family: monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow-y: auto; background: #f8f6fb; border: 1px solid #e9e4ef; border-radius: 6px; padding: 10px; margin: 4px 0; }
+@media (max-width: 600px) { .issue-history-heading { align-items: flex-start; flex-direction: column; } }

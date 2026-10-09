@@ -112,6 +112,43 @@ for (const board of [false, true]) {
   });
 }
 
+for (const embedded of [false, true]) {
+  test(`${embedded ? "sidebar" : "full page"} double-click preview enters focused Write without saving or losing drafts`, async ({ page, baseURL }) => {
+    const { project, issueIds } = await seed(page, baseURL!);
+    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issueIds[1]}`);
+    if (embedded) await page.locator(`a[data-issue-id="${issueIds[1]}"]`).click();
+    const editor = detail(page);
+    const comment = page.locator(".comments [contenteditable=true]");
+    await comment.fill("Keep this comment draft");
+    await editor.locator(".editor-preview").dblclick();
+    await expect(mode(editor, "Write")).toHaveAttribute("aria-pressed", "true");
+    await expect(editor.getByRole("textbox", { name: "Issue", exact: true })).toBeFocused();
+    await expect(mode(editor, "Save changes")).toBeDisabled();
+    await mode(editor, "Markdown").click();
+    await editor.getByLabel("Markdown source").fill("# Unsaved preview draft\n\nStill here");
+    await mode(editor, "Preview").click();
+    await editor.locator(".editor-preview").dblclick();
+    await expect(editor.getByRole("textbox", { name: "Issue", exact: true })).toBeFocused();
+    await expect(editor.getByRole("textbox", { name: "Issue", exact: true })).toContainText("Unsaved preview draft");
+    await expect(comment).toContainText("Keep this comment draft");
+    expect((await (await page.request.get(`/api/issues/${issueIds[1]}`)).json()).issue.body).toBe("# Another issue\n\nAnother body");
+    await mode(editor, "Save changes").click();
+    await expect(mode(editor, "Save changes")).toBeDisabled();
+    await page.reload();
+    if (embedded) await page.locator(`a[data-issue-id="${issueIds[1]}"]`).click();
+    await expectPreview(detail(page), "Unsaved preview draft");
+  });
+}
+
+test("double-clicking archived issue content does not enable editing", async ({ page, baseURL }) => {
+  const { project, issueIds, headers } = await seed(page, baseURL!);
+  expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
+  await page.goto(`/issues/${issueIds[1]}`);
+  await page.locator(".issue-read-only").dblclick();
+  await expect(detail(page).getByRole("button", { name: "Write", exact: true })).toHaveCount(0);
+  await expect(detail(page).getByRole("textbox")).toHaveCount(0);
+});
+
 test("Write still edits existing issues while new issues and comments start in Write", async ({ page, baseURL }) => {
   const { issueIds } = await seed(page, baseURL!);
   await page.goto(`/issues/${issueIds[1]}`);

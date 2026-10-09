@@ -23,6 +23,7 @@ import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
 import { MoveIssueDialog } from "../components/move-issue-dialog";
 import { CopyIssueBody } from "../components/copy-issue-body";
+import { IssueHistory } from "../components/issue-history";
 import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
@@ -143,6 +144,8 @@ function IssueDetailForm({
   const [issue, setIssue] = useState<Issue>(initialDetail.issue);
   const [persisted, setPersisted] = useState<Issue>(initialDetail.issue);
   const [comments, setComments] = useState<Comment[]>(initialDetail.comments);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const refreshHistory = () => setHistoryRevision((value) => value + 1);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [changingState, setChangingState] = useState(false);
@@ -194,6 +197,7 @@ function IssueDetailForm({
       });
       setIssue(result.issue);
       setPersisted(result.issue);
+      refreshHistory();
       onSaved?.(result.issue);
       notify("Changes saved");
       await refresh();
@@ -218,6 +222,7 @@ function IssueDetailForm({
       const lifecycle = { state: result.issue.state, closedAt, closedById, updatedAt };
       setIssue((v) => (v ? { ...v, ...lifecycle } : v));
       setPersisted((v) => (v ? { ...v, ...lifecycle } : v));
+      refreshHistory();
       onSaved?.(result.issue);
       notify(state === "closed" ? "Issue closed" : "Issue reopened");
       await refresh();
@@ -228,6 +233,7 @@ function IssueDetailForm({
     }
   }
   function commentIssueChanged(updated: Issue) {
+    refreshHistory();
     // Comment mentions update associations without replacing an unsaved issue draft.
     setIssue((current) => current ? { ...current, taggedUserIds: updated.taggedUserIds } : current);
     setPersisted((current) => current ? { ...current, taggedUserIds: updated.taggedUserIds } : current);
@@ -333,6 +339,7 @@ function IssueDetailForm({
                   existingTags={tags}
                   ariaLabel="Issue"
                   initialMode="preview"
+                  previewEditOnDoubleClick
                   placeholder="What needs to happen? Just start writing…"
                 />
               )}
@@ -381,16 +388,18 @@ function IssueDetailForm({
           </form>
         )}
       </section>
+      <IssueHistory issueId={id} revision={historyRevision} />
       {moving && <MoveIssueDialog issue={persisted} onBusyChange={setMoveBusy} onClose={() => setMoving(false)} onMoved={(updated) => {
         setIssue((current) => ({ ...updated, body: current.body }));
         setPersisted(updated);
+        refreshHistory();
         setNewTags([]);
         onSaved?.(updated);
         notify("Issue moved");
         void refresh().catch((cause) => setError(`Issue moved, but workspace could not refresh: ${message(cause)}`));
       }} />}
       {sending && <SendToBoardDialog issues={[persisted]} onClose={() => setSending(false)}
-        onPlaced={(projectId, board) => { onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />}
+        onPlaced={(projectId, board) => { refreshHistory(); onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />}
       {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags} onBoardChanged={onBoardChanged}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}

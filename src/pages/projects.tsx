@@ -5,6 +5,7 @@ import type { Project } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
+import { FavoriteProjectButton } from "../components/favorite-projects";
 export function ProjectsPage() {
   const { projects, refresh } = useWorkspace();
   const [open, setOpen] = useState(false);
@@ -83,10 +84,10 @@ export function ProjectsPage() {
       {shown.length ? (
         <div className="project-grid">
           {shown.map((p, i) => (
+            <div className="project-card-wrapper" key={p.id}>
             <Link
               to={`/projects/${p.slug}`}
               className={`project-card${p.archivedAt ? " is-archived" : ""}`}
-              key={p.id}
             >
               <div className="card-top">
                 <span className={`project-icon tone-${i % 3}`}>
@@ -115,6 +116,8 @@ export function ProjectsPage() {
                 <span>{p.issueCount} total</span>
               </footer>
             </Link>
+            <FavoriteProjectButton project={p} />
+            </div>
           ))}
         </div>
       ) : archivedView ? (

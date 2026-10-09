@@ -115,6 +115,7 @@ function EditorContents({
   mentionUsers,
   existingTags,
   initialMode,
+  previewEditOnDoubleClick,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -125,6 +126,7 @@ function EditorContents({
   mentionUsers: User[];
   existingTags: string[];
   initialMode: Mode;
+  previewEditOnDoubleClick: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -134,6 +136,13 @@ function EditorContents({
   const fileInput = useRef<HTMLInputElement>(null);
   const source = useRef<HTMLTextAreaElement>(null);
   const id = useId();
+  const focusOnWrite = useRef(false);
+  useEffect(() => {
+    if (mode === "write" && focusOnWrite.current) {
+      focusOnWrite.current = false;
+      editor.focus(undefined, { defaultSelection: "rootStart" });
+    }
+  }, [editor, mode]);
   // External reset or Markdown-source edits update the rich view, but ordinary typing never resets selection.
   useEffect(() => {
     if (value !== last.current) {
@@ -386,7 +395,13 @@ function EditorContents({
         />
       )}
       {mode === "preview" && (
-        <div className="editor-preview">
+        <div className="editor-preview" onDoubleClick={previewEditOnDoubleClick ? (event) => {
+          // Links and controls retain their normal behavior; read-only/loading
+          // details must never be made editable through this convenience gesture.
+          if ((event.target as Element).closest("a, button, input, textarea, select, [role=button], [inert], fieldset:disabled")) return;
+          focusOnWrite.current = true;
+          setMode("write");
+        } : undefined}>
           {value ? (
             <Markdown mentionUsers={mentionUsers}>{value}</Markdown>
           ) : (
@@ -443,6 +458,7 @@ export function RichEditor({
   mentionUsers = [],
   existingTags = [],
   initialMode = "write",
+  previewEditOnDoubleClick = false,
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -453,6 +469,7 @@ export function RichEditor({
   mentionUsers?: User[];
   existingTags?: string[];
   initialMode?: Mode;
+  previewEditOnDoubleClick?: boolean;
 }) {
   return (
     <LexicalComposer
@@ -508,6 +525,7 @@ export function RichEditor({
         mentionUsers={mentionUsers}
         existingTags={existingTags}
         initialMode={initialMode}
+        previewEditOnDoubleClick={previewEditOnDoubleClick}
       />
     </LexicalComposer>
   );

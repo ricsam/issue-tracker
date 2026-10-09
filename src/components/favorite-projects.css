@@ -1,0 +1,10 @@
+.sidebar > nav { min-height: 0; overflow-y: auto; }
+.sidebar-project-row { display: flex; align-items: center; gap: 2px; }
+.sidebar-project-row .nav-item { flex: 1; min-width: 0; }
+.sidebar-project-row .nav-item svg { flex-shrink: 0; }
+.favorite-project-button { flex-shrink: 0; }
+.favorite-project-button[aria-pressed="true"] { color: #7851c4; }
+.project-card-wrapper { position: relative; min-width: 0; }
+.project-card-wrapper > .project-card { height: 100%; }
+.project-card-wrapper > .favorite-project-button { position: absolute; top: 26px; right: 24px; }
+.project-card-wrapper .card-top { padding-right: 34px; }
