@@ -718,6 +718,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             onNavigate={navigateIssue}
             onTagIssues={tagIssues}
             onLabelIssues={(ids) => tagIssues(ids, "labels")}
+            onBoardChanged={(projectId, settings) => { if (projectId === project?.id) setBoardSettings(settings); }}
           />
         )}
       </div>
@@ -758,6 +759,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               id={selectedId}
               existingTags={existingTags}
               embedded
+              onBoardChanged={(projectId, settings) => { if (projectId === project?.id) setBoardSettings(settings); }}
               onPendingChange={onPendingChange}
               onSaved={(updated) =>
                 setIssues((current) =>

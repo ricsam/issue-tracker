@@ -7,12 +7,14 @@ import {
   RotateCcw,
   Save,
   Plus,
+  Columns3,
 } from "lucide-react";
 import type {
   Issue,
   IssueDetail,
   IssueState,
   Comment,
+  BoardSettings,
 } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
@@ -23,6 +25,7 @@ import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
+import { SendToBoardDialog } from "../components/send-to-board-dialog";
 import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { useIssueCreationHandler } from "../lib/issue-creation";
 import { useProjectTags } from "../lib/issue-tags";
@@ -44,6 +47,7 @@ type IssueDetailsProps = {
   embedded?: boolean;
   existingTags?: string[];
   onSaved?: (issue: Issue) => void;
+  onBoardChanged?: (projectId: string, board: BoardSettings) => void;
   onPendingChange?: (pending: boolean) => void;
 };
 
@@ -127,6 +131,7 @@ function IssueDetailForm({
   id,
   embedded = false,
   onSaved,
+  onBoardChanged,
   onPendingChange,
   initialDetail,
   existingTags,
@@ -144,6 +149,7 @@ function IssueDetailForm({
   const form = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [creating, setCreating] = useState(false);
+  const [sending, setSending] = useState(false);
   const [newTags, setNewTags] = useState<string[]>([]);
   const project = projects.find((p) => p.id === issue.projectId);
   const archived = !!project?.archivedAt;
@@ -287,6 +293,9 @@ function IssueDetailForm({
                 {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                   <Plus size={15} /> Create issue
                 </Button>}
+                <Button type="button" variant="secondary" disabled={busy || changingState || !project}
+                  title={project ? "Add or move this issue to a board lane" : "Issues without a project have no board"}
+                  onClick={() => setSending(true)}><Columns3 size={15} /> Send to board</Button>
                 <Button
                   type="button"
                   variant="secondary"
@@ -368,6 +377,8 @@ function IssueDetailForm({
           </form>
         )}
       </section>
+      {sending && <SendToBoardDialog issues={[persisted]} onClose={() => setSending(false)}
+        onPlaced={(projectId, board) => { onBoardChanged?.(projectId, board); setSaved("Board placement updated"); }} />}
       {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}

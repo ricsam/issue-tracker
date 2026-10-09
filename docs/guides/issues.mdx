@@ -86,6 +86,18 @@ Select issues in the list or board and choose **Add tags** to tag them together.
 
 Tags are appended to each selected issue’s latest saved body without replacing text or duplicating existing tags. If an unclosed Markdown block would hide the tags, they are inserted near the top instead. Closed issues can be tagged; archived projects are read-only. If a selected issue has an unsaved draft, you are asked before discarding it. A failed batch leaves all issues unchanged and keeps the dialog open for retry.
 
+## Send issues to a board lane
+
+Select one or more issues in a project list or **All issues**, then choose **Send to board**. The same action is available in full-page issue details and the desktop detail panel.
+
+Choose a visible lane for each project's selected issues. The choices include that board's custom lanes. Issues not yet on the board are added; existing cards move to the chosen lane, including cards currently in hidden lanes. A single issue already on the board defaults to its current lane when visible.
+
+- Unlinked issues have no board and are skipped with an explanation. Archived projects are read-only.
+- Closed issues already on a board can move. Reopen closed off-board issues before adding them.
+- Each project's changes are atomic, with a maximum of 1,000 issues per project. If one project fails, other successful projects stay saved. Retry only the remaining projects, or reload their lanes if the board changed.
+- Successfully sent issues are deselected; failed or skipped issues remain selected. Select **Done** to return to the list or issue.
+- Placement changes only the board. It neither saves nor discards unsaved issue edits or comments, and it does not change issue state.
+
 ## Add to the discussion
 
 Write in **Add a comment**, then select **Post comment**. An empty discussion shows only the comment editor, without an empty-state message.

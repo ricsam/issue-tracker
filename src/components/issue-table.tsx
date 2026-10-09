@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
-import type { Issue, Project, User } from "../../shared/types";
+import type { BoardSettings, Issue, Project, User } from "../../shared/types";
 import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
 import { ClosedTag } from "./lifecycle";
+import { SendToBoardDialog } from "./send-to-board-dialog";
 import "./issue-table.css";
 
 const columns: { key: IssueColumn; label: string }[] = [
@@ -43,13 +44,14 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   </>;
 }
 
-export function IssueTable({ issues, allIssues, users, projects, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues }: {
+export function IssueTable({ issues, allIssues, users, projects, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
   issues: Issue[]; allIssues: Issue[]; users: User[]; projects?: Project[]; state: IssueTableState;
   onChange: (state: IssueTableState) => void; selectedId: string | null; controls?: string;
   onOpen: (event: MouseEvent<HTMLAnchorElement>, issue: Issue) => void;
   onNavigate: (issue: Issue, opener: HTMLAnchorElement) => boolean;
   onTagIssues: (ids: string[]) => void;
   onLabelIssues: (ids: string[]) => void;
+  onBoardChanged: (projectId: string, board: BoardSettings) => void;
   paginationKey: string; readOnly?: boolean;
   onCloseIssues: (ids: string[]) => Promise<{ closedIds: string[]; error?: string }>;
 }) {
@@ -60,6 +62,7 @@ export function IssueTable({ issues, allIssues, users, projects, state, onChange
   const page = paging.key === resetKey ? Math.min(paging.page, pageCount - 1) : 0;
   useEffect(() => { setPaging({ key: resetKey, page }); }, [resetKey, page]);
   const [selection, setSelection] = useState<string[]>([]);
+  const [sending, setSending] = useState<Issue[] | null>(null);
   const archivedProjects = new Set(projects?.filter((project) => project.archivedAt).map((project) => project.id));
   const eligible = new Set(readOnly ? [] : issues.filter((issue) => !issue.projectId || !archivedProjects.has(issue.projectId)).map((issue) => issue.id));
   const selected = selection.filter((id) => eligible.has(id));
@@ -151,13 +154,19 @@ export function IssueTable({ issues, allIssues, users, projects, state, onChange
       <Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button>
       <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onTagIssues([...selected])}>Tag selected issues</Button>
       <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onLabelIssues([...selected])}>Add tags</Button>
+      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => setSending(issues.filter((issue) => selected.includes(issue.id)))}>Send to board</Button>
       <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
       {hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}
     </div>
     <p className="issue-bulk-outcome" role="status">{outcome}</p>
+    {sending && <SendToBoardDialog issues={sending} onClose={() => setSending(null)}
+      onPlaced={(projectId, board, issueIds) => {
+        setSelection((current) => current.filter((id) => !issueIds.includes(id)));
+        onBoardChanged(projectId, board);
+      }} />}
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className={`issue-table${projects ? " all-issues-table" : ""}`}>
-        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
+        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
         <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}

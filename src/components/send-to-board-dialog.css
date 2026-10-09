@@ -1,0 +1,6 @@
+.send-to-board-dialog .form-stack { margin-top: 20px; }
+.board-placement-group { border: 1px solid #e9e3f0; border-radius: 8px; padding: 16px; display: grid; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.board-placement-group h3 { font-size: 15px; }
+.board-placement-group .btn { justify-self: start; max-width: 100%; white-space: normal; }
+.board-placement-note { color: #796846; background: #faf7ef; border-radius: 6px; padding: 10px 12px; font-size: 12px; }
+.send-to-board-dialog .success:empty { display: none; }

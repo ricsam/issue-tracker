@@ -657,6 +657,32 @@ export function createApp(options: AppOptions = {}) {
     }).immediate();
     return c.json({ board: board(p.id) });
   });
+  app.put("/api/projects/:slug/board/issues", async (c) => {
+    const p = activeProject(c.req.param("slug"));
+    const input = z.object({
+      issueIds: z.array(z.string().uuid()).min(1).max(1000)
+        .refine((ids) => new Set(ids).size === ids.length),
+      lane: laneField,
+    }).strict().parse(await json(c));
+    db.transaction(() => {
+      activeProject(p.slug);
+      requireVisibleLane(p.id, input.lane);
+      for (const issueId of input.issueIds) {
+        const current = db.query("SELECT closedAt FROM issues WHERE id=? AND projectId=?")
+          .get(issueId, p.id) as { closedAt: string | null } | null;
+        if (!current) return fail(400, "Unknown project issue");
+        const member = db.query("SELECT issueId FROM board_issues WHERE projectId=? AND issueId=?")
+          .get(p.id, issueId);
+        if (current.closedAt && !member)
+          fail(409, "Reopen closed issue before adding it to the board");
+      }
+      for (const issueId of input.issueIds)
+        db.query(`INSERT INTO board_issues (projectId,issueId,lane) VALUES (?,?,?)
+          ON CONFLICT(projectId,issueId) DO UPDATE SET lane=excluded.lane
+          WHERE board_issues.lane != excluded.lane`).run(p.id, issueId, input.lane);
+    }).immediate();
+    return c.json({ board: board(p.id) });
+  });
   app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
     const p = activeProject(c.req.param("slug"));
     const { lane } = z
