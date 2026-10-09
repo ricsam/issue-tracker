@@ -26,12 +26,12 @@ All API responses are JSON; errors `{ error: string }`. Objects use `shared/type
 | PATCH | `/api/projects/:slug/board` | `{lanes:Lane[],customLanes?:BoardLane[]}` → `{board:BoardSettings}`; visibility, display order and new lane definitions, never membership |
 | PATCH | `/api/projects/:slug/board/lanes/:lane` | `{index:number}` → `{board:BoardSettings}`; move one visible lane |
 | POST | `/api/projects/:slug/board/issues` | `{issueIds:string[],lane:Lane}` → `{board:BoardSettings}`; atomic add |
-| POST | `/api/projects/:slug/board/issues/reorder` | `{issueIds:string[],lane:Lane,beforeIssueId:string|null}` → `{board:BoardSettings}`; atomic ordered block move |
+| POST | `/api/projects/:slug/board/issues/reorder` | `{issueIds:string[],lane:Lane,beforeIssueId:string\|null}` → `{board:BoardSettings}`; atomic ordered block move |
 | PUT | `/api/projects/:slug/board/issues` | `{issueIds:string[],lane:Lane}` → `{board:BoardSettings}`; atomic add-or-move placement |
 | PATCH | `/api/projects/:slug/board/issues/:id` | `{lane:Lane}` → `{board:BoardSettings}`; move member |
 | DELETE | `/api/projects/:slug/board/issues/:id` | No body → `{board:BoardSettings}`; remove membership only |
 | GET | `/api/issues` | `{issues:Issue[],boards:Record<string,BoardSettings>}`; all linked/unlinked issues, including archived projects, ordered by createdAt then id; boards keyed by project ID for projects represented in the result (including hidden lanes/cards) |
-| POST | `/api/issues` | `{body,projectId?:string|null,title?,labels?}` → `{issue:Issue}`; omitted/null projectId creates unlinked |
+| POST | `/api/issues` | `{body,projectId?:string\|null,title?,labels?}` → `{issue:Issue}`; omitted/null projectId creates unlinked |
 | POST | `/api/issues/tagged-users` | `{issueIds:string[],userIds:string[]}` → `{issues:Issue[]}`; atomic cross-project/unlinked body mentions |
 | POST | `/api/issues/labels` | `{issueIds:string[],labels:string[]}` → `{issues:Issue[]}`; atomic cross-project/unlinked body hashtags |
 | GET | `/api/issues/:id` | `IssueDetail` |
