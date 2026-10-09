@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
+import { isLabel } from "../shared/hashtag-matches";
 import { extractMentionUserIds } from "../shared/mentions";
 import { deriveIssueTitle, prependLegacyTitle } from "../shared/issue-content";
 
@@ -12,7 +13,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 = 12) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 = 13) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -186,7 +187,7 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 = 12) {
     const rows = db.query("SELECT id,title,body,labels FROM issues").all() as { id: string; title: string; body: string; labels: string }[];
     for (const row of rows) {
       // Migration does not truncate historical text or enforce new-write limits.
-      const body = appendIssueLabels(row.body, row.title, JSON.parse(row.labels));
+      const body = appendIssueLabels(row.body, row.title, (JSON.parse(row.labels) as string[]).filter(isLabel));
       db.query("UPDATE issues SET body=?,labels=? WHERE id=?").run(body, JSON.stringify(extractIssueLabels(body)), row.id);
       syncIssueTaggedUsers(db, row.id);
     }
@@ -297,6 +298,16 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 = 12) {
       );
       INSERT INTO migrations VALUES (12);
     `);
+  }).immediate();
+  if (targetVersion < 13) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=13").get()) return;
+    // Labels are a derived index. Drop unsupported tag syntax without rewriting
+    // historical prose, timestamps or history, or converting invalid tag names.
+    const rows = db.query("SELECT id,body FROM issues").all() as { id: number; body: string }[];
+    for (const row of rows)
+      db.query("UPDATE issues SET labels=? WHERE id=?").run(JSON.stringify(extractIssueLabels(row.body)), row.id);
+    db.query("INSERT INTO migrations VALUES (13)").run();
   }).immediate();
   return db;
 }

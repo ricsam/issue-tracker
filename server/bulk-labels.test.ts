@@ -59,16 +59,16 @@ test("bulk labels use latest content, preserve comments, title, lifecycle, board
   const comment = (await (await f.req(`/api/issues/${a.id}/comments`, "POST", { body: mentionMarkdown(f.admin) })).json()).comment;
   const before = (await (await f.req(`/api/issues/${a.id}`, "PATCH", { body: a.body + "\nLatest edit", state: "closed" })).json()).issue;
   const board = f.app.db.query("SELECT * FROM board_issues ORDER BY issueId").all();
-  const response = await f.label([a.id, b.id], [" existing ", "new", "new", " two words "]);
+  const response = await f.label([a.id, b.id], ["existing", "new", "new", "two-words"]);
   expect(response.status).toBe(200);
   const { issues } = await response.json();
-  expect(issues[0]).toEqual({ ...before, body: before.body + "\n\n\\#new \\#[two%20words]\n", labels: ["existing", "new", "two words"], updatedAt: issues[0].updatedAt });
-  expect(issues[1]).toEqual({ ...b, body: b.body + "\n\n\\#existing \\#new \\#[two%20words]\n", labels: ["existing", "new", "two words"], updatedAt: issues[1].updatedAt });
+  expect(issues[0]).toEqual({ ...before, body: before.body + "\n\n\\#new \\#two-words\n", labels: ["existing", "new", "two-words"], updatedAt: issues[0].updatedAt });
+  expect(issues[1]).toEqual({ ...b, body: b.body + "\n\n\\#existing \\#new \\#two-words\n", labels: ["existing", "new", "two-words"], updatedAt: issues[1].updatedAt });
   expect((await (await f.req(`/api/issues/${a.id}`)).json()).comments).toEqual([comment]);
   expect(f.app.db.query("SELECT * FROM board_issues ORDER BY issueId").all()).toEqual(board);
   // A trigger proves existing labels do not update even updatedAt or resync mentions.
   f.app.db.exec("CREATE TRIGGER no_updates BEFORE UPDATE ON issues BEGIN SELECT RAISE(ABORT, 'unexpected update'); END;");
-  expect(await (await f.label([a.id, b.id], ["new", "existing", "new", "two words"])).json()).toEqual({ issues });
+  expect(await (await f.label([a.id, b.id], ["new", "existing", "new", "two-words"])).json()).toEqual({ issues });
 });
 
 test("strict payload, ID and label limits reject without writes", async () => {
@@ -141,12 +141,12 @@ test("unclosed Markdown retains original content and title with visible, idempot
   const f = await fixture();
   for (const body of ["```\ncode", "Title\n=====\n\n~~~\ncode", "# Title\n\n<!-- unfinished", "# Title\n\n<script>\nunclosed", "# Title\n\n```\n#new"]) {
     const original = await f.create(body);
-    const response = await f.label([original.id], ["new", "two words"]);
+    const response = await f.label([original.id], ["new", "two-words"]);
     expect(response.status).toBe(200);
     const result = (await response.json()).issues[0];
     expect(result.title).toBe(original.title);
     expect(result.body).toContain(body.startsWith("# Title") ? body.slice("# Title\n".length) : body);
-    expect(extractIssueLabels(result.body)).toEqual(["new", "two words"]);
-    expect(await (await f.label([original.id], ["new", "two words"])).json()).toEqual({ issues: [result] });
+    expect(extractIssueLabels(result.body)).toEqual(["new", "two-words"]);
+    expect(await (await f.label([original.id], ["new", "two-words"])).json()).toEqual({ issues: [result] });
   }
 });

@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import type { Issue } from "../../shared/types";
-import { extractIssueLabels, labelMarkdown } from "../../shared/labels";
+import { labelMarkdown } from "../../shared/labels";
+import { isLabel } from "../../shared/hashtag-matches";
 import { api, message } from "../lib/api";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import "./bulk-tag-dialog.css";
@@ -19,11 +20,14 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
   const submitting = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const helpId = useId();
-  const entered = extractIssueLabels(input);
+  const tokens = input.trim() ? input.trim().split(/\s+/) : [];
+  const invalid = tokens.some((token) => !token.startsWith("#") || !isLabel(token.slice(1)));
+  const entered = invalid ? [] : tokens.map((token) => token.slice(1));
+  const availableLabels = existingLabels.filter((label) => isLabel(label) && label.length <= 50);
   const labels = [...new Set([...selected, ...entered])];
   const validation = labels.length > 30 || labels.some((label) => label.length > 50)
     ? "Use at most 30 tags, each at most 50 characters."
-    : input.trim() && !entered.length ? "Start each tag with #, for example #bug #needs-review." : "";
+    : invalid ? "Start each tag with # and use only lowercase letters, numbers and single separating hyphens, for example #bug #needs-review." : "";
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -56,11 +60,11 @@ export function BulkLabelDialog({ slug, issueIds, existingLabels, onSaved, onClo
           <label>New tags
             <input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="#bug #needs-review" aria-describedby={helpId} aria-invalid={!!validation} />
           </label>
-          <small id={helpId} className="muted">Separate tags with spaces. Use #[needs review] for a tag containing spaces.</small>
-          {existingLabels.length > 0 && <>
+          <small id={helpId} className="muted">Separate tags with spaces. Tags use lowercase letters, numbers and single separating hyphens, like #needs-review.</small>
+          {availableLabels.length > 0 && <>
             <strong>Existing tags</strong>
             <div className="bulk-tag-options" role="group" aria-label="Existing tags">
-              {existingLabels.map((label) => <label className="bulk-tag-option" key={label}>
+              {availableLabels.map((label) => <label className="bulk-tag-option" key={label}>
                 <input type="checkbox" checked={selected.has(label)} onChange={(event) => {
                   const checked = event.target.checked;
                   setSelected((current) => {

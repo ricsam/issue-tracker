@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.14.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.15.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -151,6 +151,14 @@ In Kubernetes, mount the retained claim in a temporary operator-controlled recov
 
 ## Persistence and upgrades
 
+### Upgrading to 0.15.0
+
+Version 0.15.0 includes issue history, personal project favorites, and strict kebab tags. Migration v12 adds history and favorites tables without inventing events for existing content.
+
+Tags now accept only lowercase ASCII letters and digits separated by single hyphens, such as `#needs-review-2`. Uppercase, Unicode, underscores and extended `#[label]` syntax are no longer recognized. Explicit API `labels` entries use the same grammar without `#`; invalid values are rejected, not trimmed or converted.
+
+Migration v13 rebuilds the derived label index from existing issue bodies using this grammar. Original bodies, titles, timestamps, lifecycle and history are unchanged; unsupported tags remain plain text and disappear from filters and suggestions. Back up `/data` and preserve the encryption-key Secret before upgrading. Older versions use different tag rules and do not maintain issue history, so avoid rolling back the application against the migrated data; restore a matching backup if recovery is necessary. Existing deployment values remain valid. Select the published SHA image matching the chart release commit; publishing this chart does not automatically upgrade running deployments.
+
 ### Upgrading to 0.14.0
 
 Version 0.14.0 adds issue moves between active projects (or No project), optional board-lane assignment during creation, body-only discard, clean-save protection, unified visible notifications, equal-height lane drop targets, board filters and bulk closing, and tri-state/Shift-range selection in Add issues. Moves preserve global issue IDs, comments and lifecycle while removing the old board placement; unsaved body/comment drafts remain intact. Creating into a visible lane is atomic with issue creation.
@@ -197,7 +205,7 @@ Version 0.8.0 adds card kebab menus, board selection and bulk moves/removals (in
 
 Labels now come from hashtags in the saved issue body, not a separate form field. Code and links are excluded, comments do not contribute labels, and escaped Markdown hashes count semantically. Legacy API `labels` writes remain additive compatibility input converted into body hashtags. `POST /api/projects/:slug/issues/tag` atomically adds missing body mentions while preserving original content; repeat requests are idempotent. See [the API contract](api-contract.md).
 
-Migration v8 runs once transactionally, adding missing legacy-label hashtags while preserving original content, stored titles, timestamps, lifecycle history, comments, and board placements. Extended `#[percent-encoded-label]` syntax preserves spaces and punctuation. Back up `/data`, preserve the encryption-key Secret, and verify the matching published image before upgrading. Avoid automatic Helm rollback across migrations: older releases do not maintain body-derived labels. If recovery is needed, stop the application and restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately first.
+Migration v8 runs once transactionally, adding missing legacy-label hashtags while preserving original content, stored titles, timestamps, lifecycle history, comments, and board placements. The original release used extended `#[percent-encoded-label]` syntax for spaces and punctuation; current kebab-tag rules no longer recognize it, and upgrades from pre-v8 data skip invalid legacy label names. Back up `/data`, preserve the encryption-key Secret, and verify the matching published image before upgrading. Avoid automatic Helm rollback across migrations: older releases do not maintain body-derived labels. If recovery is needed, stop the application and restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately first.
 
 ### Upgrading to 0.7.0
 

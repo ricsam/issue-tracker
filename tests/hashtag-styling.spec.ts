@@ -52,11 +52,20 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   await dialog.getByRole("button", { name: "Inline code", exact: true }).click();
   await expect(editor.locator(".hashtag-chip")).toHaveText("#bug-fix");
 
+  const invalid = ["#bugFix", "#bug_bad", "#bug--fix", "#-bug", "#bug-", "#日本語", "#[needs review]", "#[needs%20review]"];
+  // Editing a previously valid chip into an invalid full token must remove styling,
+  // rather than retaining a chip on its valid-looking prefix.
+  for (const token of invalid) {
+    await editor.fill(token);
+    await expect(editor).toHaveText(token);
+    await expect(editor.locator(".hashtag-chip")).toHaveCount(0);
+  }
   await dialog.getByRole("button", { name: "Markdown", exact: true }).click();
-  const markdown = "# Colored labels\n\nPlease review #bug #日本語 #[needs review] \\#migrated and **#bold**.\n\n`#code`\n\n```text\n#fenced\n```\n\n[#linked](https://example.test/#anchor) https://example.test/#url";
+  const markdown = `# Colored labels\n\nPlease review #bug #needs-review #release-2 ${invalid.join(" ")} \\#migrated and **#bold**.\n\n\`#code\`\n\n\`\`\`text\n#fenced\n\`\`\`\n\n[#linked](https://example.test/#anchor) https://example.test/#url`;
   await dialog.getByLabel("Markdown source").fill(markdown);
   await dialog.getByRole("button", { name: "Write", exact: true }).click();
-  const expected = ["#bug", "#日本語", "#[needs review]", "#migrated", "#bold"];
+  const expected = ["#bug", "#needs-review", "#release-2", "#migrated", "#bold"];
+  for (const token of invalid) await expect(editor).toContainText(token);
   await expect(editor.locator(".hashtag-chip")).toHaveText(expected);
   await page.screenshot({ path: testInfo.outputPath(`colored-tags-${mobile ? "mobile" : "desktop"}.png`) });
   await dialog.getByRole("button", { name: "Preview", exact: true }).click();
@@ -65,7 +74,7 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   const saved = page.waitForResponse(response => response.url().endsWith(`/api/projects/${project.slug}/issues`) && response.request().method() === "POST");
   await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
   const { issue } = await (await saved).json();
-  expect(issue.labels).toEqual(["bug", "日本語", "needs review", "migrated", "bold"]);
+  expect(issue.labels).toEqual(["bug", "needs-review", "release-2", "migrated", "bold"]);
   expect(issue.body).toBe(markdown);
   await dialog.getByRole("link", { name: "View issue" }).click();
   const detail = page.locator(".detail-form");
@@ -76,5 +85,6 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
   await page.goto(`/issues/${issue.id}`);
   await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
+  for (const token of invalid) await expect(detail.locator(".editor-preview")).toContainText(token);
   expect(errors).toEqual([]);
 });

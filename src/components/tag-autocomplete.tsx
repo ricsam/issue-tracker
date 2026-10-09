@@ -4,6 +4,7 @@ import { $isLinkNode } from "@lexical/link";
 import { $isCodeNode } from "@lexical/code";
 import { $getSelection, $isRangeSelection, $isTextNode, type TextNode } from "lexical";
 import { labelMarkdown } from "../../shared/labels";
+import { isLabel } from "../../shared/hashtag-matches";
 
 type Match = { query: string; start: number; end: number; text: string };
 /** Deliberate prose triggers only. Unfinished Markdown constructs are excluded too. */
@@ -25,14 +26,14 @@ export function tagQuery(text: string): Match | null {
     else if (run.length === ticks) ticks = 0;
   }
   if (ticks) return null;
-  const match = /(?:^|[\s(])(#(?:\[([^\]\r\n#]{0,100})|([\p{L}\p{N}\p{M}_-]{0,100})))$/u.exec(line);
+  const match = /(?:^|[\s(])(#((?:[a-z0-9]+(?:-[a-z0-9]+)*-?)?))$/.exec(line);
   if (!match) return null;
   const start = text.length - match[1].length;
   const before = text.slice(0, start);
   // Link labels/destinations, images, autolinks and raw HTML are not prose.
   if (/\[[^\]\n]*$|\]\([^\n)]*$|<[^>\n]*$/.test(before)) return null;
-  let query = match[2] ?? match[3];
-  try { query = decodeURIComponent(query); } catch { /* Allow incomplete percent escapes while typing. */ }
+  const query = match[2];
+  if (query.length > 50) return null;
   return { query, start, end: text.length, text: match[1] };
 }
 
@@ -63,7 +64,7 @@ export function TagAutocomplete({ tags, mode, source, onChange }: {
   const list = useRef<HTMLDivElement>(null);
   const dismissed = useRef("");
   const signature = (value: Match | null) => JSON.stringify(value);
-  const options = [...new Set(tags)].filter(tag => tag && tag.toLocaleLowerCase().includes(match?.query.toLocaleLowerCase() || "")).slice(0, 20);
+  const options = [...new Set(tags)].filter(tag => isLabel(tag) && tag.length <= 50 && tag.includes(match?.query || "")).slice(0, 20);
   const state = useRef({ match, options, active });
   state.current = { match, options, active };
   useEffect(() => {

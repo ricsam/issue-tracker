@@ -54,8 +54,19 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   await input.fill("#" + "x".repeat(51));
   await expect(dialog.getByRole("alert")).toContainText("at most 50 characters");
   await expect(add).toBeDisabled();
-  await input.fill("#triage #triage #日本語 #[needs review]");
   const existing = dialog.getByRole("checkbox", { name: "#existing", exact: true });
+  await existing.check();
+  // A valid selected tag or valid typed prefix must not hide an invalid token.
+  for (const invalid of ["#bugFix", "#bug_bad", "#bug--fix", "#-bug", "#bug-", "#日本語", "#[needs review]", "#[needs%20review]"]) {
+    await input.fill(`#triage ${invalid}`);
+    await expect(dialog.getByRole("alert")).toContainText(/lowercase/);
+    await expect(add).toBeDisabled();
+  }
+  await input.fill("#triage missing-hash");
+  await expect(dialog.getByRole("alert")).toContainText("Start each tag with #");
+  await expect(add).toBeDisabled();
+  await input.fill("#triage #triage #release-2 #needs-review");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
   await existing.check();
   await expect(dialog.getByRole("status")).toContainText("4 tags to add");
   await existing.uncheck();
@@ -70,7 +81,7 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   await page.route(`**${endpoint}`, (route) => route.fulfill({ status: 500, json: { error: "Hashtags failed" } }));
   await add.click();
   await expect(dialog.getByRole("alert")).toContainText("Hashtags failed");
-  await expect(input).toHaveValue("#triage #triage #日本語 #[needs review]");
+  await expect(input).toHaveValue("#triage #triage #release-2 #needs-review");
   await expect(existing).toBeChecked();
   expect((await fetchIssue(page, issues[0].id)).body).toBe(latestBody);
   await page.unroute(`**${endpoint}`);
@@ -80,7 +91,7 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   let requests = 0;
   await page.route(`**${endpoint}`, async (route) => {
     requests++;
-    expect(route.request().postDataJSON()).toEqual({ issueIds: [issues[0].id, issues[10].id], labels: ["existing", "triage", "日本語", "needs review"] });
+    expect(route.request().postDataJSON()).toEqual({ issueIds: [issues[0].id, issues[10].id], labels: ["existing", "triage", "release-2", "needs-review"] });
     await gate;
     await route.continue();
   });
@@ -99,7 +110,7 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   expect(first.body.startsWith(latestBody + "\n\n")).toBeTruthy();
   expect(last.body.startsWith(issues[10].body + "\n\n")).toBeTruthy();
   for (const issue of [first, last]) {
-    expect(issue.labels).toEqual(["existing", "triage", "日本語", "needs review"]);
+    expect(issue.labels).toEqual(["existing", "triage", "release-2", "needs-review"]);
     expect(extractIssueLabels(issue.body)).toEqual(issue.labels);
     expect(issue.body.match(/#existing/g)).toHaveLength(1);
   }

@@ -2,14 +2,14 @@ import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { titleHeading } from "./issue-content";
-import { HASHTAG_EXCLUDED_NODES, matchHashtags } from "./hashtag-matches";
+import { HASHTAG_EXCLUDED_NODES, isLabel, matchHashtags } from "./hashtag-matches";
 
 const parser = unified().use(remarkParse).use(remarkGfm);
 type Node = { type: string; value?: string; children?: Node[] };
 
 /** Hashtags in rendered prose only. Escaped hashes count (as in editor exports).
- * Links, URLs, HTML and code are deliberately excluded. Extended #[label] tags
- * preserve legacy spaces/punctuation; percent escapes protect brackets/newlines.
+ * Only lowercase ASCII letters/digits separated by single hyphens are tags.
+ * Links, URLs, HTML and code are deliberately excluded.
  */
 export function extractIssueLabels(markdown: string): string[] {
   const labels = new Set<string>();
@@ -25,18 +25,18 @@ export function extractIssueLabels(markdown: string): string[] {
 }
 
 export function labelMarkdown(label: string): string {
-  return /^[\p{L}\p{N}_][\p{L}\p{N}\p{M}_-]*$/u.test(label)
-    ? `#${label}`
-    : `#[${encodeURIComponent(label).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16)}`)}]`;
+  if (!isLabel(label)) throw new Error("Tags must use lowercase letters, numbers and single separating hyphens.");
+  return `#${label}`;
 }
 
-/** Additive compatibility/migration: never remove or replace original content. */
+/** Add missing tags without removing or replacing original content. */
 export function appendIssueLabels(body: string, title: string, labels: string[]): string {
+  // Validate every requested value, including ones already present in the body.
+  labels.forEach(labelMarkdown);
   const existing = new Set(extractIssueLabels(body));
   const missing = [...new Set(labels)].filter((label) => !existing.has(label));
   if (!missing.length) return body;
-  // Escape the hash so a legacy label consisting of '-' or heading-like text
-  // cannot change block structure. The parser consumes rendered text.
+  // Escaped hashes round-trip through both Markdown and the rich editor.
   const paragraph = missing.map((label) => `\\${labelMarkdown(label)}`).join(" ");
   const appended = `${body}\n\n${paragraph}\n`;
   if (missing.every((label) => extractIssueLabels(appended).includes(label))) return appended;

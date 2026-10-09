@@ -13,7 +13,9 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
   await expect(dialog.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
   // Lexical exports escaped punctuation; the shared parser must use semantic text.
-  await dialog.getByRole("textbox", { name: "Issue", exact: true }).fill("Rich issue #bug #design");
+  const invalid = "#bugFix #bug_bad #bug--fix #-bug #bug- #日本語 #[multi word] #[multi%20word]";
+  await dialog.getByRole("textbox", { name: "Issue", exact: true }).fill(`Rich issue #bug #design-2 ${invalid}`);
+  await expect(dialog.locator(".editor-input .hashtag-chip")).toHaveText(["#bug", "#design-2"]);
   await expect(dialog.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   const creation = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith(`/api/projects/${project.slug}/issues`));
   await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
@@ -21,7 +23,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await expect(dialog.getByRole("textbox", { name: "Issue", exact: true })).toBeEmpty();
   const { issues } = await (await page.request.get(`/api/projects/${project.slug}/issues`)).json();
   await expect(dialog.getByRole("status")).toContainText(`Issue !${issues[0].number} created`);
-  expect(issues[0].labels).toEqual(["bug", "design"]);
+  expect(issues[0].labels).toEqual(["bug", "design-2"]);
   await dialog.getByRole("link", { name: "View issue" }).click();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(`/projects/${project.slug}`);
@@ -53,7 +55,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await expect(page.locator(".comments .editor-input")).toBeVisible();
   await expect(page.getByText("No tagged users", { exact: true })).toHaveCount(0);
   await form.getByRole("button", { name: "Markdown", exact: true }).click();
-  const body = "# Updated issue\n\nNeeds #triage and #triage. `#inline-code`\n\n```text\n#fenced-code\n```\n\n#release";
+  const body = "# Updated issue\n\nNeeds #triage and #triage. `#inline-code`\n\n```text\n#fenced-code\n```\n\n#release\n\n" + invalid;
   await form.getByLabel("Markdown source").fill(body);
   const chips = form.getByRole("list", { name: "Labels", exact: true }).getByRole("listitem");
   await expect(chips).toHaveCount(0);
@@ -64,6 +66,8 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   expect((await (await page.request.get(`/api/issues/${issues[0].id}`)).json()).issue.labels).toEqual(["triage", "release"]);
   await page.reload();
   await expect(form.locator(".editor-preview")).toContainText("#triage");
+  await expect(form.locator(".editor-preview")).toContainText(invalid);
+  await expect(form.locator(".editor-preview .hashtag-chip")).toHaveText(["#triage", "#triage", "#release"]);
   await expect(chips).toHaveCount(0);
   await form.getByRole("button", { name: "Markdown", exact: true }).click();
   await form.getByLabel("Markdown source").fill("No labels remain\n\n`#code-only`");

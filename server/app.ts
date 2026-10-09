@@ -23,6 +23,7 @@ import {
   replaceLeadingTitle,
 } from "../shared/issue-content";
 import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
+import { isLabel } from "../shared/hashtag-matches";
 import { moveLaneTo } from "../shared/board";
 import { openDatabase, syncIssueTaggedUsers } from "./db";
 import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
@@ -61,11 +62,12 @@ const credentials = z.object({
   password: z.string().min(12).max(1024),
 });
 const account = credentials.extend({ name: text(100) }).strict();
+const labelField = z.string().max(50).refine(isLabel);
 const issueFields = z
   .object({
     title: text(300).optional(),
     body: z.string().max(ISSUE_BODY_MAX_LENGTH),
-    labels: z.array(text(50)).max(30).default([]),
+    labels: z.array(labelField).max(30).default([]),
   })
   .strict();
 const issueUpdateFields = issueFields
@@ -636,7 +638,7 @@ export function createApp(options: AppOptions = {}) {
   const labelIssues = async (c: Context<Env>) => {
     const input = z.object({
       issueIds: issueIdsField,
-      labels: z.array(text(50)).min(1).max(30),
+      labels: z.array(labelField).min(1).max(30),
     }).strict().parse(await json(c));
     const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");

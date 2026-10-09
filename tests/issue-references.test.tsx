@@ -41,13 +41,13 @@ test("! autocomplete supports numbers and titles without competing with tags, me
 test("Markdown links references in prose and preserves #tags, code, links, images and unsafe URLs", () => {
   const body = "See !12 and **!3** #12\n\n`!4`\n\n```\n!5\n```\n\n[!6](https://example.test) ![!7](/api/uploads/a/image.png)\n\n[unsafe](javascript:alert)\n\n#[tag !8]";
   const html = renderToStaticMarkup(<Markdown>{body}</Markdown>);
-  expect(html.match(/class="issue-reference-chip"/g)).toHaveLength(2);
+  expect(html.match(/class="issue-reference-chip"/g)).toHaveLength(3);
   expect(html).toContain('href="/issues/12"');
   expect(html).toContain('href="/issues/3"');
   expect(html).not.toContain('href="javascript:');
   expect(html).not.toContain('href="/issues/4"');
-  expect(html).not.toContain('href="/issues/8"');
-  expect(extractIssueLabels(body)).toEqual(["12", "tag !8"]);
+  expect(html).toContain('href="/issues/8"');
+  expect(extractIssueLabels(body)).toEqual(["12"]);
 });
 
 test("rich references round-trip as plain !number and remain editable across node boundaries", () => {
@@ -68,10 +68,10 @@ test("rich references round-trip as plain !number and remain editable across nod
   expect(instance.getEditorState().read(() => references($getRoot()).map(n => n.getTextContent()))).toEqual(["!3"]);
 });
 
-test("reference styling respects formats, links/code and extended hashtag spans", () => {
+test("reference styling respects formats and links/code; old bracket tags are ordinary prose", () => {
   const instance = editor();
   instance.update(() => {
     $getRoot().append($createParagraphNode().append($createTextNode("!12").setFormat("bold"), $createTextNode(" !3 #[tag !8] "), $createTextNode("!4").setFormat("code")));
   }, { discrete: true });
-  expect(instance.getEditorState().read(() => references($getRoot()).map(n => [n.getTextContent(), n.hasFormat("bold")]))).toEqual([["!12", true], ["!3", false]]);
+  expect(instance.getEditorState().read(() => references($getRoot()).map(n => [n.getTextContent(), n.hasFormat("bold")]))).toEqual([["!12", true], ["!3", false], ["!8", false]]);
 });
