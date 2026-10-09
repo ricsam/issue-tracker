@@ -803,12 +803,29 @@ fieldset > small {
   border-radius: 8px;
   min-height: 330px;
 }
+.board-lane-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 3px 17px;
+}
+.board-lane-select {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin: 0;
+  accent-color: #7050d9;
+  cursor: pointer;
+}
+.board-lane-select:disabled { cursor: default; }
 .board-column h2 {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 11px;
-  margin: 2px 3px 17px;
+  margin: 0;
 }
 .board-column h2[draggable="true"] {
   cursor: grab;

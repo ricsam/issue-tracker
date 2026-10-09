@@ -33,6 +33,7 @@ import { WorkspaceContext } from "./lib/workspace";
 import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
+import { Tooltip } from "./components/ui/tooltip";
 import { Button, ErrorNotice, Loading } from "./components/ui/primitives";
 import { AuthPage } from "./pages/auth";
 import { ProjectsPage } from "./pages/projects";
@@ -47,10 +48,10 @@ const AdminPage = lazy(() =>
 );
 function SidebarCreateIssue() {
   const open = useIssueCreation();
-  return <button type="button" className="nav-item sidebar-create-issue" onClick={open}
-    aria-label="Create issue (Alt+N)" title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+  return <Tooltip content={newIssueTooltip()}><button type="button" className="nav-item sidebar-create-issue" onClick={open}
+    aria-label="Create issue (Alt+N)" aria-keyshortcuts={NEW_ISSUE_KEYS}>
     <Plus size={18} /><span>Create issue</span><kbd>Alt N</kbd>
-  </button>;
+  </button></Tooltip>;
 }
 
 function AppContent() {
@@ -257,14 +258,13 @@ function AppContent() {
                   {auth.user.role === "admin" ? "Administrator" : "Team member"}
                 </small>
               </div>
-              <button
+              <Tooltip content="Sign out"><button
                 className="icon-button"
-                title="Sign out"
                 aria-label="Sign out"
                 onClick={() => void logout()}
               >
                 <LogOut size={17} />
-              </button>
+              </button></Tooltip>
             </div>
           </div>
         </aside>

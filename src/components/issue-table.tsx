@@ -13,7 +13,7 @@ const columns: { key: IssueColumn; label: string }[] = [
   { key: "number", label: "Number" }, { key: "title", label: "Issue" },
   { key: "lane", label: "Board lane" },
   { key: "labels", label: "Tags" }, { key: "tagged", label: "Tagged users" },
-  { key: "created", label: "Created" },
+  { key: "creator", label: "Creator" }, { key: "created", label: "Created" },
 ];
 
 function FilterPopover({ label, active, onClear, children }: { label: string; active: boolean; onClear: () => void; children: ReactNode }) {
@@ -150,6 +150,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     title: { active: !!state.title, clear: () => patch({ title: "" }), content: <input aria-label="Filter by issue" placeholder="Filter title…" value={state.title} onChange={(e) => patch({ title: e.target.value })} /> },
     labels: { active: !!state.label, clear: () => patch({ label: "" }), content: <select aria-label="Filter by tag" value={state.label} onChange={(e) => patch({ label: e.target.value })}><option value="">All tags</option><option value="none">No tags</option>{labels.map((label) => <option key={label} value={`label:${label}`}>{label}</option>)}</select> },
     tagged: { active: !!state.tagged, clear: () => patch({ tagged: "" }), content: <select aria-label="Filter by tagged user" value={state.tagged} onChange={(e) => patch({ tagged: e.target.value })}><option value="">Anyone</option><option value="none">No tagged users</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select> },
+    creator: { active: !!state.creator, clear: () => patch({ creator: "" }), content: <select aria-label="Filter by creator" value={state.creator} onChange={(e) => patch({ creator: e.target.value })}><option value="">All creators</option><option value="unknown">Unknown user</option>{users.map((user) => <option key={user.id} value={`user:${user.id}`}>{user.name} ({user.email})</option>)}</select> },
     created: { active: !!(state.createdFrom || state.createdTo), clear: () => patch({ createdFrom: "", createdTo: "" }), content: <div className="date-filter"><label><span>From</span><input type="date" aria-label="Created on or after" value={state.createdFrom} max={state.createdTo || undefined} onChange={(e) => patch({ createdFrom: e.target.value })} /></label><label><span>To</span><input type="date" aria-label="Created on or before" value={state.createdTo} min={state.createdFrom || undefined} onChange={(e) => patch({ createdTo: e.target.value })} /></label></div> },
   };
   return <section className="issue-table-section" aria-label="Issue list">
@@ -172,7 +173,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className={`issue-table${projects ? " all-issues-table" : ""}`}>
         <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
-        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="lane-column" /><col className="labels-column" /><col className="users-column" /><col className="date-column" /></colgroup>
+        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="lane-column" /><col className="labels-column" /><col className="users-column" /><col className="creator-column" /><col className="date-column" /></colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
         </tr></thead>
@@ -183,6 +184,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
           <td className="issue-board-lane">{(() => { const lane = boardLanes.get(issue.id); return lane ? <span className="tag" title={`${lane.label}${lane.hidden ? " (hidden lane)" : ""}`}>{lane.label}{lane.hidden && <span className="muted"> (hidden)</span>}</span> : <span className="muted">Not on board</span>; })()}</td>
           <td><div className="issue-meta">{issue.labels.length ? issue.labels.map((label) => <span className="tag" key={label} title={label}>{label}</span>) : empty("No tags")}</div></td>
           <td><div className="issue-meta">{issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => { const user = users.find((candidate) => candidate.id === id); return <span className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>; }) : empty("No tagged users")}</div></td>
+          <td className="issue-creator">{(() => { const creator = users.find((user) => user.id === issue.authorId); return <span className={creator ? undefined : "muted"} title={creator?.email}>{creator?.name || "Unknown user"}</span>; })()}</td>
           <td><time dateTime={issue.createdAt} title={new Date(issue.createdAt).toLocaleString()}>{new Date(issue.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time></td>
         </tr>)}{!issues.length && <tr><td colSpan={visibleColumns.length + 1} className="table-empty">{allIssues.length ? "No matching issues. Adjust or clear your filters." : "No issues in this view."}</td></tr>}</tbody>
       </table>

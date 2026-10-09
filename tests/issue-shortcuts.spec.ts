@@ -32,7 +32,10 @@ for (const modifier of ["Control", "Meta"]) {
   test(`${modifier}+N opens a draft, ${modifier}+S creates and saves only the focused issue`, async ({ page, baseURL }) => {
     const { issue } = await seed(page, baseURL!);
     const createButton = page.getByRole("button", { name: "Create issue", exact: true });
-    await expect(createButton).toHaveAttribute("title", /N; Alt\+N/);
+    await expect(createButton).not.toHaveAttribute("title");
+    await createButton.hover();
+    await expect(page.getByRole("tooltip")).toContainText(/N; Alt\+N/);
+    await page.keyboard.press("Escape");
     await expect(createButton).toHaveAttribute("aria-keyshortcuts", "Meta+N Control+N Alt+N");
     // Automation delivers reserved keys directly; real browsers may require Alt+N.
     await page.keyboard.press(`${modifier}+n`);
@@ -52,7 +55,10 @@ for (const modifier of ["Control", "Meta"]) {
     const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
     const editor = sidebar.getByRole("textbox", { name: "Issue", exact: true });
     const save = sidebar.getByRole("button", { name: "Save changes", exact: true });
-    await expect(save).toHaveAttribute("title", /Save issue \((Ctrl\+|⌘)S\)/);
+    await expect(save).not.toHaveAttribute("title");
+    await save.hover();
+    await expect(page.getByRole("tooltip")).toContainText(/Save issue \((Ctrl\+|⌘)S\)/);
+    await page.keyboard.press("Escape");
     await expect(sidebar).not.toContainText("#hashtags outside code become labels automatically.");
     await sidebar.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await editor.fill("Saved from rich mode");
@@ -107,7 +113,7 @@ for (const modifier of ["Control", "Meta"]) {
     const draft = dialog.getByRole("textbox", { name: "Issue", exact: true });
     const submit = dialog.getByRole("button", { name: "Create issue", exact: true });
     await expect(draft).toBeFocused();
-    await expect(submit).toHaveAttribute("title", /Create issue \((Ctrl\+|⌘)Enter or (Ctrl\+|⌘)S\)/);
+    await expect(submit).not.toHaveAttribute("title");
     await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter Meta+S Control+S");
     await draft.press(`${modifier}+Enter`);
     await expect(submit).toBeDisabled();

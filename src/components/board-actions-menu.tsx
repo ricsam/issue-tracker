@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Tooltip } from "./ui/tooltip";
 import { Check, EllipsisVertical, X } from "lucide-react";
 import type { BoardLane, Lane } from "../../shared/types";
 import type { BoardOrderAction } from "../lib/board-order";
@@ -61,15 +62,15 @@ export function BoardActionsMenu({ label, text, count = 1, lanes, currentLane, d
     buttons[next]?.focus();
   }
   return <>
-    <button ref={trigger} type="button" className={text ? "btn btn-secondary" : "icon-button"}
-      popoverTarget={id} aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} aria-controls={id}
+    <Tooltip content={label}><button ref={trigger} type="button" className={text ? "btn btn-secondary" : "icon-button"}
+      popoverTarget={id} aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={id}
       disabled={disabled} onKeyDown={(event) => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault(); panel.current?.showPopover();
         }
       }}>
       {text}<EllipsisVertical size={16} />
-    </button>
+    </button></Tooltip>
     <div ref={panel} id={id} popover="auto" role="menu" aria-label={label} className="board-actions-menu"
       onToggle={(event) => setOpen(event.newState === "open")} onKeyDown={keyDown}>
       {count > 1 && <span className="board-menu-help">Applies to {count} selected issues</span>}

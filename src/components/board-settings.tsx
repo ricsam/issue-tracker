@@ -14,6 +14,7 @@ import {
 } from "../../shared/types";
 import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
+import { Tooltip } from "./ui/tooltip";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
 type Direction = "up" | "down";
@@ -113,39 +114,36 @@ export function BoardSettingsDialog({
                   {settings.cards.filter((card) => card.lane === lane.value).length} issues
                 </span>
                 <span className="lane-order-buttons">
-                  <button
+                  <Tooltip content="Move up (further left on the board)"><button
                     type="button"
                     id={moveId(lane.value, "up")}
                     className="icon-button"
                     aria-label={`Move ${lane.label} lane up`}
-                    title="Move up (further left on the board)"
                     aria-disabled={index === 0 || undefined}
                     onClick={() => moveLane(lane, "up")}
                   >
                     <ChevronUp size={16} />
-                  </button>
-                  <button
+                  </button></Tooltip>
+                  <Tooltip content="Move down (further right on the board)"><button
                     type="button"
                     id={moveId(lane.value, "down")}
                     className="icon-button"
                     aria-label={`Move ${lane.label} lane down`}
-                    title="Move down (further right on the board)"
                     aria-disabled={index === visible.length - 1 || undefined}
                     onClick={() => moveLane(lane, "down")}
                   >
                     <ChevronDown size={16} />
-                  </button>
+                  </button></Tooltip>
                 </span>
-                <button
+                <Tooltip content={lanes.length === 1 ? "Keep at least one lane" : "Remove lane (keeps its issues)"}><button
                   type="button"
                   className="icon-button"
                   aria-label={`Remove ${lane.label} lane`}
                   disabled={lanes.length === 1}
-                  title={lanes.length === 1 ? "Keep at least one lane" : "Remove lane (keeps its issues)"}
                   onClick={() => setLanes((current) => current.filter((value) => value !== lane.value))}
                 >
                   <X size={16} />
-                </button>
+                </button></Tooltip>
               </li>
             ))}
           </ol>

@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type MouseEvent,
   type DragEvent,
+  type KeyboardEvent,
 } from "react";
 import {
   Link,
@@ -38,6 +39,7 @@ import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { Snackbar } from "../components/ui/snackbar";
+import { Tooltip } from "../components/ui/tooltip";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
 import { EditProjectDialog } from "../components/edit-project-dialog";
 import { IssueTable } from "../components/issue-table";
@@ -60,6 +62,7 @@ import { useGloballyCreatedIssues, useIssueCreationHandler } from "../lib/issue-
 import { issueTags } from "../lib/issue-tags";
 import { boardLaneOptions, issueBoardLanes } from "../lib/issue-board-lanes";
 import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
+import { boardArrowTarget, boardSelectionRange, type BoardArrow } from "../lib/board-selection";
 import "./board-order.css";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -198,6 +201,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const boardBusy = useRef(false);
   const [boardSelection, setBoardSelection] = useState<string[]>([]);
   const boardAnchor = useRef<string | null>(null);
+  const boardRange = useRef<{ key: string; anchor: string; head: string; base: string[] } | null>(null);
   const cardDrag = useRef<string[]>([]);
   const [cardDrop, setCardDrop] = useState<{ lane: Lane; targetId: string | null; after: boolean } | null>(null);
   const [boardOutcome, setBoardOutcome] = useState("");
@@ -207,6 +211,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   useEffect(() => {
     setBoardSelection([]);
     boardAnchor.current = null;
+    boardRange.current = null;
   }, [board, query, project?.archivedAt]);
   useEffect(() => {
     const visible = new Set(boardSettings.cards.filter((card) => boardSettings.lanes.includes(card.lane)).map((card) => card.issueId));
@@ -311,6 +316,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
     const targets = ids.flatMap((id) => placed.has(id) && byId.has(id) ? [byId.get(id)!] : []);
     if (!targets.length) return;
+    boardRange.current = null;
     boardBusy.current = true;
     setSaving("cards");
     setError("");
@@ -348,6 +354,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   async function reorderCards(ids: string[], lane: Lane, beforeIssueId: string | null) {
     if (saving || boardBusy.current || project?.archivedAt || !ids.length || !boardSettings.lanes.includes(lane)) return;
+    boardRange.current = null;
     boardBusy.current = true;
     setSaving("cards");
     setError("");
@@ -458,15 +465,50 @@ function ProjectIssues({ slug }: { slug: string }) {
         .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
   const filtered = board ? searched : issueTableRows(searched, users, tableState, projects, listBoardLanes);
-  const boardOrder = lanes.flatMap((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
+  const boardColumns = lanes.map((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
+  const boardOrder = boardColumns.flat();
+  const boardOrderKey = JSON.stringify([query, boardSettings.lanes, boardColumns]);
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
   function selectBoardIssue(id: string, checked: boolean, range = false) {
     if (saving || readOnly) return;
+    boardRange.current = null;
     const anchor = boardAnchor.current ? boardOrder.indexOf(boardAnchor.current) : -1;
     const index = boardOrder.indexOf(id);
     const targets = range && anchor >= 0 ? boardOrder.slice(Math.min(anchor, index), Math.max(anchor, index) + 1) : [id];
     setBoardSelection((current) => checked ? [...new Set([...current, ...targets])] : current.filter((item) => !targets.includes(item)));
     if (!range || anchor < 0) boardAnchor.current = id;
+  }
+  function boardKeyboardNavigate(event: KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) || event.altKey || saving) return;
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey || event.shiftKey && readOnly) return;
+    const target = event.target as HTMLElement;
+    // Menus, lane controls, filters, and the detail editor keep their own keys.
+    if (!target.matches('a.issue-link, .board-card-toolbar input[type="checkbox"]')) return;
+    const card = target.closest(".board-card");
+    const source = card?.querySelector<HTMLAnchorElement>("a[data-issue-id]")?.dataset.issueId;
+    if (!source) return;
+    const next = boardArrowTarget(boardColumns, source, event.key as BoardArrow, event.metaKey || event.ctrlKey);
+    if (!next) return;
+    event.preventDefault();
+    if (event.shiftKey) {
+      if (!boardRange.current || boardRange.current.key !== boardOrderKey || boardRange.current.head !== source) {
+        boardRange.current = { key: boardOrderKey, anchor: source, head: source, base: [...selectedBoard] };
+      }
+      const range = boardRange.current;
+      range.head = next;
+      boardAnchor.current = range.anchor;
+      setBoardSelection([...new Set([...range.base, ...boardSelectionRange(boardColumns, range.anchor, next)])]);
+    } else {
+      boardRange.current = null;
+      boardAnchor.current = next;
+    }
+    collection.current?.querySelector<HTMLAnchorElement>(`.board-card a[data-issue-id="${CSS.escape(next)}"]`)?.focus();
+  }
+  function selectLane(ids: string[], checked: boolean) {
+    if (saving || readOnly) return;
+    boardRange.current = null;
+    boardAnchor.current = null;
+    setBoardSelection((current) => checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)));
   }
   function issueCard(i: Issue) {
     const checked = selectedBoard.includes(i.id);
@@ -520,10 +562,9 @@ function ProjectIssues({ slug }: { slug: string }) {
             onChange={(event) => {
               if (!(event.nativeEvent as globalThis.MouseEvent).shiftKey) selectBoardIssue(i.id, event.target.checked);
             }} />
-          <span
+          <Tooltip content="Drag to reorder or move issue; use Board actions for keyboard controls"><span
             className="board-card-handle"
             aria-label={`Drag issue !${i.number}`}
-            title="Drag to reorder or move issue; use Board actions for keyboard controls"
             draggable={!saving && !readOnly}
             onDragStart={(event) => {
               if (saving || readOnly) { event.preventDefault(); return; }
@@ -538,7 +579,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               }
             }}
             onDragEnd={() => { cardDrag.current = []; setCardDrop(null); }}
-          ><GripVertical size={14} className="drag-hint" /></span>
+          ><GripVertical size={14} className="drag-hint" /></span></Tooltip>
           <BoardActionsMenu label={`Board actions for issue !${i.number}`} lanes={lanes} currentLane={currentLane}
             count={targets.length} disabled={!!saving || readOnly} {...reorderActions(targets)}
             onMove={(lane) => void changeBoard(targets, lane)} onRemove={() => void changeBoard(targets)} />
@@ -669,11 +710,11 @@ function ProjectIssues({ slug }: { slug: string }) {
           <>
             <div className="issue-bulk-actions issue-board-actions" role="group" aria-label="Selected board issue actions" aria-busy={!!saving}>
               <p className="board-summary muted">
-                {`${boardIssues.length} issues on board`}
-                {` · ${lanes.length} lanes`}
+                {`${boardIssues.length} of ${issues.length} issues assigned to board`}
+                {` · ${issues.length - boardIssues.length} unassigned · ${lanes.length} lanes`}
                 {hiddenCount > 0 && ` · ${hiddenCount} issues in hidden lanes`}
               </p>
-              <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => setBoardSelection(boardOrder)}>Select visible issues</Button>
+              <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => { boardRange.current = null; boardAnchor.current = null; setBoardSelection(boardOrder); }}>Select visible issues</Button>
               <span className="issue-selection-count">{selectedBoard.length} selected</span>
               <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
                 currentLane={selectedBoard.length && selectedBoard.every((id) => placements.get(id) === placements.get(selectedBoard[0])) ? placements.get(selectedBoard[0]) : undefined}
@@ -681,7 +722,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
               <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add tags</Button>
-              <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; }}>Clear selection</Button>
+              <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; boardRange.current = null; }}>Clear selection</Button>
             </div>
             {boardIssues.length === 0 && (
               <p className="board-empty-notice">
@@ -696,12 +737,15 @@ function ProjectIssues({ slug }: { slug: string }) {
               </p>
             )}
             <Snackbar message={boardOutcome} onDismiss={dismissBoardOutcome} />
-            <p className="sr-only">
+            <p className="sr-only" id="board-keyboard-help">
+              Use arrow keys to focus adjacent cards. Hold Shift to extend or shrink a selection; Cmd or Ctrl plus Shift and Up or Down selects to the start or end of the current lane. Left and Right extend across lanes. Lane checkboxes select only issues visible in the current search.
               Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
               Drag a lane by its heading to reorder lanes, or use Manage lanes.
             </p>
             <div
               className="board"
+              onKeyDown={boardKeyboardNavigate}
+              aria-describedby="board-keyboard-help"
               style={{ "--board-lanes": lanes.length } as CSSProperties}
             >
               {lanes.map((s, index) => {
@@ -757,15 +801,22 @@ function ProjectIssues({ slug }: { slug: string }) {
                       if (ids.length) void reorderCards(ids, s.value, null);
                     }}
                   >
-                    <h2
+                    <div className="board-lane-heading">
+                    <Tooltip content={`Select all visible issues in ${s.label}`}><input
+                      className="board-lane-select"
+                      type="checkbox"
+                      aria-label={`Select all visible issues in ${s.label}`}
+                      checked={cards.length > 0 && cards.every((issue) => selectedBoard.includes(issue.id))}
+                      ref={(element) => { if (element) element.indeterminate = cards.some((issue) => selectedBoard.includes(issue.id)) && !cards.every((issue) => selectedBoard.includes(issue.id)); }}
+                      disabled={!!saving || readOnly || !cards.length}
+                      onChange={(event) => selectLane(cards.map((issue) => issue.id), event.target.checked)}
+                    /></Tooltip>
+                    <Tooltip content={canReorderLanes ? "Drag to reorder lanes" : undefined}><h2
                       draggable={canReorderLanes}
-                      title={
-                        canReorderLanes ? "Drag to reorder lanes" : undefined
-                      }
                       onDragStart={(e) => {
                         e.dataTransfer.effectAllowed = "move";
                         e.dataTransfer.setData(LANE_DRAG_TYPE, s.value);
-                        const column = e.currentTarget.parentElement;
+                        const column = e.currentTarget.closest(".board-column");
                         if (column) {
                           const box = column.getBoundingClientRect();
                           e.dataTransfer.setDragImage(
@@ -784,7 +835,8 @@ function ProjectIssues({ slug }: { slug: string }) {
                       <span className={`lane-dot ${s.value}`} />
                       <span className="lane-name">{s.label}</span>
                       <span className="count">{cards.length}</span>
-                    </h2>
+                    </h2></Tooltip>
+                    </div>
                     {cards.map(issueCard)}
                     {!cards.length && (
                       <p className="column-empty">No issues here yet</p>
@@ -828,26 +880,24 @@ function ProjectIssues({ slug }: { slug: string }) {
           {desktop && <div className="issue-sidebar-resizer" {...separatorProps} />}
           <header className="issue-sidebar-header">
             <h2>Issue details</h2>
-            <Link
+            <Tooltip content="Open issue in full page"><Link
               className="icon-button"
               to={`/issues/${selectedId}`}
               aria-label="Open issue in full page"
-              title="Open issue in full page"
               onClick={(event) => {
                 if (isPlainClick(event) && !canLeaveDetails())
                   event.preventDefault();
               }}
             >
               <Maximize2 size={17} />
-            </Link>
-            <button
+            </Link></Tooltip>
+            <Tooltip content="Close issue details"><button
               className="icon-button"
               aria-label="Close issue details"
-              title="Close issue details"
               onClick={closeDetails}
             >
               <X size={18} />
-            </button>
+            </button></Tooltip>
           </header>
           <div className="issue-detail-scroll" inert={closingIssues}>
             <IssueDetails

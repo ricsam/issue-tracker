@@ -72,6 +72,7 @@ import type { Attachment, User } from "../../shared/types";
 import { IMAGE_TRANSFORMER, ImageNode } from "./image-node";
 import { Markdown } from "./markdown";
 import "./editor.css";
+import { Tooltip } from "./ui/tooltip";
 
 const transformers = [MENTION_TRANSFORMER, IMAGE_TRANSFORMER, ESCAPED_HASHTAG_TRANSFORMER, CHECK_LIST, ...TRANSFORMERS];
 type Mode = "write" | "markdown" | "preview";
@@ -91,17 +92,16 @@ function Tool({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <Tooltip content={label}><button
       type="button"
       className="editor-tool"
       aria-label={label}
-      title={label}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
     >
       {children}
-    </button>
+    </button></Tooltip>
   );
 }
 

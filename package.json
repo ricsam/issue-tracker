@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "build": "vite build",
     "start": "bun server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test server tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts",
+    "test": "bun test server tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts tests/copy-tooltip.test.tsx",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -23,8 +23,9 @@
     "@lexical/rich-text": "^0.38.2",
     "@lexical/selection": "^0.38.2",
     "@lexical/utils": "^0.38.2",
-    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dialog": "^1.2.0",
     "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.3.0",
     "@tailwindcss/vite": "^4.1.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

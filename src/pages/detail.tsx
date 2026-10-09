@@ -20,6 +20,7 @@ import { api, message } from "../lib/api";
 import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
+import { CopyIssueBody } from "../components/copy-issue-body";
 import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
@@ -337,6 +338,7 @@ function IssueDetailForm({
           </div>
         </fieldset>
       </form>
+      <CopyIssueBody body={issue.body} />
       <section className="comments">
         {comments.length > 0 && <h2>
           <MessageSquare size={18} /> Discussion{" "}

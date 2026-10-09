@@ -1,14 +1,17 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, LoaderCircle } from "lucide-react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentPropsWithRef, ReactNode } from "react";
+import { Tooltip } from "./tooltip";
 export function Button({
   className = "",
   variant = "primary",
+  title,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ComponentPropsWithRef<"button"> & {
   variant?: "primary" | "secondary" | "ghost";
 }) {
-  return <button className={`btn btn-${variant} ${className}`} {...props} />;
+  const button = <button className={`btn btn-${variant} ${className}`} {...props} />;
+  return title ? <Tooltip content={title}>{button}</Tooltip> : button;
 }
 export function Modal({
   title,

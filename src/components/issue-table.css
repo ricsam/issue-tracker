@@ -26,8 +26,10 @@
 .issue-bulk-outcome { margin: 0; font-size: 13px; }
 .issue-bulk-outcome:empty { display: none; }
 .issue-table .is-bulk-selected { background: #f6f3ff; }
-.issue-table { min-width: 1090px; }
-.issue-table.all-issues-table { min-width: 1270px; }
+.issue-table { min-width: 1250px; }
+.issue-table.all-issues-table { min-width: 1430px; }
+.issue-table .creator-column { width: 160px; }
+.issue-creator { overflow-wrap: anywhere; }
 .issue-table .lane-column { width: 175px; }
 .issue-board-lane .tag { white-space: normal; overflow-wrap: anywhere; }
 .issue-table .project-column { width: 180px; }

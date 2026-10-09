@@ -37,7 +37,7 @@ for (const width of [1440, 1060, 390]) {
       bar.getByRole("button", { name: "Clear selection", exact: true }),
     ];
     const offset = () => board.evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
-    await expect(bar.getByText("12 issues on board · 3 lanes", { exact: true })).toBeVisible();
+    await expect(bar.getByText("12 of 12 issues assigned to board · 0 unassigned · 3 lanes", { exact: true })).toBeVisible();
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     await expect(page.getByText("Use checkboxes or Shift-click to select a range.", { exact: true })).toHaveCount(0);
     await expect(selectAll).toBeEnabled();
@@ -73,12 +73,12 @@ for (const width of [1440, 1060, 390]) {
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     await expect(selectAll).toBeDisabled();
     for (const action of actions) await expect(action).toBeDisabled();
-    await expect(bar).toContainText("12 issues on board · 3 lanes");
+    await expect(bar).toContainText("12 of 12 issues assigned to board · 0 unassigned · 3 lanes");
     expect((await bar.boundingBox())!.height).toBe(height);
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
     expect((await page.request.patch(endpoint, { headers, data: { lanes: ["in_progress", "done"] } })).ok()).toBeTruthy();
     await page.reload();
-    await expect(bar).toContainText("12 issues on board · 2 lanes · 12 issues in hidden lanes");
+    await expect(bar).toContainText("12 of 12 issues assigned to board · 0 unassigned · 2 lanes · 12 issues in hidden lanes");
     await expect(selectAll).toBeDisabled();
     expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
     await page.reload();
@@ -86,7 +86,7 @@ for (const width of [1440, 1060, 390]) {
     for (const action of [selectAll, ...actions]) await expect(action).toBeDisabled();
     const { project: empty } = await (await page.request.post("/api/projects", { headers, data: { name: `Empty board ${randomUUID()}` } })).json();
     await page.goto(`/projects/${empty.slug}/board`);
-    await expect(bar).toContainText("0 issues on board · 3 lanes");
+    await expect(bar).toContainText("0 of 0 issues assigned to board · 0 unassigned · 3 lanes");
     await expect(page.getByText("No work on the board yet.", { exact: false })).toBeVisible();
     for (const action of [selectAll, ...actions]) await expect(action).toBeDisabled();
   });

@@ -7,6 +7,7 @@ import { validateIssueBody } from "../lib/validation";
 import { useWorkspace } from "../lib/workspace";
 import { useProjectTags } from "../lib/issue-tags";
 import { CREATE_ISSUE_KEYS, createIssueTooltip, useCreateIssueShortcut, useIssueSaveShortcut } from "../lib/issue-shortcuts";
+import { CopyIssueBody } from "./copy-issue-body";
 import { RichEditor } from "./rich-editor";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
@@ -148,6 +149,7 @@ export function CreateIssueDialog({
                   <strong>Issue !{created.number} created.</strong>
                   <span>Ready for another.</span>
                 </div>
+                <div className="issue-created-actions">
                 <Link
                   to={`/issues/${created.id}`}
                   onClick={viewIssue}
@@ -156,6 +158,8 @@ export function CreateIssueDialog({
                 >
                   View issue
                 </Link>
+                <CopyIssueBody key={created.id} body={created.body} />
+                </div>
                 <button
                   type="button"
                   className="icon-button"

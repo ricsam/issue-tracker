@@ -56,6 +56,28 @@ test("project filters distinguish unlinked and archived-project issues and combi
   expect(issueTableRows([...rows].reverse(), users, initialIssueTableState)).toEqual(issueTableRows(rows, users, initialIssueTableState));
 });
 
+test("creator sorting uses displayed names, with numeric ties and an unknown-author fallback", () => {
+  const rows = [issue(10, { authorId: "b" }), issue(3, { authorId: "missing" }), issue(2, { authorId: "a" }), issue(1, { authorId: "b" })];
+  expect(numbers(issueTableRows(rows, users, { ...initialIssueTableState, sort: "creator" }))).toEqual([2, 1, 10, 3]);
+  expect(numbers(issueTableRows(rows, users, { ...initialIssueTableState, sort: "creator", direction: "descending" }))).toEqual([3, 1, 10, 2]);
+  expect(numbers(rows)).toEqual([10, 3, 2, 1]);
+});
+
+test("creator filters use identity rather than names or tagged users, combine with project and tags, and clear", () => {
+  const sameNames = [...users, { ...users[0], id: "other", email: "other@example.test" }, { ...users[1], id: "unknown" }];
+  const rows = [issue(1, { authorId: "a", taggedUserIds: ["b"], labels: ["bug"] }), issue(2, { authorId: "other", projectId: "q" }), issue(3, { authorId: "missing", projectId: null }), issue(4, { authorId: "unknown" }), issue(5, { authorId: "also-missing" })];
+  const filtered = (state: Partial<typeof initialIssueTableState>) => numbers(issueTableRows(rows, sameNames, { ...initialIssueTableState, ...state }, projects));
+  expect(filtered({ creator: "user:a", tagged: "b", label: "label:bug", project: "p" })).toEqual([1]);
+  expect(filtered({ creator: "user:a", project: "q" })).toEqual([]);
+  expect(filtered({ creator: "user:other" })).toEqual([2]);
+  expect(filtered({ creator: "unknown" })).toEqual([3, 5]);
+  expect(filtered({ creator: "user:unknown" })).toEqual([4]);
+  expect(filtered({ creator: "" })).toEqual([1, 2, 3, 4, 5]);
+  expect(hasColumnFilters({ ...initialIssueTableState, creator: "user:a" })).toBe(true);
+  expect(hasColumnFilters({ ...initialIssueTableState, creator: "unknown" })).toBe(true);
+  expect(hasColumnFilters(initialIssueTableState)).toBe(false);
+});
+
 test("table sorts without mutation and breaks ties by number", () => {
   expect(numbers(issueTableRows(issues, users, initialIssueTableState))).toEqual([2, 3, 10]);
   expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, sort: "title", direction: "descending" }))).toEqual([10, 2, 3]);

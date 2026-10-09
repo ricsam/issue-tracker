@@ -1,7 +1,7 @@
 import type { Issue, Project, User } from "../../shared/types";
 import type { IssueBoardLane } from "./issue-board-lanes";
 
-export type IssueColumn = "number" | "title" | "labels" | "tagged" | "created" | "project" | "lane";
+export type IssueColumn = "number" | "title" | "labels" | "tagged" | "creator" | "created" | "project" | "lane";
 export interface IssueTableState {
   sort: IssueColumn;
   direction: "ascending" | "descending";
@@ -9,6 +9,7 @@ export interface IssueTableState {
   title: string;
   label: string;
   tagged: string;
+  creator: string;
   project: string;
   lane: string;
   createdFrom: string;
@@ -21,6 +22,7 @@ export const initialIssueTableState: IssueTableState = {
   title: "",
   label: "",
   tagged: "",
+  creator: "",
   project: "",
   lane: "",
   createdFrom: "",
@@ -28,7 +30,7 @@ export const initialIssueTableState: IssueTableState = {
 };
 
 export function hasColumnFilters(state: IssueTableState) {
-  return !!(state.number || state.title || state.label || state.tagged || state.project || state.lane || state.createdFrom || state.createdTo);
+  return !!(state.number || state.title || state.label || state.tagged || state.creator || state.project || state.lane || state.createdFrom || state.createdTo);
 }
 
 /** Compare/filter the same local calendar dates that the table displays. */
@@ -50,6 +52,7 @@ export function issueTableRows(issues: Issue[], users: User[], state: IssueTable
       issue.title.toLocaleLowerCase().includes(state.title.trim().toLocaleLowerCase()) &&
       (!state.label || (state.label === "none" ? issue.labels.length === 0 : issue.labels.includes(state.label.slice(6)))) &&
       (!state.tagged || (state.tagged === "none" ? issue.taggedUserIds.length === 0 : issue.taggedUserIds.includes(state.tagged))) &&
+      (!state.creator || (state.creator === "unknown" ? !names.has(issue.authorId) : issue.authorId === state.creator.slice(5))) &&
       (!state.project || (state.project === "none" ? issue.projectId === null : issue.projectId === state.project)) &&
       (!state.lane || (state.lane === "none" ? !boardLanes.has(issue.id) : boardLanes.get(issue.id)?.value === state.lane)) &&
       (!state.createdFrom || date >= state.createdFrom) &&
@@ -63,6 +66,7 @@ export function issueTableRows(issues: Issue[], users: User[], state: IssueTable
       case "title": comparison = compareText(a.title, b.title); break;
       case "labels": comparison = compareText([...a.labels].sort(compareText).join(", "), [...b.labels].sort(compareText).join(", ")); break;
       case "tagged": comparison = compareText(taggedNames(a), taggedNames(b)); break;
+      case "creator": comparison = compareText(names.get(a.authorId) || "Unknown user", names.get(b.authorId) || "Unknown user"); break;
       case "created": comparison = Date.parse(a.createdAt) - Date.parse(b.createdAt); break;
       default: comparison = a.number - b.number;
     }
