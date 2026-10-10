@@ -7,17 +7,14 @@ Threadline is a small, self-hosted issue tracker for a trusted, authenticated te
 Review these boundaries before inviting users or storing sensitive information.
 They describe current behavior, not a roadmap or a promise of future features.
 
-## One shared workspace
+## Project access within one workspace
 
-Every authenticated user can access every project and upload.
-There are no per-project access controls or private projects.
-Tagging a user in an issue does not restrict who can read or update it; there is no assignee role. Moving an issue to another project does not change who can access it.
-The workspace user directory, including names and email addresses, is also visible to authenticated users.
-Anonymous visitors cannot access application data.
+Public projects are readable by every signed-in user. Private projects are readable only by the owner, explicitly shared users, and administrators. Only owners and administrators manage access; readers retain collaborative writes. **No project** issues remain workspace-wide.
+Tagging a user does not grant access or assign a role. Moving an issue changes its audience and requires access to both projects. Attachments follow readable saved issue/comment/history references; unsaved uploads are uploader-only, with administrator access to all files.
+The workspace user directory, including names and email addresses, remains visible to all authenticated users. Anonymous visitors cannot access application data.
 
 <Warning>
-  Do not use projects as security boundaries between customers, departments, or teams.
-  Only admit users who may access the entire workspace and its uploaded files.
+  Administrators and infrastructure operators remain trusted. Access controls cannot retract previously downloaded or copied data. This is not separate tenant isolation or encryption.
 </Warning>
 
 ## Limited account management

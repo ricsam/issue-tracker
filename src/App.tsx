@@ -60,8 +60,12 @@ function AppContent() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const updateProject = useCallback((project: Project) => {
-    setProjects((current) => current.map((item) => item.id === project.id ? project : item));
-  }, []);
+    const viewer = auth?.user;
+    const accessible = project.visibility === "public" || viewer?.role === "admin" || project.ownerId === viewer?.id || project.sharedUserIds.includes(viewer?.id || "");
+    setProjects((current) => accessible
+      ? current.map((item) => item.id === project.id ? project : item)
+      : current.filter((item) => item.id !== project.id));
+  }, [auth?.user]);
   const [users, setUsers] = useState<User[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");

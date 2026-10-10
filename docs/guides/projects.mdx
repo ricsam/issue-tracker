@@ -6,11 +6,19 @@ description: Organize shared work into projects and understand progress at a gla
 Projects group related issues into a list and a board.
 Use a project for a product, a team initiative, or a clearly scoped body of work.
 
-<Warning>
-  Every project is shared with every authenticated user.
-  There are no project memberships, private projects, or per-project access controls.
-  A project is an organizational boundary, not a security boundary.
-</Warning>
+<Note>
+  **Public** means all signed-in users, never anonymous visitors. **Private** means the owner, explicitly shared users, and administrators only. Issues without a project remain visible to the whole signed-in workspace.
+</Note>
+
+## Manage access
+
+New projects default to public and belong to their creator. Choose private visibility to limit the audience, and select the users to share with. Open **Manage access** on the project's List or Board to change visibility, transfer ownership to an existing user, or update sharing. Only the owner or an administrator sees this action; access settings remain editable for archived projects. Transferring a private project without keeping yourself under **Shared users** removes your access and returns you to the project list.
+
+Sharing grants collaboration, not a read-only role: readers can edit active project details, issues, and boards, and archive or restore projects. Comment editing and deletion still require the comment author or an administrator. Tagging someone does not share a private project with them.
+
+Users who lose access stop seeing the project in lists, favorites, issue references, and move destinations. Direct project, issue, comment, and history routes return not found. Saved favorites return if access is restored. Attachments follow current issue access, including references retained in history.
+
+On upgrade, existing projects remain public. Their owner is the earliest administrator by creation time, then user ID; if no administrator exists, the owner stays unset until an administrator assigns one. Existing shared-user lists start empty.
 
 ## Create a project
 
@@ -18,7 +26,8 @@ Use a project for a product, a team initiative, or a clearly scoped body of work
 2. Select **Create project**, or **Create your first project** in an empty workspace.
 3. Enter a **Project name**, such as `Website redesign`.
 4. Add an optional **Description** explaining the goal and scope.
-5. Select **Create project** to open the new project's issue list.
+5. Choose **Visibility** and optionally select **Shared users**. Public is workspace-wide; private is limited to the owner, shared users, and administrators.
+6. Select **Create project** to open the new project's issue list.
 
 Any authenticated member can create a project; administrator access is not required.
 You can change the name and description later using **Edit project**.
@@ -31,11 +40,11 @@ You can change the name and description later using **Edit project**.
 The project URL uses a generated slug derived from the name plus a random suffix.
 You do not need to choose or manage that slug yourself.
 Copy the browser URL when directing teammates to the project.
-Recipients must sign in to access its data.
+Recipients must sign in and have project access to see its data.
 
 ## Edit a project
 
-Open the project's **List** or **Board**, select **Edit project**, then update its name or description and choose **Save changes**. The name is required; the description can be cleared. Any signed-in member can edit an active project.
+Open the project's **List** or **Board**, select **Edit project**, then update its name or description and choose **Save changes**. The name is required; the description can be cleared. Any signed-in member with access can edit an active project.
 
 Renaming keeps the project's URL, issue links, board, and history unchanged. The sidebar and project cards show the saved name immediately. Canceling a changed draft asks before discarding it, and a failed save keeps your draft for retry. Editing project details never saves or discards unsaved issue edits in the side panel.
 
@@ -43,7 +52,7 @@ Archived projects remain read-only. Select **Restore project** before editing th
 
 ## Read the project overview
 
-Each project card shows its name, description, unfinished board work, and total issue count.
+Each project card shows its name, description, visibility, owner, shared-user count, unfinished board work, and total issue count. Administrators see every project, including private projects they do not own.
 Unfinished work counts open issues on the board outside the built-in **Done** lane, including cards in hidden lanes.
 Closing an issue or moving its card to **Done** reduces that count without deleting anything.
 Issues that are not on the board count only toward the total.
@@ -77,16 +86,16 @@ They stay readable, including issues, comments, and the board, but are read-only
 Open issues stay open; archiving does not close them.
 
 To work in the project again, open it and select **Restore project**.
-Any signed-in member can archive or restore a project.
+Any signed-in member with access can archive or restore a project.
 
 ## Plan for retained projects
 
 The current release has no project delete action.
-It also does not expose an issue move between projects.
+Issues can move between active projects you can access or become **No project** issues. Moving changes the audience of their content, comments, history, and attachments; unlinking makes them workspace-wide.
 Create projects deliberately rather than treating them as disposable folders.
 
 When work finishes, close its issues and archive the project to keep it as a reference.
-Do not use project organization to separate information that different users must not see.
+Use private visibility and explicit sharing for restricted work. Administrators retain access, and already-downloaded or copied information cannot be retracted.
 Review [current limitations](/admin/limitations) before inviting a broader audience.
 
 <CardGroup cols={2}>

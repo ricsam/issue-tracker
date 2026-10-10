@@ -8,9 +8,9 @@ Threadline inserts a Markdown image or file link after the upload succeeds.
 Each file must be **10 MiB or smaller**.
 
 <Warning>
-  Every upload is accessible to every authenticated user who has its URL.
-  There are no per-project or per-file access controls, including for files not referenced by an issue.
-  Anonymous users cannot download uploaded files.
+  Unsaved upload drafts are readable only by their uploader and administrators.
+  Saved attachment references inherit the current access of their issue, comment, or retained history.
+  A known URL does not grant access. Anonymous users cannot download files.
 </Warning>
 
 ## Attach a file
@@ -55,9 +55,9 @@ The returned link includes the stored filename; keep the generated URL intact.
 ## Share an attachment
 
 Keep the inserted reference in an issue or comment so teammates can find it later.
-A teammate opening the upload URL must have an authenticated session.
-Copying the URL does not create a public download or grant access to an anonymous recipient.
-Conversely, moving the reference between projects does not change who can access the file.
+A teammate opening the upload URL must be signed in and able to read an issue that references the file (including its comments or history). Administrators can read all uploads.
+Copying the URL does not grant access. Moving an issue, changing project visibility, or revoking sharing changes download access immediately on subsequent requests.
+Saving a reference in a public project or **No project** issue makes it available to all signed-in users. If a file has multiple saved references, access through any readable issue is sufficient.
 
 ## Handle upload failures
 
@@ -73,7 +73,9 @@ Check the editor before selecting the whole batch again to avoid unnecessary dup
 
 Uploading and saving the surrounding issue or comment are separate operations.
 Canceling an issue draft after uploading does not remove the uploaded file.
-Removing an attachment link or deleting its comment does not delete the file either.
+Removing an attachment link or deleting its comment does not delete the file either. Saved history can still contain the reference, so the issue's readers may still download it.
+
+After upgrading, legacy referenced uploads follow issue access too; legacy uploads with no saved references are administrator-only.
 
 <Warning>
   Uploads are retained even when unused.

@@ -6,8 +6,11 @@ import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
 import { FavoriteProjectButton } from "../components/favorite-projects";
+import { ProjectAccessFields, ProjectAccessSummary } from "../components/project-access";
 export function ProjectsPage() {
-  const { projects, refresh } = useWorkspace();
+  const { projects, refresh, user } = useWorkspace();
+  const [visibility, setVisibility] = useState<Project["visibility"]>("public");
+  const [sharedUserIds, setSharedUserIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -23,10 +26,12 @@ export function ProjectsPage() {
     try {
       const { project } = await api<{ project: Project }>("/api/projects", {
         method: "POST",
-        body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
+        body: JSON.stringify({ ...Object.fromEntries(new FormData(e.currentTarget)), visibility, sharedUserIds }),
       });
       await refresh();
       setOpen(false);
+      setVisibility("public");
+      setSharedUserIds([]);
       navigate(`/projects/${project.slug}`);
     } catch (e) {
       setError(message(e));
@@ -107,6 +112,7 @@ export function ProjectsPage() {
               <p>
                 {p.description || "A fresh space for your team’s next idea."}
               </p>
+              <ProjectAccessSummary project={p} />
               <footer>
                 <span>
                   {p.archivedAt
@@ -178,6 +184,9 @@ export function ProjectsPage() {
               maxLength={10000}
             />
           </label>
+          <fieldset className="form-stack" disabled={busy}>
+            <ProjectAccessFields visibility={visibility} onVisibilityChange={setVisibility} sharedUserIds={sharedUserIds} onSharedChange={setSharedUserIds} ownerId={user.id} />
+          </fieldset>
           <ErrorNotice error={error} />
           <div className="form-actions">
             <Button

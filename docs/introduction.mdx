@@ -16,10 +16,10 @@ The product is **Threadline**. Its public source repository, container image, an
 
 ## A deliberately shared workspace
 
-Every authenticated user can access all projects, issues, and uploads. Administrators additionally manage local users and OIDC settings. Comments can be edited or deleted by their author or an administrator.
+Public projects are shared with all signed-in users. Private projects are limited to their owner, explicitly shared users, and administrators. Owners and administrators manage project access; readable projects remain collaborative. Administrators also manage local users and OIDC settings. Comments require project access and can be edited or deleted only by their author or an administrator.
 
 <Warning>
-Projects are organizational boundaries, not security boundaries. There are no private projects or per-project upload permissions. Invite only people who may access the whole workspace.
+Public never means anonymous access. Issues without a project remain workspace-wide. Uploaded attachments follow readable saved issue, comment, or history references; unsaved uploads are private to the uploader and administrators. Moving or sharing content can broaden its audience.
 </Warning>
 
 ## Small by design

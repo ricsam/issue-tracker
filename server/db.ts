@@ -3,6 +3,7 @@ import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { isLabel } from "../shared/hashtag-matches";
 import { extractMentionUserIds } from "../shared/mentions";
 import { deriveIssueTitle, prependLegacyTitle } from "../shared/issue-content";
+import { retainAttachmentReferences } from "./attachments";
 
 /** Called inside the content write transaction; historical unknown IDs are ignored. */
 export function syncIssueTaggedUsers(db: Database, issueId: string) {
@@ -13,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 = 13) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 = 14) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -308,6 +309,39 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 = 13
     for (const row of rows)
       db.query("UPDATE issues SET labels=? WHERE id=?").run(JSON.stringify(extractIssueLabels(row.body)), row.id);
     db.query("INSERT INTO migrations VALUES (13)").run();
+  }).immediate();
+  if (targetVersion < 14) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=14").get()) return;
+    db.exec(`
+      ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public','private'));
+      ALTER TABLE projects ADD COLUMN ownerId TEXT REFERENCES users(id);
+      UPDATE projects SET ownerId=(SELECT id FROM users WHERE role='admin' ORDER BY createdAt,id LIMIT 1);
+      CREATE TABLE project_members (
+        projectId TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY(projectId,userId)
+      );
+      ALTER TABLE attachments ADD COLUMN uploaderId TEXT REFERENCES users(id);
+      CREATE TABLE issue_attachments (
+        issueId INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        attachmentId TEXT NOT NULL REFERENCES attachments(id),
+        PRIMARY KEY(issueId,attachmentId)
+      );
+      CREATE INDEX issue_attachments_attachment ON issue_attachments(attachmentId,issueId);
+    `);
+    // Existing files inherit the current access of issues, including retained
+    // comment/body history. Unreferenced legacy files are administrator-only.
+    for (const row of db.query("SELECT id,body FROM issues").all() as { id: number; body: string }[])
+      retainAttachmentReferences(db, row.id, [row.body]);
+    for (const row of db.query("SELECT issueId,body FROM comments").all() as { issueId: number; body: string }[])
+      retainAttachmentReferences(db, row.issueId, [row.body]);
+    for (const row of db.query("SELECT issueId,changes FROM issue_history").all() as { issueId: number; changes: string }[]) {
+      const changes = JSON.parse(row.changes) as { field: string; before: string | null; after: string | null }[];
+      retainAttachmentReferences(db, row.issueId, changes.filter((change) => ["body", "comment"].includes(change.field))
+        .flatMap((change) => [change.before ?? "", change.after ?? ""]));
+    }
+    db.query("INSERT INTO migrations VALUES (14)").run();
   }).immediate();
   return db;
 }

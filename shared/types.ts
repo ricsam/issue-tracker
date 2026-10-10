@@ -17,6 +17,11 @@ export interface Project {
   slug: string;
   name: string;
   description: string;
+  /** Public projects are visible to all authenticated users, never anonymous visitors. */
+  visibility: "public" | "private";
+  /** Legacy projects without any accounts may have no owner until an admin assigns one. */
+  ownerId: string | null;
+  sharedUserIds: string[];
   createdAt: string;
   /** Archived projects are hidden from navigation and read-only until restored. */
   archivedAt: string | null;

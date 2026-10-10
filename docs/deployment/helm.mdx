@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.16.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.17.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,9 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.16.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.16.0 adds configurable table-column visibility/order with per-account browser preferences and fixes mobile table hit areas that can intercept scrolling or Board navigation on older Safari versions. No database migration, API change, or deployment-value change is added by this release.
+Verify `0.17.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.17.0 adds public/private projects, ownership, explicit sharing, and full administrator access. Public means signed-in workspace access, not anonymous access. Owners and administrators manage access; authorized members retain collaboration. It also includes the board and issue workflow preferences added since 0.16.0.
+
+Migration v14 keeps existing projects public, assigns the earliest administrator as owner (or leaves ownership unset when none exists), and starts sharing lists empty. Saved attachment references inherit current issue access, including retained history; legacy unreferenced uploads become administrator-only. Back up the full `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** older images do not enforce project or attachment restrictions. Recovery requires restoring a pre-upgrade backup with its matching application, while preserving newer writes separately. No deployment-value changes are required.
 
 When upgrading from before 0.15.0, issue history, personal project favorites, and strict lowercase kebab tags such as `#needs-review-2` are also included. Uppercase, Unicode, underscores and bracketed tags are no longer recognized; invalid tag text remains ordinary prose.
 
@@ -49,7 +51,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.16.0 --namespace issue-tracker \
+  --version 0.17.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -89,9 +91,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.16.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.17.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.16.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.17.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

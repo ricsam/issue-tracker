@@ -1,0 +1,6 @@
+.project-access-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--muted); font-size: 12px; margin-top: 12px; }
+.access-explanation { font-size: 12px; margin: 0; line-height: 1.5; }
+.project-share-list { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; min-width: 0; }
+.project-share-list legend { font-weight: 600; margin-bottom: 8px; }
+.project-share-list label { display: flex; align-items: center; flex-direction: row; gap: 8px; overflow-wrap: anywhere; }
+.project-share-list input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 auto; }

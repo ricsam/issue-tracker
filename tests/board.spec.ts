@@ -376,6 +376,8 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   await page.setViewportSize({ width: 1440, height: 1000 });
   await plan.locator(".board-card-handle").dragTo(todo);
   await expect(todo.getByRole("link", { name: /Plan the release/ })).toBeVisible();
+  // Avoid scrolling the source away between dragTo's mousedown and dragstart.
+  await review.scrollIntoViewIfNeeded();
   await plan.locator(".board-card-handle").dragTo(review);
   await expect(review.locator(".board-card")).toHaveCount(1);
   await page.screenshot({ path: "test-results/custom-lanes-desktop.png", fullPage: true });

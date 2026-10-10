@@ -44,6 +44,7 @@ import { Snackbar } from "../components/ui/snackbar";
 import { Tooltip } from "../components/ui/tooltip";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
 import { EditProjectDialog } from "../components/edit-project-dialog";
+import { ProjectAccessDialog, ProjectAccessSummary } from "../components/project-access";
 import { IssueTable } from "../components/issue-table";
 import { initialIssueTableState, issueTableRows } from "../lib/issue-table";
 import { BoardSettingsDialog } from "../components/board-settings";
@@ -215,6 +216,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [tableState, setTableState] = useState(initialIssueTableState);
   const [open, setOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
+  const [editingAccess, setEditingAccess] = useState(false);
   const [projectSaved, setProjectSaved] = useState("");
   const dismissProjectSaved = useCallback(() => setProjectSaved(""), []);
   useIssueCreationHandler(() => { if (!bulkClosing.current && !boardBusy.current) setOpen(true); }, !loading && !loadFailed && (all || !!project));
@@ -684,9 +686,11 @@ function ProjectIssues({ slug }: { slug: string }) {
             <p className="muted">
               {all ? "Every issue across your workspace, with or without a project." : project!.description || "Every step forward starts here."}
             </p>
+            {project && <ProjectAccessSummary project={project} />}
           </div>
-          {!readOnly && (
-            <div className="page-actions">
+          <div className="page-actions">
+            {project && (user.role === "admin" || project.ownerId === user.id) && <Button variant="secondary" onClick={() => { if (canLeaveDetails()) setEditingAccess(true); }}>Manage access</Button>}
+            {!readOnly && <>
               {project && <>
                 <Button variant="secondary" onClick={() => { setProjectSaved(""); setEditingProject(true); }}>Edit project</Button>
                 <ArchiveProjectButton project={project} onChange={setProject} />
@@ -695,8 +699,8 @@ function ProjectIssues({ slug }: { slug: string }) {
                 <Plus size={16} />
                 Create issue
               </Button>
-            </div>
-          )}
+            </>}
+          </div>
         </header>
         <Snackbar message={projectSaved} onDismiss={dismissProjectSaved} />
         {readOnly && project && (
@@ -1009,6 +1013,15 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
         </aside>
       )}
+      {editingAccess && project && <ProjectAccessDialog project={project}
+        onSaved={(updated, refreshFailed) => {
+          if (updated.visibility === "private" && user.role !== "admin" && updated.ownerId !== user.id && !updated.sharedUserIds.includes(user.id)) {
+            navigate("/projects", { replace: true });
+          } else {
+            setProject(updated);
+            setProjectSaved(refreshFailed ? "Access saved. Workspace refresh failed; reload to retry." : "Project access updated");
+          }
+        }} onClose={() => setEditingAccess(false)} />}
       {editingProject && project && <EditProjectDialog project={project}
         onSaved={(updated) => { setProject(updated); setProjectSaved("Project updated"); }}
         onClose={() => setEditingProject(false)} />}

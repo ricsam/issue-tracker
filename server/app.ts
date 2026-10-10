@@ -30,6 +30,8 @@ import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
+import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams } from "./project-access";
+import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./attachments";
 
 export interface AppOptions {
   dataDir?: string;
@@ -82,6 +84,13 @@ const projectUpdateFields = z.union([
   z.object({ name: text(100).optional(), description: z.string().max(10000).optional() })
     .strict().refine((input) => input.name !== undefined || input.description !== undefined),
 ]);
+const sharedUsersField = z.array(z.string().uuid()).max(1000)
+  .refine((ids) => new Set(ids).size === ids.length);
+const projectAccessFields = z.object({
+  visibility: z.enum(["public", "private"]).optional(),
+  ownerId: z.string().uuid().optional(),
+  sharedUserIds: sharedUsersField.optional(),
+}).strict().refine((input) => Object.keys(input).length > 0);
 const laneField = z.string().min(1).max(100);
 const customLaneField = z.object({
   value: z.string().regex(/^custom_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
@@ -133,6 +142,7 @@ export function createApp(options: AppOptions = {}) {
     if (key.length !== 32) throw new Error("Invalid persistent settings key");
   }
   const db = openDatabase(resolve(dataDir, "app.sqlite"));
+  const access = projectAccess(db);
   const oidc = new OidcService(db, {
     baseUrl,
     key,
@@ -177,13 +187,14 @@ export function createApp(options: AppOptions = {}) {
   const requireAdmin = (c: any) => {
     if (c.get("user").role !== "admin") fail(403, "Administrator required");
   };
-  const issue = (issueId: string | number): Issue => {
+  const issue = (issueId: string | number, user: User): Issue => {
     const row = db
       .query(
         "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
     if (!row) return fail(404, "Issue not found");
+    access.requireRead(row.projectId, user, "Issue");
     return {
       ...row,
       id: String(row.id),
@@ -193,26 +204,29 @@ export function createApp(options: AppOptions = {}) {
       state: row.closedAt ? "closed" : "open",
     };
   };
-  const project = (slug: string) => {
+  const project = (slug: string, user: User) => {
     const row = db
       .query(`${projectSql} WHERE p.slug=? GROUP BY p.id`)
       .get(slug) as Project | null;
-    return row ?? fail(404, "Project not found");
+    if (!row) return fail(404, "Project not found");
+    access.requireRead(row.id, user);
+    return access.serialize(row);
   };
   // Archived projects stay readable but reject content and board changes until restored.
-  const activeProject = (slug: string) => {
-    const p = project(slug);
+  const activeProject = (slug: string, user: User) => {
+    const p = project(slug, user);
     if (p.archivedAt) fail(409, "Project is archived");
     return p;
   };
-  const requireActiveProjectId = (projectId: string) => {
+  const requireActiveProjectId = (projectId: string, user: User) => {
+    access.requireRead(projectId, user);
     const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
     if (!p) return fail(404, "Project not found");
     if (p.archivedAt) fail(409, "Project is archived");
   };
-  const activeIssue = (issueId: string) => {
-    const i = issue(issueId);
-    if (i.projectId !== null) requireActiveProjectId(i.projectId);
+  const activeIssue = (issueId: string, user: User) => {
+    const i = issue(issueId, user);
+    if (i.projectId !== null) requireActiveProjectId(i.projectId, user);
     return i;
   };
   const board = (projectId: string): BoardSettings => {
@@ -248,6 +262,20 @@ export function createApp(options: AppOptions = {}) {
   const validateMentions = (body: string) => {
     for (const userId of extractMentionUserIds(body))
       if (!publicUser(userId)) fail(400, "Unknown mentioned user");
+  };
+  const validateSharedUsers = (userIds: string[]) => {
+    if (userIds.some((userId) => !publicUser(userId))) fail(400, "Unknown shared user");
+  };
+  const saveSharedUsers = (projectId: string, userIds: string[]) => {
+    validateSharedUsers(userIds);
+    db.query("DELETE FROM project_members WHERE projectId=?").run(projectId);
+    for (const userId of userIds)
+      db.query("INSERT INTO project_members (projectId,userId) VALUES (?,?)").run(projectId, userId);
+  };
+  const validateAttachments = (body: string, user: User) => {
+    // A guessed URL must never grant access by being pasted into a public issue.
+    for (const attachmentId of attachmentIds(body))
+      if (!canReadAttachment(db, attachmentId, user)) fail(404, "Attachment not found");
   };
   const limits = new Map<string, { count: number; expires: number }>();
   app.onError((err, c) => {
@@ -482,8 +510,8 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/projects", (c) =>
     c.json({
       projects: db
-        .query(`${projectSql} GROUP BY p.id ORDER BY p.createdAt,p.id`)
-        .all() as Project[],
+        .query(`${projectSql} WHERE ${visibleProjectSql} GROUP BY p.id ORDER BY p.createdAt,p.id`)
+        .all(...accessParams(c.get("user"))).map((row) => access.serialize(row as Project)),
     }),
   );
   app.post("/api/projects", async (c) => {
@@ -491,6 +519,8 @@ export function createApp(options: AppOptions = {}) {
       .object({
         name: text(100),
         description: z.string().max(10000).default(""),
+        visibility: z.enum(["public", "private"]).default("public"),
+        sharedUserIds: sharedUsersField.default([]),
       })
       .strict()
       .parse(await json(c));
@@ -503,18 +533,42 @@ export function createApp(options: AppOptions = {}) {
         .slice(0, 70) || "project") +
       "-" +
       randomBytes(4).toString("hex");
-    db.query(
-      "INSERT INTO projects (id,slug,name,description,createdAt) VALUES (?,?,?,?,?)",
-    ).run(id(), slug, input.name, input.description, now());
-    return c.json({ project: project(slug) });
+    db.transaction(() => {
+      const projectId = id();
+      db.query(
+        "INSERT INTO projects (id,slug,name,description,createdAt,visibility,ownerId) VALUES (?,?,?,?,?,?,?)",
+      ).run(projectId, slug, input.name, input.description, now(), input.visibility, c.get("user").id);
+      saveSharedUsers(projectId, input.sharedUserIds);
+    }).immediate();
+    return c.json({ project: project(slug, c.get("user")) });
   });
   app.get("/api/projects/:slug", (c) =>
-    c.json({ project: project(c.req.param("slug")) }),
+    c.json({ project: project(c.req.param("slug"), c.get("user")) }),
   );
+  app.patch("/api/projects/:slug/access", async (c) => {
+    const input = projectAccessFields.parse(await json(c));
+    const updated = db.transaction(() => {
+      const p = project(c.req.param("slug"), c.get("user"));
+      access.requireManage(p, c.get("user"));
+      if (input.ownerId !== undefined) {
+        if (!publicUser(input.ownerId)) fail(400, "Unknown project owner");
+        db.query("UPDATE projects SET ownerId=? WHERE id=?").run(input.ownerId, p.id);
+      }
+      if (input.visibility !== undefined)
+        db.query("UPDATE projects SET visibility=? WHERE id=?").run(input.visibility, p.id);
+      if (input.sharedUserIds !== undefined) saveSharedUsers(p.id, input.sharedUserIds);
+      // A transfer may revoke the caller's access, but still return the committed
+      // settings for this authorized operation. Subsequent reads use the new ACL.
+      const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(p.id) as Project;
+      return access.serialize(row);
+    }).immediate();
+    return c.json({ project: updated });
+  });
   app.patch("/api/projects/:slug", async (c) => {
-    const p = project(c.req.param("slug"));
+    const p = project(c.req.param("slug"), c.get("user"));
     const input = projectUpdateFields.parse(await json(c));
     db.transaction(() => {
+      access.requireRead(p.id, c.get("user"));
       if ("archived" in input) {
         // Conditional writes keep repeated archive requests idempotent.
         if (input.archived)
@@ -526,21 +580,22 @@ export function createApp(options: AppOptions = {}) {
             "UPDATE projects SET archivedAt=NULL,archivedById=NULL WHERE id=?",
           ).run(p.id);
       } else {
-        activeProject(p.slug);
+        activeProject(p.slug, c.get("user"));
         // Update only supplied fields. Slug, identity, creation history and children stay unchanged.
         if (input.name !== undefined) db.query("UPDATE projects SET name=? WHERE id=?").run(input.name, p.id);
         if (input.description !== undefined) db.query("UPDATE projects SET description=? WHERE id=?").run(input.description, p.id);
       }
     }).immediate();
-    return c.json({ project: project(p.slug) });
+    return c.json({ project: project(p.slug, c.get("user")) });
   });
   app.get("/api/projects/:slug/board", (c) =>
-    c.json({ board: board(project(c.req.param("slug")).id) }),
+    c.json({ board: board(project(c.req.param("slug"), c.get("user")).id) }),
   );
   app.patch("/api/projects/:slug/board", async (c) => {
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     const input = boardFields.parse(await json(c));
     db.transaction(() => {
+      activeProject(p.slug, c.get("user"));
       const customLanes = [...board(p.id).customLanes];
       const seenIds = new Set<string>();
       const seenLabels = new Set<string>();
@@ -571,13 +626,14 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.patch("/api/projects/:slug/board/lanes/:lane", async (c) => {
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     const lane = c.req.param("lane");
     const { index } = z
       .object({ index: z.number().int().min(0) })
       .strict()
       .parse(await json(c));
     db.transaction(() => {
+      activeProject(p.slug, c.get("user"));
       // Move within the current state so concurrent visibility changes are kept;
       // positions past the end place the lane last.
       const state = board(p.id);
@@ -597,16 +653,17 @@ export function createApp(options: AppOptions = {}) {
   const historyTransaction = <T>(c: Context<Env>, ids: string[], mutate: () => T) => ({
     immediate: () => withIssueHistory(db, c.get("user").id, ids, mutate),
   });
-  const favoriteProjects = (userId: string) => ({ projectIds: (db.query("SELECT projectId FROM favorite_projects WHERE userId=? ORDER BY projectId").all(userId) as { projectId: string }[]).map((row) => row.projectId) });
-  app.get("/api/me/favorite-projects", (c) => c.json(favoriteProjects(c.get("user").id)));
+  const favoriteProjects = (user: User) => ({ projectIds: (db.query(`SELECT f.projectId FROM favorite_projects f JOIN projects p ON p.id=f.projectId WHERE f.userId=? AND ${visibleProjectSql} ORDER BY f.projectId`)
+    .all(user.id, ...accessParams(user)) as { projectId: string }[]).map((row) => row.projectId) });
+  app.get("/api/me/favorite-projects", (c) => c.json(favoriteProjects(c.get("user"))));
   for (const method of ["put", "delete"] as const) app[method]("/api/me/favorite-projects/:projectId", (c) => {
     const projectId = c.req.param("projectId");
     const userId = c.get("user").id;
     const result = db.transaction(() => {
-      if (!db.query("SELECT id FROM projects WHERE id=?").get(projectId)) fail(404, "Project not found");
+      access.requireRead(projectId, c.get("user"));
       if (method === "put") db.query("INSERT OR IGNORE INTO favorite_projects (userId,projectId) VALUES (?,?)").run(userId, projectId);
       else db.query("DELETE FROM favorite_projects WHERE userId=? AND projectId=?").run(userId, projectId);
-      return favoriteProjects(userId);
+      return favoriteProjects(c.get("user"));
     }).immediate();
     return c.json(result);
   });
@@ -616,19 +673,18 @@ export function createApp(options: AppOptions = {}) {
     const input = z.object({ issueIds: issueIdsField, userIds: ids }).strict().parse(await json(c));
     const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");
-      const p = slug ? activeProject(slug) : null;
+      const p = slug ? activeProject(slug, c.get("user")) : null;
       const users = input.userIds.map((userId) => publicUser(userId) ?? fail(400, "Unknown mentioned user"));
       return input.issueIds.map((issueId) => {
-        const current = issue(issueId);
+        const current = activeIssue(issueId, c.get("user"));
         if (p && current.projectId !== p.id) fail(400, "Unknown project issue");
-        activeIssue(issueId);
         const body = appendIssueMentions(current.body, current.title, users);
         if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Tagged issue exceeds body length limit");
         if (body !== current.body) {
           db.query("UPDATE issues SET body=?,labels=?,updatedAt=? WHERE id=?").run(body, JSON.stringify(bodyLabels(body)), now(), issueId);
           syncIssueTaggedUsers(db, issueId);
         }
-        return issue(issueId);
+        return issue(issueId, c.get("user"));
       });
     }).immediate();
     return c.json({ issues });
@@ -642,18 +698,17 @@ export function createApp(options: AppOptions = {}) {
     }).strict().parse(await json(c));
     const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");
-      const p = slug ? activeProject(slug) : null;
+      const p = slug ? activeProject(slug, c.get("user")) : null;
       return input.issueIds.map((issueId) => {
-        const current = issue(issueId);
+        const current = activeIssue(issueId, c.get("user"));
         if (p && current.projectId !== p.id) fail(400, "Unknown project issue");
-        activeIssue(issueId);
         const body = appendIssueLabels(current.body, current.title, input.labels);
         if (body.length > ISSUE_BODY_MAX_LENGTH) fail(400, "Labeled issue exceeds body length limit");
         if (body !== current.body) {
           db.query("UPDATE issues SET body=?,labels=?,updatedAt=? WHERE id=?").run(body, JSON.stringify(bodyLabels(body)), now(), issueId);
           syncIssueTaggedUsers(db, issueId);
         }
-        return issue(issueId);
+        return issue(issueId, c.get("user"));
       });
     }).immediate();
     return c.json({ issues });
@@ -661,7 +716,7 @@ export function createApp(options: AppOptions = {}) {
   app.post("/api/projects/:slug/issues/labels", labelIssues);
   app.post("/api/issues/labels", labelIssues);
   app.post("/api/projects/:slug/board/issues", async (c) => {
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     const input = z
       .object({
         issueIds: issueIdsField,
@@ -670,6 +725,7 @@ export function createApp(options: AppOptions = {}) {
       .strict()
       .parse(await json(c));
     historyTransaction(c, input.issueIds, () => {
+      activeProject(p.slug, c.get("user"));
       requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
         if (
@@ -705,7 +761,7 @@ export function createApp(options: AppOptions = {}) {
       beforeIssueId: issueIdField.nullable(),
     }).strict().parse(await json(c));
     const result = historyTransaction(c, input.issueIds, () => {
-      const p = activeProject(c.req.param("slug"));
+      const p = activeProject(c.req.param("slug"), c.get("user"));
       requireVisibleLane(p.id, input.lane);
       const current = board(p.id).cards;
       const selected = new Set(input.issueIds);
@@ -730,13 +786,13 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: result });
   });
   app.put("/api/projects/:slug/board/issues", async (c) => {
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     const input = z.object({
       issueIds: issueIdsField,
       lane: laneField,
     }).strict().parse(await json(c));
     historyTransaction(c, input.issueIds, () => {
-      activeProject(p.slug);
+      activeProject(p.slug, c.get("user"));
       requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
         const current = db.query("SELECT closedAt FROM issues WHERE id=? AND projectId=?")
@@ -756,12 +812,13 @@ export function createApp(options: AppOptions = {}) {
   });
   app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
     issueIdField.parse(c.req.param("id"));
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     const { lane } = z
       .object({ lane: laneField })
       .strict()
       .parse(await json(c));
     historyTransaction(c, [c.req.param("id")], () => {
+      activeProject(p.slug, c.get("user"));
       if (
         !db
           .query(
@@ -779,7 +836,7 @@ export function createApp(options: AppOptions = {}) {
   });
   app.delete("/api/projects/:slug/board/issues/:id", (c) => {
     issueIdField.parse(c.req.param("id"));
-    const p = activeProject(c.req.param("slug"));
+    const p = activeProject(c.req.param("slug"), c.get("user"));
     historyTransaction(c, [c.req.param("id")], () => {
       const result = db.query("DELETE FROM board_issues WHERE projectId=? AND issueId=?").run(p.id, c.req.param("id"));
       if (!result.changes) fail(404, "Board member not found");
@@ -787,17 +844,18 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   app.get("/api/projects/:slug/issues", (c) => {
-    const p = project(c.req.param("slug"));
+    const p = project(c.req.param("slug"), c.get("user"));
     const rows = db
       .query("SELECT id FROM issues WHERE projectId=? ORDER BY number")
       .all(p.id) as { id: string }[];
-    return c.json({ issues: rows.map((r) => issue(r.id)) });
+    return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))) });
   });
   app.get("/api/issues", (c) => {
     // Return board metadata with the list so clients need no request per project.
-    const rows = db.query("SELECT id,projectId FROM issues ORDER BY createdAt,id").all() as { id: string; projectId: string | null }[];
+    const rows = db.query(`SELECT i.id,i.projectId FROM issues i WHERE ${visibleIssueSql} ORDER BY i.createdAt,i.id`)
+      .all(...accessParams(c.get("user"))) as { id: string; projectId: string | null }[];
     const projectIds = [...new Set(rows.flatMap((row) => row.projectId ? [row.projectId] : []))];
-    return c.json({ issues: rows.map((r) => issue(r.id)), boards: Object.fromEntries(projectIds.map((id) => [id, board(id)])) });
+    return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))), boards: Object.fromEntries(projectIds.map((id) => [id, board(id)])) });
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");
@@ -810,13 +868,14 @@ export function createApp(options: AppOptions = {}) {
       fail(400, "Invalid issue body");
     const time = now();
     const result = db.transaction(() => {
-      const projectId = slug ? activeProject(slug).id : input.projectId ?? null;
-      if (projectId !== null) requireActiveProjectId(projectId);
+      const projectId = slug ? activeProject(slug, c.get("user")).id : input.projectId ?? null;
+      if (projectId !== null) requireActiveProjectId(projectId, c.get("user"));
       if (input.lane != null) {
         if (projectId === null) return fail(400, "Lane requires a project");
         requireVisibleLane(projectId, input.lane);
       }
       validateMentions(body);
+      validateAttachments(body, c.get("user"));
       const inserted = db.query(
         "INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (0,?,?,?,?,?,?,?,?,?) RETURNING id",
       ).get(
@@ -833,14 +892,15 @@ export function createApp(options: AppOptions = {}) {
       const uid = String(inserted.id);
       db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
       syncIssueTaggedUsers(db, uid);
+      retainAttachmentReferences(db, uid, [body]);
       if (input.lane != null && projectId !== null) {
         db.query("INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)")
           .run(projectId, uid, input.lane, nextBoardPosition(projectId, input.lane));
         recordIssueChange(db, uid, c.get("user").id, null);
-        return { issue: issue(uid), board: board(projectId) };
+        return { issue: issue(uid, c.get("user")), board: board(projectId) };
       }
       recordIssueChange(db, uid, c.get("user").id, null);
-      return { issue: issue(uid) };
+      return { issue: issue(uid, c.get("user")) };
     }).immediate();
     return c.json(result);
   };
@@ -851,8 +911,10 @@ export function createApp(options: AppOptions = {}) {
     const numeric = query.replace(/^!/, "");
     const exactId = issueIdField.safeParse(numeric);
     const rows = exactId.success
-      ? db.query("SELECT id,title,closedAt FROM issues WHERE id=? LIMIT 20").all(exactId.data)
-      : db.query("SELECT id,title,closedAt FROM issues WHERE instr(lower(title),lower(?))>0 ORDER BY id DESC LIMIT 20").all(query);
+      ? db.query(`SELECT i.id,i.title,i.closedAt FROM issues i WHERE i.id=? AND ${visibleIssueSql} LIMIT 20`)
+        .all(exactId.data, ...accessParams(c.get("user")))
+      : db.query(`SELECT i.id,i.title,i.closedAt FROM issues i WHERE instr(lower(i.title),lower(?))>0 AND ${visibleIssueSql} ORDER BY i.id DESC LIMIT 20`)
+        .all(query, ...accessParams(c.get("user")));
     return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null }[]).map((row) => ({
       id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const,
     })) });
@@ -860,7 +922,7 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/issues/:id/history", (c) => {
     const canonical = issueIdField.safeParse(c.req.param("id"));
     if (!canonical.success) return fail(404, "Issue not found");
-    const current = issue(canonical.data);
+    const current = issue(canonical.data, c.get("user"));
     const before = c.req.query("before");
     const limit = c.req.query("limit");
     const cursor = before === undefined ? null : Number(issueIdField.parse(before));
@@ -871,7 +933,7 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/issues/:id", (c) => {
     const canonical = issueIdField.safeParse(c.req.param("id"));
     if (!canonical.success) return fail(404, "Issue not found");
-    const current = issue(canonical.data);
+    const current = issue(canonical.data, c.get("user"));
     return c.json({
       issue: current,
       comments: db.query("SELECT *,CAST(issueId AS TEXT) AS issueId FROM comments WHERE issueId=? ORDER BY createdAt,id").all(current.id) as Comment[],
@@ -880,7 +942,7 @@ export function createApp(options: AppOptions = {}) {
   app.patch("/api/issues/:id", async (c) => {
     const issueId = issueIdField.parse(c.req.param("id"));
     const raw = await json(c);
-    const current = activeIssue(issueId);
+    const current = activeIssue(issueId, c.get("user"));
     const parsed = issueUpdateFields.parse(raw);
     const input = Object.fromEntries(
       Object.entries(parsed).filter(([key]) => Object.hasOwn(raw, key)),
@@ -909,8 +971,9 @@ export function createApp(options: AppOptions = {}) {
       updatedAt: now(),
     };
     historyTransaction(c, [current.id], () => {
-      activeIssue(current.id);
-      if (input.projectId != null) requireActiveProjectId(input.projectId);
+      activeIssue(current.id, c.get("user"));
+      if (input.projectId != null) requireActiveProjectId(input.projectId, c.get("user"));
+      if (body !== current.body) validateAttachments(body, c.get("user"));
       if (input.projectId !== undefined && input.projectId !== current.projectId) {
         db.query("DELETE FROM board_issues WHERE issueId=?").run(current.id);
         db.query("UPDATE issues SET projectId=? WHERE id=?").run(input.projectId, current.id);
@@ -937,11 +1000,12 @@ export function createApp(options: AppOptions = {}) {
         ).run(current.id);
       if (body !== current.body)
         syncIssueTaggedUsers(db, current.id);
+      retainAttachmentReferences(db, current.id, [current.body, body]);
     }).immediate();
-    return c.json({ issue: issue(current.id) });
+    return c.json({ issue: issue(current.id, c.get("user")) });
   });
   app.post("/api/issues/:id/comments", async (c) => {
-    const i = activeIssue(issueIdField.parse(c.req.param("id")));
+    const i = activeIssue(issueIdField.parse(c.req.param("id")), c.get("user"));
     const { body } = z
       .object({ body: text(100000) })
       .strict()
@@ -949,19 +1013,21 @@ export function createApp(options: AppOptions = {}) {
     const uid = id(),
       time = now();
     db.transaction(() => {
-      activeIssue(i.id);
+      activeIssue(i.id, c.get("user"));
       validateMentions(body);
+      validateAttachments(body, c.get("user"));
       db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)").run(
         uid, i.id, c.get("user").id, body, time, time,
       );
       syncIssueTaggedUsers(db, i.id);
+      retainAttachmentReferences(db, i.id, [body]);
       recordHistory(db, i.id, c.get("user").id, "commented", [{ field: "comment", before: null, after: body }]);
     }).immediate();
     return c.json({
       comment: db
         .query("SELECT * FROM comments WHERE id=?")
         .get(uid) as Comment,
-      issue: issue(i.id),
+      issue: issue(i.id, c.get("user")),
     });
   });
   const ownedComment = (c: any) => {
@@ -969,21 +1035,24 @@ export function createApp(options: AppOptions = {}) {
       .query("SELECT * FROM comments WHERE id=?")
       .get(c.req.param("id")) as Comment | null;
     if (!row) return fail(404, "Comment not found");
+    issue(row.issueId, c.get("user"));
     if (row.authorId !== c.get("user").id && c.get("user").role !== "admin")
       fail(403, "Not permitted");
     return row;
   };
   app.patch("/api/comments/:id", async (c) => {
     const row = ownedComment(c);
-    activeIssue(row.issueId);
+    activeIssue(row.issueId, c.get("user"));
     const { body } = z
       .object({ body: text(100000) })
       .strict()
       .parse(await json(c));
     db.transaction(() => {
-      activeIssue(row.issueId);
+      activeIssue(row.issueId, c.get("user"));
       validateMentions(body);
+      validateAttachments(body, c.get("user"));
       const previous = ownedComment(c);
+      retainAttachmentReferences(db, row.issueId, [previous.body, body]);
       db.query("UPDATE comments SET body=?,updatedAt=? WHERE id=?").run(body, now(), row.id);
       if (previous.body !== body) recordHistory(db, row.issueId, c.get("user").id, "comment_edited", [{ field: "comment", before: previous.body, after: body }]);
       syncIssueTaggedUsers(db, row.issueId);
@@ -992,20 +1061,21 @@ export function createApp(options: AppOptions = {}) {
       comment: db
         .query("SELECT * FROM comments WHERE id=?")
         .get(row.id) as Comment,
-      issue: issue(row.issueId),
+      issue: issue(row.issueId, c.get("user")),
     });
   });
   app.delete("/api/comments/:id", (c) => {
     const row = ownedComment(c);
-    activeIssue(row.issueId);
+    activeIssue(row.issueId, c.get("user"));
     db.transaction(() => {
-      activeIssue(row.issueId);
+      activeIssue(row.issueId, c.get("user"));
       const previous = ownedComment(c);
+      retainAttachmentReferences(db, row.issueId, [previous.body]);
       db.query("DELETE FROM comments WHERE id=?").run(row.id);
       recordHistory(db, row.issueId, c.get("user").id, "comment_deleted", [{ field: "comment", before: previous.body, after: null }]);
       syncIssueTaggedUsers(db, row.issueId);
     }).immediate();
-    return c.json({ ok: true, issue: issue(row.issueId) });
+    return c.json({ ok: true, issue: issue(row.issueId, c.get("user")) });
   });
   app.post("/api/uploads", async (c) => {
     let form: FormData;
@@ -1025,11 +1095,12 @@ export function createApp(options: AppOptions = {}) {
     const path = resolve(uploads, uid);
     try {
       await Bun.write(path, bytes);
-      db.query("INSERT INTO attachments VALUES (?,?,?,?)").run(
+      db.query("INSERT INTO attachments (id,name,mime,size,uploaderId) VALUES (?,?,?,?,?)").run(
         uid,
         name,
         mime,
         file.size,
+        c.get("user").id,
       );
     } catch (e) {
       await unlink(path).catch(() => {});
@@ -1054,7 +1125,7 @@ export function createApp(options: AppOptions = {}) {
       mime: string;
       size: number;
     } | null;
-    if (!row || row.name !== c.req.param("name"))
+    if (!row || row.name !== c.req.param("name") || !canReadAttachment(db, row.id, c.get("user")))
       return fail(404, "Attachment not found");
     const file = Bun.file(resolve(uploads, row.id));
     if (!(await file.exists())) return fail(404, "Attachment not found");
