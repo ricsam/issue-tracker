@@ -1,6 +1,16 @@
-.board-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; border: 1px solid var(--border, #e9e3f0); border-radius: 8px; margin: 0 0 16px; padding: 12px; min-width: 0; }
-.board-filters legend { font-size: 13px; padding: 0 5px; }
-.board-filters label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; min-width: 120px; max-width: 100%; }
-.board-filters select { max-width: 100%; min-height: 34px; padding: 5px 8px; border: 1px solid var(--border, #e9e3f0); border-radius: 5px; background: var(--surface, white); color: inherit; }
-.board-filters select[multiple] { height: 64px; }
-.board-filter-help { flex-basis: 100%; font-size: 12px; }
+.board-filters { border: 1px solid var(--border, #e9e3f0); border-radius: 8px; margin: 0 0 16px; padding: 6px; min-width: 0; }
+.board-filters-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.board-filter-badge { border-radius: 999px; background: #ede8ff; color: #5941a9; padding: 2px 7px; font-size: 11px; }
+.board-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; padding: 10px; }
+.board-filter-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; }
+.board-filter-field > .btn { justify-content: space-between; width: 100%; }
+.board-filter-field > .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-filter-help { font-size: 12px; margin: 2px 10px 8px; }
+.board-filter-dialog { z-index: 80; width: 300px; max-width: calc(100vw - 24px); border: 1px solid var(--border, #e9e3f0); border-radius: 8px; background: white; color: #302b40; padding: 12px; box-shadow: 0 8px 28px #302b4026; }
+.board-filter-search { width: 100%; margin: 12px 0; padding: 9px 12px; border: 1px solid var(--border, #e9e3f0); border-radius: 6px; }
+.board-filter-options { max-height: min(350px, 45dvh); overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.board-filter-option { display: flex; align-items: center; gap: 9px; padding: 9px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.board-filter-option:hover, .board-filter-option:focus-within { background: #f2effa; }
+.board-filter-option input { accent-color: #7050d9; flex: none; }
+.board-filter-option span { flex: 1; overflow-wrap: anywhere; }
+.board-filter-dialog-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }

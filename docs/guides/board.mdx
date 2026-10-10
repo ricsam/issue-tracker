@@ -13,7 +13,7 @@ The board contains work explicitly placed in a project's lanes, during creation 
 
 The **Add issues** dialog's **Select all matching issues** header checkbox replaces separate select-all/clear buttons. It selects or deselects the current search matches while preserving selections outside the search. It is checked when all matches are selected and indeterminate when only some are selected. Shift-click an issue checkbox to select a range in the matching list.
 
-**Create issue** captures Markdown content, including tags. Its **Board lane** defaults to **Not on board**; choose a visible built-in or custom lane to create the issue and append it to that lane in one operation. The dialog keeps the project and lane for the next issue, but switching project resets the lane. Unlinked issues cannot have a lane. **Add issues** offers only existing open issues; reopen a closed off-board issue before adding it.
+**Create issue** captures Markdown content, including tags. Its **Board lane** defaults to **Not on board**; choose a visible built-in or custom lane to create the issue and append it to that lane in one operation. The dialog remembers your lane choice per project and your global project choice across visits in this browser. Switching project restores that project's remembered lane, or **Not on board** if unavailable. Unlinked issues cannot have a lane. **Add issues** offers only existing open issues; reopen a closed off-board issue before adding it.
 
 Use the card's kebab menu beside its drag handle to remove only its board placement. The issue, comments, and attachments remain available in **List** and can be added back later.
 
@@ -31,6 +31,8 @@ Select **Save board** to apply your changes, or **Cancel** to discard them. Keep
 <Note>
   Removing a lane hides it without deleting its issues or placements. Add it back to see those cards again. The board summary shows how many cards are in hidden lanes.
 </Note>
+
+For a personal alternative to shared hiding, use the collapse button in a lane heading. Collapsed lanes keep their heading, count, and drop target, but their cards leave selection and keyboard navigation until expanded. Collapse preferences are saved per account and board in this browser, including on archived boards; they do not change team visibility or card membership.
 
 Wide boards scroll horizontally on desktop rather than squeezing the cards. Lane drop areas share the same height, including empty lanes, so the space below cards remains a consistent drag target.
 
@@ -75,6 +77,8 @@ The panel narrows automatically on smaller desktop screens while retaining your 
 
 **Search issues** combines with filters for **State**, **Lane**, **Tags**, **Tagged users**, and **Creator**. The board defaults to **All states**, including both open and closed cards; this differs from the issue list's default Open view. Choose Open or Closed when needed. Filters narrow the displayed cards without changing saved membership, lane visibility, or order; hidden lanes cannot be made visible by filtering.
 
-Clear the filters and search to see all cards in visible lanes. If work is missing, check **Manage lanes** for hidden lanes, **Add issues** for unplaced work, or open **List** to see every open or closed project issue. Project-wide board totals include closed cards and hidden lanes and do not shrink with search or filters.
+The searchable filter pickers use checkboxes for multiple tags or tagged users; no Ctrl/Cmd selection is needed. Select **Filter board** to collapse the section. A badge shows active filters, including search, even while collapsed. Selections, search, and expansion are remembered per board and account in this browser. Project List and Board views share the search when switching views. **Clear filters** resets filters and search without expanding the section or changing collapsed lanes.
+
+Clear the filters and search, and expand collapsed lanes, to see all cards in visible lanes. If work is missing, check **Manage lanes** for hidden lanes, **Add issues** for unplaced work, or open **List** to see every open or closed project issue. Project-wide board totals include closed cards and hidden lanes and do not shrink with search or filters.
 
 All authenticated workspace members can collaborate on boards. For issue content and discussion, see [issues](/guides/issues).

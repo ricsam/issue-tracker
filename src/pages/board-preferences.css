@@ -1,0 +1,14 @@
+.board { grid-template-columns: var(--board-template); }
+.board-lane-collapse.btn { padding: 3px; width: 24px; height: 24px; flex: none; }
+.board-column.is-collapsed .board-lane-heading { flex-wrap: wrap; gap: 7px; }
+.board-column.is-collapsed .board-lane-select { display: none; }
+.board-column.is-collapsed h2 { flex-basis: 100%; }
+.board-column.is-collapsed .lane-name { overflow-wrap: anywhere; }
+.board-column.is-collapsed .board-lane-collapse { margin-left: auto; }
+.board-lane-cards[hidden] { display: none; }
+@media (max-width: 440px) {
+  .board { grid-template-columns: 1fr; }
+  .board-column.is-collapsed { min-height: 0; }
+  .board-column.is-collapsed .board-lane-heading { flex-wrap: nowrap; }
+  .board-column.is-collapsed h2 { flex-basis: auto; }
+}

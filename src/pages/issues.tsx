@@ -17,6 +17,8 @@ import {
 } from "react-router-dom";
 import {
   CircleCheck,
+  ChevronDown,
+  ChevronRight,
   CircleDot,
   Columns3,
   List,
@@ -64,7 +66,9 @@ import { boardLaneOptions, issueBoardLanes } from "../lib/issue-board-lanes";
 import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
 import { boardArrowTarget, boardSelectionRange, type BoardArrow } from "../lib/board-selection";
 import { BoardFilters, emptyBoardFilters, matchesBoardFilters } from "../components/board-filters";
+import { useBoardPreferences } from "../components/board-preferences";
 import "./board-order.css";
+import "./board-preferences.css";
 
 function isPlainClick(event: MouseEvent<HTMLAnchorElement>) {
   return (
@@ -92,13 +96,15 @@ export function IssuesPage() {
 }
 
 function ProjectIssues({ slug }: { slug: string }) {
-  const { refresh, users, projects } = useWorkspace();
+  const { refresh, user, users, projects } = useWorkspace();
   const all = !slug;
   const listPath = all ? "/issues" : `/projects/${slug}`;
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
   const showClosed = useSearchParams()[0].get("state") === "closed";
   const desktop = useDesktopIssues();
+  const currentDesktop = useRef(desktop);
+  currentDesktop.current = desktop;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const pending = useRef(false);
   const focusDetails = useRef(true);
@@ -124,7 +130,9 @@ function ProjectIssues({ slug }: { slug: string }) {
       if (focusDetails.current) detailSidebar.current?.focus({ preventScroll: true });
     } else if (opener.current) {
       const currentLink = openerId.current ? collection.current?.querySelector<HTMLAnchorElement>(`a[data-issue-id="${CSS.escape(openerId.current)}"]`) : null;
-      const target = currentLink || (opener.current.isConnected ? opener.current : collection.current);
+      const visibleLink = currentLink && !currentLink.closest("[hidden]") ? currentLink : null;
+      const expandLane = currentLink?.closest(".board-column.is-collapsed")?.querySelector<HTMLButtonElement>(".board-lane-collapse");
+      const target = visibleLink || expandLane || (opener.current.isConnected && !opener.current.closest("[hidden]") ? opener.current : collection.current);
       target?.focus({ preventScroll: true });
       opener.current = null;
     }
@@ -190,11 +198,16 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [boardFilters, setBoardFilters] = useState(emptyBoardFilters);
+  const [listQuery, setListQuery] = useState("");
+  const [boardPreferences, updateBoardPreferences] = useBoardPreferences(user.id, project?.id);
+  const { filters: boardFilters, collapsedLanes } = boardPreferences;
+  // Project List and Board have always shared their search when switching views.
+  const query = all ? listQuery : boardPreferences.search;
+  const setQuery = (search: string) => all ? setListQuery(search) : updateBoardPreferences({ search });
+  const setBoardFilters = (filters: typeof boardFilters) => updateBoardPreferences({ filters });
   const visibleBoardCards = boardSettings.cards.filter((card) => {
     const issue = issues.find((item) => item.id === card.issueId);
-    return issue && boardSettings.lanes.includes(card.lane)
+    return issue && boardSettings.lanes.includes(card.lane) && !collapsedLanes.includes(card.lane)
       && matchesBoardFilters(issue, card.lane, boardFilters)
       && `${issue.title} ${issue.number} ${issue.labels.join(" ")} ${users.filter((user) => issue.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`.toLowerCase().includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase());
   });
@@ -507,7 +520,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
   const filtered = board ? searched.filter((issue) => matchesBoardFilters(issue, placements.get(issue.id), boardFilters)) : issueTableRows(searched, users, tableState, projects, listBoardLanes);
-  const boardColumns = lanes.map((lane) => filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
+  const boardColumns = lanes.map((lane) => collapsedLanes.includes(lane.value) ? [] : filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const boardOrder = boardColumns.flat();
   const boardOrderKey = JSON.stringify([query, boardFilters, boardSettings.lanes, boardColumns]);
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
@@ -754,9 +767,10 @@ function ProjectIssues({ slug }: { slug: string }) {
           <span className="muted results-count">{filtered.length} issues</span>
         </div>
         {board && <BoardFilters value={boardFilters} onChange={setBoardFilters}
-          onClear={() => { setBoardFilters(emptyBoardFilters); setQuery(""); }}
+          onClear={() => updateBoardPreferences({ filters: emptyBoardFilters, search: "" })}
           lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving}
-          active={!!query || JSON.stringify(boardFilters) !== JSON.stringify(emptyBoardFilters)} />}
+          search={query} expanded={boardPreferences.filtersExpanded}
+          onExpandedChange={(filtersExpanded) => updateBoardPreferences({ filtersExpanded })} />}
         <ErrorNotice error={error} />
         {board ? (
           <>
@@ -799,9 +813,11 @@ function ProjectIssues({ slug }: { slug: string }) {
               className="board"
               onKeyDown={boardKeyboardNavigate}
               aria-describedby="board-keyboard-help"
-              style={{ "--board-lanes": lanes.length } as CSSProperties}
+              style={{ "--board-lanes": lanes.length, "--board-template": lanes.map((lane) => collapsedLanes.includes(lane.value) ? "150px" : "minmax(240px, 1fr)").join(" ") } as CSSProperties}
             >
               {lanes.map((s, index) => {
+                const collapsed = collapsedLanes.includes(s.value);
+                const contentId = `board-lane-${s.value}`;
                 const drop =
                   laneDrag?.target === s.value && dragFrom >= 0 && dragFrom !== index
                     ? index < dragFrom
@@ -813,7 +829,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 );
                 return (
                   <section
-                    className={`board-column${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}${cardDrop?.lane === s.value && cardDrop.targetId === null ? " card-drop-end" : ""}`}
+                    className={`board-column${collapsed ? " is-collapsed" : ""}${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}${cardDrop?.lane === s.value && cardDrop.targetId === null ? " card-drop-end" : ""}`}
                     key={s.value}
                     onDragOver={(e) => {
                       if (saving || readOnly || (!laneDrag && !cardDrag.current.length)) return;
@@ -861,7 +877,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                       aria-label={`Select all visible issues in ${s.label}`}
                       checked={cards.length > 0 && cards.every((issue) => selectedBoard.includes(issue.id))}
                       ref={(element) => { if (element) element.indeterminate = cards.some((issue) => selectedBoard.includes(issue.id)) && !cards.every((issue) => selectedBoard.includes(issue.id)); }}
-                      disabled={!!saving || readOnly || !cards.length}
+                      disabled={!!saving || readOnly || collapsed || !cards.length}
                       onChange={(event) => selectLane(cards.map((issue) => issue.id), event.target.checked)}
                     /></Tooltip>
                     <Tooltip content={canReorderLanes ? "Drag to reorder lanes" : undefined}><h2
@@ -889,11 +905,18 @@ function ProjectIssues({ slug }: { slug: string }) {
                       <span className="lane-name">{s.label}</span>
                       <span className="count">{cards.length}</span>
                     </h2></Tooltip>
+                    <Button variant="ghost" className="board-lane-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ${s.label} lane`}
+                      aria-expanded={!collapsed} aria-controls={contentId} disabled={!!saving || !!laneDrag}
+                      title={collapsed ? "Expand lane (only for you)" : "Collapse lane (only for you)"}
+                      onClick={() => updateBoardPreferences({ collapsedLanes: collapsed ? collapsedLanes.filter((lane) => lane !== s.value) : [...collapsedLanes, s.value] })}>
+                      {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                    </Button>
                     </div>
-                    {cards.map(issueCard)}
-                    {!cards.length && (
-                      <p className="column-empty">No issues here yet</p>
-                    )}
+                    <div id={contentId} hidden={collapsed} className="board-lane-cards">
+                      {cards.map(issueCard)}
+                      {!cards.length && <p className="column-empty">No issues here yet</p>}
+                    </div>
+                    {collapsed && <p className="column-empty">{cards.length} matching issue{cards.length === 1 ? "" : "s"} · collapsed</p>}
                   </section>
                 );
               })}
@@ -901,6 +924,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           </>
         ) : (
           <IssueTable
+            preferenceScope={project ? `project:${project.id}` : "all"}
             issues={filtered}
             allIssues={listIssues}
             users={users}
@@ -1018,8 +1042,8 @@ function ProjectIssues({ slug }: { slug: string }) {
           onBoardChanged={listBoardChanged}
           onClose={() => setOpen(false)}
           canViewIssue={canLeaveDetails}
-          onViewIssue={desktop ? (issue, source) => {
-            if (!all && issue.projectId !== project?.id) {
+          onViewIssue={(issue, source) => {
+            if (!currentDesktop.current || !all && issue.projectId !== project?.id) {
               setOpen(false);
               navigate(`/issues/${issue.id}`);
               return;
@@ -1030,7 +1054,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             openerId.current = issue.id;
             setOpen(false);
             setSelectedId(issue.id);
-          } : undefined}
+          }}
         />
       )}
     </div>

@@ -173,6 +173,9 @@ function IssueDetailForm({
     return () => setBreadcrumb(null);
   }, [embedded, persisted, setBreadcrumb]);
   const pending = dirty || !!comment.trim() || busy || posting || changingState || moveBusy;
+  // The post-creation toast can outlive its dialog; always guard the latest draft.
+  const currentPending = useRef(pending);
+  currentPending.current = pending;
   useEffect(() => {
     onPendingChange?.(pending);
     return () => onPendingChange?.(false);
@@ -279,7 +282,7 @@ function IssueDetailForm({
       <ErrorNotice error={error} />
       <form ref={form} onSubmit={save} className="detail-form">
         <fieldset
-          disabled={busy || changingState || archived}
+          disabled={busy || changingState}
           inert={busy || changingState}
           className={archived ? "is-read-only" : undefined}
         >
@@ -328,9 +331,15 @@ function IssueDetailForm({
           </div>
           <div className="issue-detail-body">
               {archived ? (
-                <article className="issue-read-only" aria-label="Issue">
-                  <Markdown mentionUsers={users}>{issue.body}</Markdown>
-                </article>
+                <div className="rich-editor">
+                  <div className="editor-topbar">
+                    <span className="muted">Preview</span>
+                    <CopyIssueBody body={issue.body} iconOnly />
+                  </div>
+                  <article className="issue-read-only" aria-label="Issue">
+                    <Markdown mentionUsers={users}>{issue.body}</Markdown>
+                  </article>
+                </div>
               ) : (
                 <RichEditor
                   value={issue.body}
@@ -339,6 +348,7 @@ function IssueDetailForm({
                   existingTags={tags}
                   ariaLabel="Issue"
                   initialMode="preview"
+                  toolbarActions={<CopyIssueBody body={issue.body} iconOnly />}
                   previewEditOnDoubleClick
                   placeholder="What needs to happen? Just start writing…"
                 />
@@ -346,7 +356,6 @@ function IssueDetailForm({
           </div>
         </fieldset>
       </form>
-      <CopyIssueBody body={issue.body} />
       <section className="comments">
         {comments.length > 0 && <h2>
           <MessageSquare size={18} /> Discussion{" "}
@@ -403,7 +412,7 @@ function IssueDetailForm({
       {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags} onBoardChanged={onBoardChanged}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}
-        canViewIssue={() => !pending || window.confirm("Discard unsaved issue changes or comment?")} />}
+        canViewIssue={() => !currentPending.current || window.confirm("Discard unsaved issue changes or comment?")} />}
     </div>
   );
 }

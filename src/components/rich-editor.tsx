@@ -116,6 +116,7 @@ function EditorContents({
   existingTags,
   initialMode,
   previewEditOnDoubleClick,
+  toolbarActions,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -127,6 +128,7 @@ function EditorContents({
   existingTags: string[];
   initialMode: Mode;
   previewEditOnDoubleClick: boolean;
+  toolbarActions?: ReactNode;
 }) {
   const [editor] = useLexicalComposerContext();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -284,6 +286,8 @@ function EditorContents({
             </button>
           ))}
         </div>
+        <div className="editor-topbar-actions">
+        {toolbarActions}
         <Tool
           label="Attach files"
           onClick={() => fileInput.current?.click()}
@@ -295,6 +299,7 @@ function EditorContents({
             <Paperclip size={16} />
           )}
         </Tool>
+        </div>
         <input
           ref={fileInput}
           className="sr-only"
@@ -459,6 +464,7 @@ export function RichEditor({
   existingTags = [],
   initialMode = "write",
   previewEditOnDoubleClick = false,
+  toolbarActions,
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -470,6 +476,7 @@ export function RichEditor({
   existingTags?: string[];
   initialMode?: Mode;
   previewEditOnDoubleClick?: boolean;
+  toolbarActions?: ReactNode;
 }) {
   return (
     <LexicalComposer
@@ -526,6 +533,7 @@ export function RichEditor({
         existingTags={existingTags}
         initialMode={initialMode}
         previewEditOnDoubleClick={previewEditOnDoubleClick}
+        toolbarActions={toolbarActions}
       />
     </LexicalComposer>
   );

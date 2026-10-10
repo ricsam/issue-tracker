@@ -1,5 +1,9 @@
+import { useId } from "react";
+import * as Collapsible from "@radix-ui/react-collapsible";
+import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import type { BoardLane, Issue, User } from "../../shared/types";
 import { Button } from "./ui/primitives";
+import { BoardFilterPicker } from "./board-filter-picker";
 import "./board-filters.css";
 
 export interface BoardFilterState {
@@ -10,7 +14,6 @@ export interface BoardFilterState {
   creator: string;
 }
 export const emptyBoardFilters: BoardFilterState = { state: "all", lane: "", tags: [], users: [], creator: "" };
-
 export function matchesBoardFilters(issue: Issue, lane: string | undefined, filters: BoardFilterState) {
   return (filters.state === "all" || issue.state === filters.state)
     && (!filters.lane || lane === filters.lane)
@@ -18,35 +21,38 @@ export function matchesBoardFilters(issue: Issue, lane: string | undefined, filt
     && filters.users.every((id) => issue.taggedUserIds.includes(id))
     && (!filters.creator || issue.authorId === filters.creator);
 }
-
-export function BoardFilters({ value, onChange, onClear, lanes, tags, users, active, disabled }: {
+export function BoardFilters({ value, onChange, onClear, lanes, tags, users, search, expanded, onExpandedChange, disabled }: {
   value: BoardFilterState;
   onChange: (value: BoardFilterState) => void;
   onClear: () => void;
   lanes: BoardLane[];
   tags: string[];
   users: User[];
-  active: boolean;
+  search: string;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   disabled: boolean;
 }) {
-  return <fieldset className="board-filters" disabled={disabled}>
-    <legend>Filter board</legend>
-    <label>State<select aria-label="Filter board state" value={value.state} onChange={(event) => onChange({ ...value, state: event.target.value as BoardFilterState["state"] })}>
-      <option value="all">All states</option><option value="open">Open</option><option value="closed">Closed</option>
-    </select></label>
-    <label>Lane<select aria-label="Filter board lane" value={value.lane} onChange={(event) => onChange({ ...value, lane: event.target.value })}>
-      <option value="">All lanes</option>{lanes.map((lane) => <option key={lane.value} value={lane.value}>{lane.label}</option>)}
-    </select></label>
-    <label>Tags<select multiple aria-label="Filter board tags" value={value.tags} onChange={(event) => onChange({ ...value, tags: Array.from(event.target.selectedOptions, (option) => option.value) })}>
-      {tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-    </select></label>
-    <label>Tagged users<select multiple aria-label="Filter board tagged users" value={value.users} onChange={(event) => onChange({ ...value, users: Array.from(event.target.selectedOptions, (option) => option.value) })}>
-      {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-    </select></label>
-    <label>Creator<select aria-label="Filter board creator" value={value.creator} onChange={(event) => onChange({ ...value, creator: event.target.value })}>
-      <option value="">All creators</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-    </select></label>
-    <Button variant="ghost" disabled={!active || disabled} onClick={onClear}>Clear filters</Button>
-    <span className="muted board-filter-help">All selected filters must match. Use Ctrl or Cmd to select multiple tags or users.</span>
-  </fieldset>;
+  const id = useId();
+  const count = Number(value.state !== "all") + Number(!!value.lane) + value.tags.length + value.users.length + Number(!!value.creator) + Number(!!search.trim());
+  const people = users.map((user) => ({ value: user.id, label: user.name }));
+  return <Collapsible.Root asChild open={expanded} onOpenChange={onExpandedChange}><section className="board-filters" aria-label="Board filters">
+    <div className="board-filters-heading">
+      <Collapsible.Trigger asChild><Button variant="ghost" aria-controls={id}>
+        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<SlidersHorizontal size={15} /> Filter board
+        {count > 0 && <span className="board-filter-badge">{count} active{search.trim() ? " · search" : ""}</span>}
+      </Button></Collapsible.Trigger>
+      <Button variant="ghost" disabled={!count || disabled} onClick={onClear}>Clear filters</Button>
+    </div>
+    <Collapsible.Content id={id}>
+      <div className="board-filter-fields">
+        <BoardFilterPicker label="State" options={[{ value: "all", label: "All states" }, { value: "open", label: "Open" }, { value: "closed", label: "Closed" }]} value={[value.state]} onChange={(items) => onChange({ ...value, state: (items[0] ?? "all") as BoardFilterState["state"] })} disabled={disabled} />
+        <BoardFilterPicker label="Lane" options={lanes.map((lane) => ({ value: lane.value, label: lane.label }))} value={value.lane ? [value.lane] : []} onChange={(items) => onChange({ ...value, lane: items[0] ?? "" })} disabled={disabled} />
+        <BoardFilterPicker label="Tags" options={tags.map((tag) => ({ value: tag, label: tag }))} value={value.tags} onChange={(items) => onChange({ ...value, tags: items })} multiple disabled={disabled} />
+        <BoardFilterPicker label="Tagged users" options={people} value={value.users} onChange={(items) => onChange({ ...value, users: items })} multiple disabled={disabled} />
+        <BoardFilterPicker label="Creator" options={people} value={value.creator ? [value.creator] : []} onChange={(items) => onChange({ ...value, creator: items[0] ?? "" })} disabled={disabled} />
+      </div>
+      <p className="muted board-filter-help">All selected filters must match. Filters and collapsed lanes are saved for you on this device.</p>
+    </Collapsible.Content>
+  </section></Collapsible.Root>;
 }

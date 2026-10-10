@@ -11,13 +11,13 @@ All authenticated users can read and update issues across the workspace. Issues 
 ## Create an issue
 
 1. Select **Create issue** in the sidebar or press **Alt+N**. You can also create from a project's **List** or **Board**.
-2. Choose an active **Project** or **No project**. On project pages the current project is preselected; elsewhere creation defaults to no project.
-3. Leave **Board lane** at **Not on board**, or choose a visible lane in the selected project, including custom lanes. Changing project resets this choice; **No project** has no board.
+2. Choose an active **Project** or **No project**. On project pages the current project is preselected; elsewhere your last global project choice is restored, or **No project** if it is unavailable.
+3. Leave **Board lane** at **Not on board**, or choose a visible lane in the selected project, including custom lanes. Your last lane choice is remembered separately for each project. Hidden or unavailable lanes fall back to **Not on board**; **No project** has no board. These preferences are personal to your account in this browser and survive closing the dialog and reloading.
 4. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
 5. Optionally add tags such as `#bug` or `#needs-review` to the body.
-6. Select **Create issue** to save. The dialog clears and refocuses for another issue, keeping the selected project and lane; select **View issue** in the confirmation to open it, or **Done** to close the dialog.
+6. Select **Create issue** to save. The dialog clears and refocuses for another issue, keeping the selected project and lane; select **View issue** in the temporary snackbar to open it, or **Done** to close the dialog. The snackbar has no copy button, pauses while hovered or focused, and remains available briefly after **Done**.
 
-New issues are open. **Not on board** is the default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
+New issues are open. **Not on board** is the initial default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
 Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Moving an issue between projects keeps its number and URL; unlinked issues cannot join project boards.
 
@@ -54,6 +54,7 @@ Open an issue by selecting its title in the list or its card body on the board. 
 The issue body opens in **Preview**, both on the full page and in the desktop side panel. Select **Write** or **Markdown** to edit it, then select **Save changes**, or press Cmd+S on macOS / Ctrl+S elsewhere while focused on the issue. New issues and comment editors still start in **Write** mode.
 Edit the heading or first text line in the body to change the derived display title. **Save changes** is disabled when the body has no unsaved changes. **Discard changes** restores the last saved issue body only: it leaves new-comment drafts and comment edits alone, and does not undo saved state or project changes.
 Wait for the **Changes saved** toast before leaving the page. Action results use shared toast notifications without shifting the editor; validation and retry controls remain beside the relevant form.
+The **Copy issue body** icon at the right of the editor toolbar copies the current Markdown, including unsaved body edits but excluding comments. It is available in every editor mode and on archived issues, and never saves the issue.
 Edits on the detail page are not automatically saved.
 When switching issues in the desktop side panel, the previous issue remains visible but non-interactive while the new one loads. A failed load shows an error and **Retry** without replacing the previous content.
 
@@ -87,7 +88,7 @@ Choose **Columns** above the table to show or hide columns and move them up or d
 
 On mobile, swipe sideways across the table to reach more columns, and vertically to reach more rows. Tap an issue's title to open it; the **Board** toggle opens the project board.
 
-The list shows 25 rows per page by default. Use **Rows per page** to choose 10, 25, 50, or 100, and **Previous**/**Next** to navigate. Changing search, filters, sort, or issue state returns to the first page.
+The list shows 25 rows per page by default. Use **Rows per page** to choose 10, 25, 50, or 100, and **Previous**/**Next** to navigate. Your choice is remembered per account in this browser, separately for each project list and **All issues**. Open and Closed views share that list's page size. Changing page size, search, filters, sort, or issue state returns to the first page.
 
 Use Up/Down to open adjacent issues, including across page boundaries. Shift+Up/Down or Shift-click selects a range in the current filtered and sorted order.
 

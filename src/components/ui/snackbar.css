@@ -8,6 +8,17 @@
   pointer-events: none;
 }
 .snackbar[data-open="true"] { pointer-events: auto; }
+/* Keep toast actions in the modal focus trap without shifting the editor.
+   The zero-height anchor sits immediately above the variable-height footer. */
+.dialog-snackbar { position: relative; height: 0; flex-shrink: 0; align-self: flex-end; width: min(380px, 100%); z-index: 2; }
+.dialog-snackbar .notification { position: absolute; bottom: 8px; right: 0; width: 100%; padding: 10px 12px; }
+.dialog-snackbar .notification-content > :not(:first-child) { margin-top: 4px; }
+@media (max-width: 760px) {
+  /* Small dialogs have little editor space. Float below the title instead of
+     covering the next draft's caret and formatting toolbar. */
+  .dialog-snackbar { position: absolute; top: 80px; right: 23px; width: calc(100% - 46px); }
+  .dialog-snackbar .notification { bottom: auto; top: 0; }
+}
 .notification {
   display: flex;
   align-items: flex-start;

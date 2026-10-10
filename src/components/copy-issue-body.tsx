@@ -5,7 +5,7 @@ import { Notification, useNotification } from "./ui/snackbar";
 import "./copy-issue-body.css";
 
 /** Copy exactly the displayed Markdown draft, without saving or adding comments. */
-export function CopyIssueBody({ body }: { body: string }) {
+export function CopyIssueBody({ body, iconOnly = false }: { body: string; iconOnly?: boolean }) {
   const [status, setStatus] = useState<"idle" | "copying" | "copied" | "error">("idle");
   const generation = useRef(0);
   const root = useRef<HTMLDivElement>(null);
@@ -39,10 +39,10 @@ export function CopyIssueBody({ body }: { body: string }) {
     }
   }
   return <div ref={root} className="copy-issue-body">
-    <Button type="button" variant="secondary" onClick={() => void copy()} disabled={status === "copying"}
+    <Button type="button" variant={iconOnly ? "ghost" : "secondary"} className={iconOnly ? "copy-issue-icon" : undefined} onClick={() => void copy()} disabled={status === "copying"}
       aria-label="Copy issue body" title="Copy issue Markdown without saving">
       {status === "copied" ? <Check size={15} /> : <Copy size={15} />}
-      {status === "copied" ? "Copied!" : status === "copying" ? "Copying…" : "Copy body"}
+      <span className={iconOnly ? "sr-only" : undefined}>{status === "copied" ? "Copied!" : status === "copying" ? "Copying…" : "Copy body"}</span>
     </Button>
     {inlineNotice && <Notification message={inlineNotice.message} variant={inlineNotice.variant} onDismiss={() => setInlineNotice(null)} />}
   </div>;

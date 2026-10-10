@@ -57,6 +57,8 @@ async function expectReset(page: Page) {
   await expect(modal(page).getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(modal(page).getByLabel("Markdown source")).toHaveCount(0);
   await expect(modal(page).getByRole("button", { name: "Done", exact: true })).toBeVisible();
+  await expect(modal(page).locator(".create-issue-footer").getByRole("link", { name: "View issue" })).toHaveCount(0);
+  await expect(modal(page).getByRole("button", { name: /Copy/ })).toHaveCount(0);
 }
 
 test("repeat creation resets preview, Markdown and undo history, then Done reveals the refreshed list", async ({ page, baseURL }) => {
@@ -199,6 +201,40 @@ test("View issue protects an existing sidebar draft before replacing it", async 
   await expect(sidebar(page).locator(".detail-form .editor-preview")).toContainText("Replacement issue");
   await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
   await expect(sidebar(page)).toBeHidden();
+});
+
+test("creation snackbar survives Done with an actionable link", async ({ page, baseURL }) => {
+  await setup(page, baseURL!);
+  await editor(page).fill("View after Done");
+  await submit(page).click();
+  const issue = await expectCreated(page);
+  await modal(page).getByRole("button", { name: "Done", exact: true }).click();
+  await expect(modal(page)).toBeHidden();
+  const toast = page.locator(".snackbar");
+  await expect(toast.getByRole("status")).toContainText(`Issue !${issue.number} created.`);
+  await toast.getByRole("link", { name: "View issue" }).click();
+  await expect(page.locator(".detail-form .editor-preview")).toContainText("View after Done");
+  await expect(toast.getByRole("link", { name: "View issue" })).toHaveCount(0);
+});
+
+test("creation snackbar times out, pauses for focus, and keeps tab focus trapped", async ({ page, baseURL }) => {
+  await setup(page, baseURL!);
+  await page.clock.install();
+  await editor(page).fill("Accessible transient result");
+  await submit(page).click();
+  await expectReset(page);
+  const link = modal(page).getByRole("link", { name: "View issue" });
+  await link.focus();
+  await page.clock.fastForward(15000);
+  await expect(link).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(modal(page).getByRole("button", { name: "Dismiss notification" })).toBeFocused();
+  await modal(page).getByRole("button", { name: "Done", exact: true }).focus();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(11000);
+  await expect(link).toHaveCount(0);
+  await expect(status(page)).toBeEmpty();
+  await expect(editor(page)).toBeVisible();
 });
 
 test("a rejected submission retains the entire draft and can be retried", async ({ page, baseURL }) => {

@@ -50,6 +50,56 @@ test("creation chooses a visible custom lane, repeats placement and resets when 
   await expect(page.locator(".board-card")).toHaveCount(2);
 });
 
+test("global creation remembers project and per-project lane across reopen/reload, with context and hidden-lane fallbacks", async ({ page, baseURL }) => {
+  const headers = { Origin: baseURL! };
+  const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Remember creation ${randomUUID()}` } })).json();
+  const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Context creation ${randomUUID()}` } })).json();
+  const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
+  const projectField = dialog.getByRole("combobox", { name: "Project", exact: true });
+  const lane = dialog.getByRole("combobox", { name: "Board lane", exact: true });
+  const open = async () => {
+    await page.getByRole("button", { name: "Create issue (Alt+N)", exact: true }).click();
+    await expect(dialog).toBeVisible();
+  };
+  await page.goto("/issues");
+  await open();
+  await projectField.selectOption(project.id);
+  await lane.selectOption("done");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await open();
+  await expect(projectField).toHaveValue(project.id);
+  await expect(lane).toHaveValue("done");
+  await page.reload();
+  await open();
+  await expect(projectField).toHaveValue(project.id);
+  await expect(lane).toHaveValue("done");
+  await page.goto(`/projects/${other.slug}`);
+  await expect(page.getByRole("button", { name: "Create issue", exact: true })).toBeVisible();
+  await open();
+  await expect(projectField).toHaveValue(other.id);
+  await expect(lane).toBeEnabled();
+  await expect(lane).toHaveValue("");
+  await lane.selectOption("todo");
+  await projectField.selectOption(project.id);
+  await expect(lane).toHaveValue("done");
+  await projectField.selectOption(other.id);
+  await expect(lane).toHaveValue("todo");
+  await page.goto("/issues");
+  await open();
+  await expect(projectField).toHaveValue(project.id);
+  await expect(lane).toHaveValue("done");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect((await page.request.patch(`/api/projects/${project.slug}/board`, { headers, data: { lanes: ["todo"] } })).ok()).toBeTruthy();
+  await open();
+  await expect(lane).toBeEnabled();
+  await expect(lane).toHaveValue("");
+  await projectField.selectOption("");
+  await page.reload();
+  await open();
+  await expect(projectField).toHaveValue("");
+  await expect(lane).toHaveCount(0);
+});
+
 test("a now-hidden creation lane fails atomically and retains the draft for correction", async ({ page, baseURL }) => {
   const headers = { Origin: baseURL! };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Stale lane ${randomUUID()}` } })).json();

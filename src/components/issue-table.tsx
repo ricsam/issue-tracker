@@ -11,6 +11,7 @@ import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
 import { useWorkspace } from "../lib/workspace";
 import { defaultIssueColumns, issueColumnsStorageKey, issueTableColumns, normalizeIssueColumns, type IssueColumnPreference } from "../lib/issue-table-columns";
 import { IssueColumnConfig } from "./issue-column-config";
+import { issuePageSizes, issuePageSizeStorageKey, normalizeIssuePageSize, readIssuePageSize } from "../lib/issue-pagination";
 import "./issue-table.css";
 
 function FilterPopover({ label, active, onClear, children }: { label: string; active: boolean; onClear: () => void; children: ReactNode }) {
@@ -43,7 +44,7 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   </>;
 }
 
-export function IssueTable({ issues, allIssues, users, projects, boardLanes, laneOptions, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
+export function IssueTable({ issues, allIssues, users, projects, boardLanes, laneOptions, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, preferenceScope, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
   issues: Issue[]; allIssues: Issue[]; users: User[]; projects?: Project[]; state: IssueTableState;
   boardLanes: ReadonlyMap<string, IssueBoardLane>;
   laneOptions: BoardLaneOption[];
@@ -53,7 +54,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   onTagIssues: (ids: string[]) => void;
   onLabelIssues: (ids: string[]) => void;
   onBoardChanged: (projectId: string, board: BoardSettings) => void;
-  paginationKey: string; readOnly?: boolean;
+  paginationKey: string; preferenceScope: string; readOnly?: boolean;
   onCloseIssues: (ids: string[]) => Promise<{ closedIds: string[]; error?: string }>;
 }) {
   const { user } = useWorkspace();
@@ -73,8 +74,20 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     catch { notify("Columns updated for this visit, but browser storage is unavailable.", "error"); }
     closeColumnConfig();
   };
-  const [pageSize, setPageSize] = useState(25);
-  const resetKey = JSON.stringify([paginationKey, state]);
+  const pageSizeKey = issuePageSizeStorageKey(user.id, preferenceScope);
+  const [pageSizePreference, setPageSizePreference] = useState(() => ({ key: pageSizeKey, value: readIssuePageSize(pageSizeKey) }));
+  // Never carry one account/list's value into another, even if the table is reused.
+  const pageSize = pageSizePreference.key === pageSizeKey ? pageSizePreference.value : readIssuePageSize(pageSizeKey);
+  useEffect(() => {
+    if (pageSizePreference.key !== pageSizeKey) setPageSizePreference({ key: pageSizeKey, value: readIssuePageSize(pageSizeKey) });
+  }, [pageSizeKey, pageSizePreference.key]);
+  const setPageSize = (value: number) => {
+    const size = normalizeIssuePageSize(value);
+    setPageSizePreference({ key: pageSizeKey, value: size });
+    try { localStorage.setItem(pageSizeKey, JSON.stringify(size)); }
+    catch { notify("Rows per page updated for this visit, but browser storage is unavailable.", "error"); }
+  };
+  const resetKey = JSON.stringify([pageSizeKey, paginationKey, state]);
   const [paging, setPaging] = useState({ key: resetKey, page: 0 });
   const pageCount = Math.max(1, Math.ceil(issues.length / pageSize));
   const page = paging.key === resetKey ? Math.min(paging.page, pageCount - 1) : 0;
@@ -220,6 +233,6 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
         </tr>)}{!issues.length && <tr><td colSpan={visibleColumns.length + 1} className="table-empty">{allIssues.length ? "No matching issues. Adjust or clear your filters." : "No issues in this view."}</td></tr>}</tbody>
       </table>
     </div>
-    <nav className="issue-pagination" aria-label="Issue list pagination"><label>Rows per page <select aria-label="Rows per page" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPaging({ key: resetKey, page: 0 }); }}>{[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><span>{issues.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, issues.length)} of {issues.length}</span><span>Page {page + 1} of {pageCount}</span><Button type="button" variant="ghost" aria-label="Previous page" disabled={page === 0} onClick={() => setPaging({ key: resetKey, page: page - 1 })}>Previous</Button><Button type="button" variant="ghost" aria-label="Next page" disabled={page + 1 >= pageCount} onClick={() => setPaging({ key: resetKey, page: page + 1 })}>Next</Button></nav>
+    <nav className="issue-pagination" aria-label="Issue list pagination"><label>Rows per page <select aria-label="Rows per page" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPaging({ key: resetKey, page: 0 }); }}>{issuePageSizes.map((size) => <option key={size} value={size}>{size}</option>)}</select></label><span>{issues.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, issues.length)} of {issues.length}</span><span>Page {page + 1} of {pageCount}</span><Button type="button" variant="ghost" aria-label="Previous page" disabled={page === 0} onClick={() => setPaging({ key: resetKey, page: page - 1 })}>Previous</Button><Button type="button" variant="ghost" aria-label="Next page" disabled={page + 1 >= pageCount} onClick={() => setPaging({ key: resetKey, page: page + 1 })}>Next</Button></nav>
   </section>;
 }
