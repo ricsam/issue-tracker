@@ -2,6 +2,40 @@ import { expect, test } from "bun:test";
 import type { Issue, Project, User } from "../shared/types";
 import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows } from "../src/lib/issue-table";
 import { boardLaneKey, boardLaneOptions, issueBoardLanes } from "../src/lib/issue-board-lanes";
+import { defaultIssueColumns, issueColumnsStorageKey, moveIssueColumn, normalizeIssueColumns } from "../src/lib/issue-table-columns";
+
+test("column preferences validate stored values, retain issue navigation and append new columns", () => {
+  const defaults = defaultIssueColumns(false);
+  expect(normalizeIssueColumns(null, false)).toEqual(defaults);
+  expect(normalizeIssueColumns({ columns: [] }, false)).toEqual(defaults);
+  const normalized = normalizeIssueColumns([
+    { key: "created", visible: false }, { key: "title", visible: false },
+    { key: "created", visible: true }, { key: "project", visible: false },
+    { key: "unknown", visible: true }, null, "number", { key: "number" },
+  ], false);
+  expect(normalized.slice(0, 3)).toEqual([
+    { key: "created", visible: false }, { key: "title", visible: true }, { key: "number", visible: true },
+  ]);
+  expect(new Set(normalized.map(({ key }) => key)).size).toBe(defaults.length);
+  expect(normalized.some(({ key }) => key === "project")).toBe(false);
+  expect(normalizeIssueColumns([], true)).toEqual(defaultIssueColumns(true));
+});
+
+test("column reordering is immutable, bounded and preserves visibility", () => {
+  const columns = [{ key: "title" as const, visible: true }, { key: "number" as const, visible: false }];
+  expect(moveIssueColumn(columns, "title", -1)).toBe(columns);
+  expect(moveIssueColumn(columns, "number", 1)).toBe(columns);
+  expect(moveIssueColumn(columns, "created", 1)).toBe(columns);
+  const reordered = moveIssueColumn(columns, "number", -1);
+  expect(reordered).toEqual([columns[1], columns[0]]);
+  expect(columns[0].key).toBe("title");
+  expect(moveIssueColumn(reordered, "number", 1)).toEqual(columns);
+});
+
+test("column preferences are scoped to user and list type", () => {
+  expect(issueColumnsStorageKey("a", true)).not.toBe(issueColumnsStorageKey("a", false));
+  expect(issueColumnsStorageKey("a", false)).not.toBe(issueColumnsStorageKey("b", false));
+});
 
 const users: User[] = [
   { id: "a", name: "Alex", email: "alex@example.test", role: "member", createdAt: "2026-01-01" },

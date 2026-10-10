@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.15.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.16.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,9 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.15.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.15.0 adds issue history, personal project favorites, and strict lowercase kebab tags such as `#needs-review-2`. Uppercase, Unicode, underscores and bracketed tags are no longer recognized; invalid tag text remains ordinary prose.
+Verify `0.16.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.16.0 adds configurable table-column visibility/order with per-account browser preferences and fixes mobile table hit areas that can intercept scrolling or Board navigation on older Safari versions. No database migration, API change, or deployment-value change is added by this release.
+
+When upgrading from before 0.15.0, issue history, personal project favorites, and strict lowercase kebab tags such as `#needs-review-2` are also included. Uppercase, Unicode, underscores and bracketed tags are no longer recognized; invalid tag text remains ordinary prose.
 
 Migration v12 adds history and favorites tables without inventing historical events. Migration v13 rebuilds the derived tag index without changing bodies, titles, timestamps or lifecycle; unsupported tags disappear from filters and suggestions. Back up `/data` and preserve the encryption-key Secret before upgrading. Avoid application-only rollback: older versions use different tag rules and do not maintain history. Restore a matching backup if recovery is necessary. Existing deployment values remain valid; publishing a chart does not upgrade running deployments.
 
@@ -47,7 +49,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.15.0 --namespace issue-tracker \
+  --version 0.16.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -87,9 +89,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.15.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.16.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.15.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.16.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

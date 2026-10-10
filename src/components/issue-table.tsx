@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Filter } from "lucide-react";
 import type { BoardSettings, Issue, Project, User } from "../../shared/types";
 import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
@@ -8,14 +8,10 @@ import { useNotification } from "./ui/snackbar";
 import { ClosedTag } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
 import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
+import { useWorkspace } from "../lib/workspace";
+import { defaultIssueColumns, issueColumnsStorageKey, issueTableColumns, normalizeIssueColumns, type IssueColumnPreference } from "../lib/issue-table-columns";
+import { IssueColumnConfig } from "./issue-column-config";
 import "./issue-table.css";
-
-const columns: { key: IssueColumn; label: string }[] = [
-  { key: "number", label: "Number" }, { key: "title", label: "Issue" },
-  { key: "lane", label: "Board lane" },
-  { key: "labels", label: "Tags" }, { key: "tagged", label: "Tagged users" },
-  { key: "creator", label: "Creator" }, { key: "created", label: "Created" },
-];
 
 function FilterPopover({ label, active, onClear, children }: { label: string; active: boolean; onClear: () => void; children: ReactNode }) {
   const id = useId();
@@ -60,6 +56,23 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   paginationKey: string; readOnly?: boolean;
   onCloseIssues: (ids: string[]) => Promise<{ closedIds: string[]; error?: string }>;
 }) {
+  const { user } = useWorkspace();
+  const includeProject = !!projects;
+  const storageKey = issueColumnsStorageKey(user.id, includeProject);
+  const [columnPreferences, setColumnPreferences] = useState(() => {
+    try { return normalizeIssueColumns(JSON.parse(localStorage.getItem(storageKey) || "null"), includeProject); }
+    catch { return defaultIssueColumns(includeProject); }
+  });
+  const [configuringColumns, setConfiguringColumns] = useState(false);
+  const columnsButton = useRef<HTMLButtonElement>(null);
+  const closeColumnConfig = () => setConfiguringColumns(false);
+  const saveColumns = (columns: IssueColumnPreference[]) => {
+    const normalized = normalizeIssueColumns(columns, includeProject);
+    setColumnPreferences(normalized);
+    try { localStorage.setItem(storageKey, JSON.stringify(normalized)); }
+    catch { notify("Columns updated for this visit, but browser storage is unavailable.", "error"); }
+    closeColumnConfig();
+  };
   const [pageSize, setPageSize] = useState(25);
   const resetKey = JSON.stringify([paginationKey, state]);
   const [paging, setPaging] = useState({ key: resetKey, page: 0 });
@@ -143,7 +156,29 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   const labels = [...new Set(allIssues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b));
   const patch = (value: Partial<IssueTableState>) => onChange({ ...state, ...value });
   const empty = (label: string) => <span className="muted empty-cell" aria-label={label}>—</span>;
-  const visibleColumns = projects ? [columns[0], columns[1], { key: "project" as const, label: "Project" }, ...columns.slice(2)] : columns;
+  const visibleColumns = columnPreferences.filter(({ visible }) => visible).map(({ key }) => issueTableColumns.find((column) => column.key === key)!);
+  const cellContent = (issue: Issue, key: IssueColumn) => {
+    switch (key) {
+      case "number": return <>!{issue.number}</>;
+      case "title": return <Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong>{issue.state === "closed" && <ClosedTag />}</Link>;
+      case "project": {
+        const project = projects?.find((candidate) => candidate.id === issue.projectId);
+        return issue.projectId ? project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project" : <span className="muted">No project</span>;
+      }
+      case "lane": {
+        const lane = boardLanes.get(issue.id);
+        return lane ? <span className="tag" title={`${lane.label}${lane.hidden ? " (hidden lane)" : ""}`}>{lane.label}{lane.hidden && <span className="muted"> (hidden)</span>}</span> : <span className="muted">Not on board</span>;
+      }
+      case "labels": return <div className="issue-meta">{issue.labels.length ? issue.labels.map((label) => <span className="tag" key={label} title={label}>{label}</span>) : empty("No tags")}</div>;
+      case "tagged": return <div className="issue-meta">{issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => { const user = users.find((candidate) => candidate.id === id); return <span className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>; }) : empty("No tagged users")}</div>;
+      case "creator": {
+        const creator = users.find((user) => user.id === issue.authorId);
+        return <span className={creator ? undefined : "muted"} title={creator?.email}>{creator?.name || "Unknown user"}</span>;
+      }
+      case "created": return <time dateTime={issue.createdAt} title={new Date(issue.createdAt).toLocaleString()}>{new Date(issue.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time>;
+    }
+  };
+  const cellClasses: Partial<Record<IssueColumn, string>> = { number: "issue-number", project: "issue-project", lane: "issue-board-lane", creator: "issue-creator" };
   const filters: Record<IssueColumn, { active: boolean; clear: () => void; content: ReactNode }> = {
     project: { active: !!state.project, clear: () => patch({ project: "" }), content: <select aria-label="Filter by project" value={state.project} onChange={(e) => patch({ project: e.target.value })}><option value="">All projects</option><option value="none">No project</option>{projects?.map((project) => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? " (archived)" : ""}</option>)}</select> },
     lane: { active: !!state.lane, clear: () => patch({ lane: "" }), content: <select aria-label="Filter by board lane" value={state.lane} onChange={(event) => patch({ lane: event.target.value })}><option value="">All board lanes</option><option value="none">Not on board</option>{laneOptions.map((lane) => <option key={lane.value} value={lane.value}>{lane.label}</option>)}</select> },
@@ -157,6 +192,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   return <section className="issue-table-section" aria-label="Issue list">
     <div className="issue-bulk-actions issue-table-actions" role="group" aria-label="Selected issue actions" aria-busy={pending}>
       <p className="issue-table-count muted">{issues.length} of {allIssues.length} issues</p>
+      <Button ref={columnsButton} type="button" variant="secondary" aria-haspopup="dialog" onClick={() => setConfiguringColumns(true)}><Columns3 size={15} />Columns</Button>
       <span className="issue-selection-count">{selected.length} selected</span>
       <Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button>
       <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onTagIssues([...selected])}>Tag selected issues</Button>
@@ -165,27 +201,22 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
       {hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}
     </div>
+    {configuringColumns && <IssueColumnConfig columns={columnPreferences} includeProject={includeProject} onSave={saveColumns} onClose={closeColumnConfig} onRestoreFocus={() => columnsButton.current?.focus({ preventScroll: true })} />}
     {sending && <SendToBoardDialog issues={sending} onClose={() => setSending(null)}
       onPlaced={(projectId, board, issueIds) => {
         setSelection((current) => current.filter((id) => !issueIds.includes(id)));
         onBoardChanged(projectId, board);
       }} />}
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
-      <table className={`issue-table${projects ? " all-issues-table" : ""}`}>
+      <table className={`issue-table${projects ? " all-issues-table" : ""}`} style={{ minWidth: 42 + visibleColumns.reduce((width, column) => width + column.width, 0) }}>
         <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
-        <colgroup><col className="selection-column" /><col className="number-column" /><col className="title-column" />{projects && <col className="project-column" />}<col className="lane-column" /><col className="labels-column" /><col className="users-column" /><col className="creator-column" /><col className="date-column" /></colgroup>
+        <colgroup><col className="selection-column" />{visibleColumns.map(({ key, className, width }) => <col key={key} className={className} style={{ width: key === "title" ? undefined : width }} />)}</colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
         </tr></thead>
         <tbody>{rows.map((issue) => <tr key={issue.id} onClickCapture={(event) => { if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).matches('input[type="checkbox"]')) return; event.preventDefault(); event.stopPropagation(); selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); }} className={`issue-row${selectedId === issue.id ? " is-selected" : ""}${selected.includes(issue.id) ? " is-bulk-selected" : ""}`}>
           <td><input type="checkbox" aria-label={`Select issue !${issue.number}`} checked={selected.includes(issue.id)} disabled={pending || !eligible.has(issue.id)} onChange={(event) => { if ((event.nativeEvent as globalThis.MouseEvent).shiftKey) { selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); return; } const checked = event.target.checked; activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: selected.filter((id) => id !== issue.id) }; setSelection((current) => checked ? [...new Set([...current, issue.id])] : current.filter((id) => id !== issue.id)); }} /></td>
-          <td className="issue-number">!{issue.number}</td><td><Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong>{issue.state === "closed" && <ClosedTag />}</Link></td>
-          {projects && <td className="issue-project">{issue.projectId ? (() => { const project = projects.find((candidate) => candidate.id === issue.projectId); return project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project"; })() : <span className="muted">No project</span>}</td>}
-          <td className="issue-board-lane">{(() => { const lane = boardLanes.get(issue.id); return lane ? <span className="tag" title={`${lane.label}${lane.hidden ? " (hidden lane)" : ""}`}>{lane.label}{lane.hidden && <span className="muted"> (hidden)</span>}</span> : <span className="muted">Not on board</span>; })()}</td>
-          <td><div className="issue-meta">{issue.labels.length ? issue.labels.map((label) => <span className="tag" key={label} title={label}>{label}</span>) : empty("No tags")}</div></td>
-          <td><div className="issue-meta">{issue.taggedUserIds.length ? issue.taggedUserIds.map((id) => { const user = users.find((candidate) => candidate.id === id); return <span className="tag user-tag" key={id} title={user?.email}>{user?.name || "Unknown user"}</span>; }) : empty("No tagged users")}</div></td>
-          <td className="issue-creator">{(() => { const creator = users.find((user) => user.id === issue.authorId); return <span className={creator ? undefined : "muted"} title={creator?.email}>{creator?.name || "Unknown user"}</span>; })()}</td>
-          <td><time dateTime={issue.createdAt} title={new Date(issue.createdAt).toLocaleString()}>{new Date(issue.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time></td>
+          {visibleColumns.map(({ key }) => <td key={key} data-column={key} className={cellClasses[key]}>{cellContent(issue, key)}</td>)}
         </tr>)}{!issues.length && <tr><td colSpan={visibleColumns.length + 1} className="table-empty">{allIssues.length ? "No matching issues. Adjust or clear your filters." : "No issues in this view."}</td></tr>}</tbody>
       </table>
     </div>

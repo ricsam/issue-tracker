@@ -483,7 +483,7 @@ test("rapid selection ignores stale responses and failed details can retry witho
 });
 
 for (const width of [1440, 1024, 390]) {
-  test(`table row metadata and keyboard links open an issue at ${width}px`, async ({
+  test(`table row hit targets and keyboard links open the intended issue at ${width}px`, async ({
     page,
     baseURL,
   }) => {
@@ -497,7 +497,8 @@ for (const width of [1440, 1024, 390]) {
     await expect(alpha.getByRole("combobox")).toHaveCount(0);
 
     await expect(alpha.locator(".avatar")).toHaveCount(0);
-    // The number cell and padding still activate the real, full-row link.
+    // Desktop retains the full-row link. Compact layouts deliberately leave
+    // metadata inert so a stretched link cannot escape its row on mobile Safari.
     for (const target of ["padding", "number"] as const) {
       const cell = alpha.locator("td.issue-number");
       await cell.scrollIntoViewIfNeeded();
@@ -514,12 +515,15 @@ for (const width of [1440, 1024, 390]) {
           .getByRole("button", { name: "Close issue details" })
           .click();
       } else {
-        await expect(page).toHaveURL(issuePath);
-        await expect(
-          page.locator(".detail-form .editor-preview"),
-        ).toContainText("Sidebar alpha");
-        await page.goto(projectPath);
+        await expect(page).toHaveURL(projectPath);
+        await expect(sidebar(page)).toHaveCount(0);
       }
+    }
+    if (width < 1024) {
+      await alpha.getByRole("link").focus();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(issuePath);
+      await expect(page.locator(".detail-form .editor-preview")).toContainText("Sidebar alpha");
     }
 
     // The enlarged hit area is still a real link (including native new-tab clicks).

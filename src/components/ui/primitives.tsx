@@ -21,6 +21,7 @@ export function Modal({
   children,
   className = "",
   onOpenAutoFocus,
+  onCloseAutoFocus,
 }: {
   title: string;
   description?: string;
@@ -29,6 +30,7 @@ export function Modal({
   children: ReactNode;
   className?: string;
   onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -37,6 +39,7 @@ export function Modal({
         <Dialog.Content
           className={`dialog-content ${className}`}
           onOpenAutoFocus={onOpenAutoFocus}
+          onCloseAutoFocus={onCloseAutoFocus}
           {...(!description ? { "aria-describedby": undefined } : {})}
         >
           <Dialog.Title className="dialog-title">{title}</Dialog.Title>

@@ -722,8 +722,8 @@ fieldset > small {
 .issue-row:hover {
   background: #fcfaff;
 }
-/* Extend the real link over the row's padding and non-interactive metadata.
-   Native keyboard, mobile and modified-click navigation remain unchanged. */
+/* Extend the real link over the row's padding and non-interactive metadata
+   on desktop. Touch layouts use the title link itself (see below). */
 .issue-row .issue-link::after {
   content: "";
   position: absolute;
@@ -737,6 +737,20 @@ fieldset > small {
 .issue-row .issue-link:focus-visible::after {
   outline: 3px solid #a48be7;
   outline-offset: -3px;
+}
+/* Safari versions differ in whether a positioned table row establishes the
+   containing block for this stretched link. On phones/tablets it can escape
+   the row, intercept navigation above the table, and capture scroll gestures.
+   Do not stretch links on compact layouts or touch-first devices; native title
+   links still support taps, keyboard navigation and long-press link actions. */
+@media (max-width: 1023px), (hover: none), (pointer: coarse) {
+  .issue-row .issue-link::after {
+    content: none;
+  }
+  .issue-row .issue-link:focus-visible {
+    outline: 3px solid #a48be7;
+    outline-offset: 2px;
+  }
 }
 .issue-row .issue-meta :is(select, button, a, input) {
   position: relative;
