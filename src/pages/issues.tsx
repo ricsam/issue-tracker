@@ -787,14 +787,16 @@ function ProjectIssues({ slug }: { slug: string }) {
               </p>
               <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => { boardRange.current = null; boardAnchor.current = null; setBoardSelection(boardOrder); }}>Select visible issues</Button>
               <span className="issue-selection-count">{selectedBoard.length} selected</span>
-              <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
-                currentLane={selectedBoard.length && selectedBoard.every((id) => placements.get(id) === placements.get(selectedBoard[0])) ? placements.get(selectedBoard[0]) : undefined}
-                {...reorderActions(selectedBoard)}
-                disabled={!!saving || readOnly || !selectedBoard.length} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
-              <Button variant="secondary" disabled={!!saving || closingIssues || readOnly || !selectedBoard.some((id) => issueById.get(id)?.state === "open")} onClick={() => void closeBoardIssues(selectedBoard)}>{closingIssues ? "Closing issues…" : "Close selected issues"}</Button>
-              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard)}>Tag selected issues</Button>
-              <Button variant="secondary" disabled={!!saving || readOnly || !selectedBoard.length} onClick={() => tagIssues(selectedBoard, "labels")}>Add tags</Button>
-              <Button variant="ghost" disabled={!!saving || !selectedBoard.length} onClick={() => { setBoardSelection([]); boardAnchor.current = null; boardRange.current = null; }}>Clear selection</Button>
+              {selectedBoard.length > 0 && <>
+                <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
+                  currentLane={selectedBoard.every((id) => placements.get(id) === placements.get(selectedBoard[0])) ? placements.get(selectedBoard[0]) : undefined}
+                  {...reorderActions(selectedBoard)}
+                  disabled={!!saving || readOnly} onMove={(lane) => void changeBoard(selectedBoard, lane)} onRemove={() => void changeBoard(selectedBoard)} />
+                <Button variant="secondary" disabled={!!saving || closingIssues || readOnly || !selectedBoard.some((id) => issueById.get(id)?.state === "open")} onClick={() => void closeBoardIssues(selectedBoard)}>{closingIssues ? "Closing issues…" : "Close selected issues"}</Button>
+                <Tooltip content="Mention user in selected issues"><Button variant="secondary" disabled={!!saving || readOnly} onClick={() => tagIssues(selectedBoard)}>Mention</Button></Tooltip>
+                <Tooltip content="Tag selected issues with labels"><Button variant="secondary" disabled={!!saving || readOnly} onClick={() => tagIssues(selectedBoard, "labels")}>Tag</Button></Tooltip>
+                <Button variant="ghost" disabled={!!saving} onClick={() => { setBoardSelection([]); boardAnchor.current = null; boardRange.current = null; }}>Clear selection</Button>
+              </>}
             </div>
             {boardIssues.length === 0 && (
               <p className="board-empty-notice">

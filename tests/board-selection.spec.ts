@@ -32,36 +32,52 @@ for (const width of [1440, 1060, 390]) {
     const selectAll = bar.getByRole("button", { name: "Select visible issues", exact: true });
     const actions = [
       bar.getByRole("button", { name: "Selected board issue actions", exact: true }),
-      bar.getByRole("button", { name: "Tag selected issues", exact: true }),
-      bar.getByRole("button", { name: "Add tags", exact: true }),
+      bar.getByRole("button", { name: "Mention", exact: true }),
+      bar.getByRole("button", { name: "Tag", exact: true }),
       bar.getByRole("button", { name: "Clear selection", exact: true }),
+      bar.getByRole("button", { name: "Close selected issues", exact: true }),
     ];
     const offset = () => board.evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
     await expect(bar.getByText("12 of 12 issues assigned to board · 0 unassigned · 3 lanes", { exact: true })).toBeVisible();
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     await expect(page.getByText("Use checkboxes or Shift-click to select a range.", { exact: true })).toHaveCount(0);
     await expect(selectAll).toBeEnabled();
-    for (const action of actions) await expect(action).toBeDisabled();
-    for (const action of [selectAll, ...actions]) expect((await action.boundingBox())!.height).toBe(28);
+    for (const action of actions) await expect(action).toHaveCount(0);
+    expect((await selectAll.boundingBox())!.height).toBe(28);
     const height = (await bar.boundingBox())!.height;
     const initialOffset = await offset();
     expect(initialOffset - height).toBe(8);
     await bar.screenshot({ path: `test-results/board-selection-empty-${width}.png` });
     await select(page, issues[0].number).check();
     await expect(bar.getByText("1 selected", { exact: true })).toBeVisible();
-    for (const action of actions) await expect(action).toBeEnabled();
-    expect((await bar.boundingBox())!.height).toBe(height);
-    expect(await offset()).toBe(initialOffset);
+    for (const action of actions) {
+      await expect(action).toBeEnabled();
+      const bounds = (await action.boundingBox())!;
+      expect(bounds.height).toBe(28);
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    }
+    await expect(actions[1]).toHaveText("Mention");
+    await actions[1].hover();
+    await expect(page.getByRole("tooltip", { name: "Mention user in selected issues", exact: true })).toBeVisible();
+    await expect(actions[2]).toHaveText("Tag");
+    await actions[2].hover();
+    await expect(page.getByRole("tooltip", { name: "Tag selected issues with labels", exact: true })).toBeVisible();
+    await page.mouse.move(0, 0);
+    const selectedHeight = (await bar.boundingBox())!.height;
+    const selectedOffset = await offset();
+    expect(height).toBeLessThanOrEqual(selectedHeight);
+    expect(selectedOffset - selectedHeight).toBe(8);
     await selectAll.click();
     await expect(bar.getByText("12 selected", { exact: true })).toBeVisible();
-    expect((await bar.boundingBox())!.height).toBe(height);
-    expect(await offset()).toBe(initialOffset);
+    expect((await bar.boundingBox())!.height).toBe(selectedHeight);
+    expect(await offset()).toBe(selectedOffset);
     await bar.screenshot({ path: `test-results/board-selection-selected-${width}.png` });
     await actions[3].click();
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     expect((await bar.boundingBox())!.height).toBe(height);
     expect(await offset()).toBe(initialOffset);
-    for (const action of actions) await expect(action).toBeDisabled();
+    for (const action of actions) await expect(action).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 
     // Hidden/search-filtered cards are not selected, but the total status remains.
@@ -72,7 +88,7 @@ for (const width of [1440, 1060, 390]) {
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("missing");
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
     await expect(selectAll).toBeDisabled();
-    for (const action of actions) await expect(action).toBeDisabled();
+    for (const action of actions) await expect(action).toHaveCount(0);
     await expect(bar).toContainText("12 of 12 issues assigned to board · 0 unassigned · 3 lanes");
     expect((await bar.boundingBox())!.height).toBe(height);
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
@@ -83,12 +99,14 @@ for (const width of [1440, 1060, 390]) {
     expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
     await page.reload();
     await expect(bar).toBeVisible();
-    for (const action of [selectAll, ...actions]) await expect(action).toBeDisabled();
+    await expect(selectAll).toBeDisabled();
+    for (const action of actions) await expect(action).toHaveCount(0);
     const { project: empty } = await (await page.request.post("/api/projects", { headers, data: { name: `Empty board ${randomUUID()}` } })).json();
     await page.goto(`/projects/${empty.slug}/board`);
     await expect(bar).toContainText("0 of 0 issues assigned to board · 0 unassigned · 3 lanes");
     await expect(page.getByText("No work on the board yet.", { exact: false })).toBeVisible();
-    for (const action of [selectAll, ...actions]) await expect(action).toBeDisabled();
+    await expect(selectAll).toBeDisabled();
+    for (const action of actions) await expect(action).toHaveCount(0);
   });
 }
 
@@ -171,7 +189,6 @@ test("pending and failed moves clear stale snackbars while preserving errors and
   await page.clock.install();
   const status = page.locator(".snackbar").getByRole("status");
   const offset = () => page.locator(".board").evaluate((element) => element.getBoundingClientRect().top - element.parentElement!.querySelector(".issue-board-actions")!.getBoundingClientRect().top);
-  const initialOffset = await offset();
   await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
   await expect(status).toHaveText("1 of 1 issues moved.");
@@ -183,10 +200,14 @@ test("pending and failed moves clear stale snackbars while preserving errors and
   });
   try {
     await select(page, issues[1].number).check();
+    const selectedOffset = await offset();
     await page.getByRole("button", { name: `Board actions for issue !${issues[1].number}`, exact: true }).click();
     await page.getByRole("menuitem", { name: "In progress", exact: true }).click();
     await expect(status).toBeEmpty();
-    expect(await offset()).toBe(initialOffset);
+    expect(await offset()).toBe(selectedOffset);
+    for (const name of ["Selected board issue actions", "Mention", "Tag", "Clear selection"]) {
+      await expect(page.getByRole("group", { name: "Selected board issue actions", exact: true }).getByRole("button", { name, exact: true })).toBeDisabled();
+    }
   } finally { release(); }
   await expect(page.getByRole("alert")).toContainText("Move failed");
   await expect(status).toHaveText("0 of 1 issues moved.");
@@ -329,11 +350,11 @@ test("board selection prunes search-hidden issues and bulk tagging works from bo
   await select(page, issues[0].number).check();
   await select(page, issues[1].number).check();
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("issue 4");
-  await expect(page.getByRole("button", { name: "Tag selected issues" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Mention", exact: true })).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
   await select(page, issues[0].number).check();
   await select(page, issues[1].number).check();
-  await page.getByRole("button", { name: "Tag selected issues" }).click();
+  await page.getByRole("button", { name: "Mention", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Tag teammates" });
   await dialog.getByRole("checkbox", { name: /Alex Morgan/ }).check();
   const tagEndpoint = `/api/projects/${project.slug}/issues/tag`;
@@ -359,11 +380,11 @@ test("board selection prunes search-hidden issues and bulk tagging works from bo
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Unsaved draft must survive cancellation");
   page.once("dialog", (prompt) => prompt.dismiss());
-  await page.getByRole("button", { name: "Tag selected issues" }).click();
+  await page.getByRole("button", { name: "Mention", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(editor).toContainText("Unsaved draft must survive cancellation");
   page.once("dialog", (prompt) => prompt.accept());
-  await page.getByRole("button", { name: "Tag selected issues" }).click();
+  await page.getByRole("button", { name: "Mention", exact: true }).click();
   await dialog.getByRole("checkbox", { name: /Alex Morgan/ }).check();
   await dialog.getByRole("button", { name: "Add mentions" }).click();
   await expect(dialog).toBeHidden();

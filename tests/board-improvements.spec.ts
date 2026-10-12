@@ -74,6 +74,7 @@ test("combined filters prune selection and never mutate board persistence", asyn
   const writes: string[] = [];
   page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
+  await page.getByRole("button", { name: "Filter board", exact: true }).click();
   for (const [field, value] of [["state", "closed"], ["lane", "todo"], ["labels", "label:bug"], ["tagged", issues[1].authorId!], ["creator", `user:${issues[1].authorId}`]]) {
     await page.getByRole("button", { name: "Add filter", exact: true }).click();
     const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();

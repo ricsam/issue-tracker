@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.17.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.18.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.18.0
+
+Version 0.18.0 adds persistent compound board and table filters with AND/OR and negative conditions. Existing board selections migrate to equivalent AND conditions. Board filters start collapsed unless a saved choice exists, and remember expansion per user and board on this device. Selection actions are hidden until issues are selected; **Mention** adds user mentions and **Tag** adds labels, with explanatory tooltips. Radio picker controls keep compact sizing and readable labels.
+
+No database migration, API change, or deployment-value change is added by this release. Preserve `/data`, the encryption-key Secret and existing values, and select the published SHA image matching the chart release commit after CI succeeds. Upgrades from older versions still carry the migration and rollback restrictions below. Publishing this chart does not automatically upgrade running deployments.
 
 ### Upgrading to 0.17.0
 

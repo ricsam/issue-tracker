@@ -9,8 +9,8 @@
 .board-filter-dialog { z-index: 80; width: 300px; max-width: calc(100vw - 24px); border: 1px solid var(--border, #e9e3f0); border-radius: 8px; background: white; color: #302b40; padding: 12px; box-shadow: 0 8px 28px #302b4026; }
 .board-filter-search { width: 100%; margin: 12px 0; padding: 9px 12px; border: 1px solid var(--border, #e9e3f0); border-radius: 6px; }
 .board-filter-options { max-height: min(350px, 45dvh); overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
-.board-filter-option { display: flex; align-items: center; gap: 9px; padding: 9px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.board-filter-option { display: flex; flex-shrink: 0; align-items: center; gap: 9px; padding: 9px; border-radius: 5px; cursor: pointer; font-size: 13px; }
 .board-filter-option:hover, .board-filter-option:focus-within { background: #f2effa; }
-.board-filter-option input { accent-color: #7050d9; flex: none; }
-.board-filter-option span { flex: 1; overflow-wrap: anywhere; }
+.board-filter-option input { accent-color: #7050d9; flex: none; width: 16px; height: 16px; margin: 0; }
+.board-filter-option span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .board-filter-dialog-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }

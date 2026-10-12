@@ -13,6 +13,15 @@ test("malformed or missing preferences safely default", () => {
   expect(parseBoardPreferences(JSON.stringify({ filters: { state: "bad", tags: ["bug", 4, "bug"], users: false }, collapsedLanes: ["todo", null, "todo"], search: 42, filtersExpanded: "false" }))).toEqual({ ...defaultBoardPreferences(), filters: { conjunction: "and", conditions: [{ id: "legacy-1", field: "labels", operator: "is", value: "label:bug" }] }, collapsedLanes: ["todo"] });
   for (const filters of [null, [], 42, { conjunction: "or", conditions: false }]) expect(parseFilters(filters).conditions).toEqual([]);
 });
+test("filters default to collapsed and preserve explicit saved expansion", () => {
+  expect(defaultBoardPreferences().filtersExpanded).toBe(false);
+  for (const value of [{}, { filtersExpanded: null }, { filtersExpanded: "true" }]) {
+    expect(parseBoardPreferences(JSON.stringify(value)).filtersExpanded).toBe(false);
+  }
+  for (const filtersExpanded of [true, false]) {
+    expect(parseBoardPreferences(JSON.stringify({ filtersExpanded })).filtersExpanded).toBe(filtersExpanded);
+  }
+});
 test("legacy selections migrate into individual AND conditions", () => {
   const migrated = parseFilters({ state: "closed", lane: "custom-deleted", tags: ["bug", "feature"], users: ["missing-user", "another"], creator: "author" });
   expect(migrated.conjunction).toBe("and");

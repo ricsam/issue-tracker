@@ -37,6 +37,14 @@ test("list selection spans pages, adds and moves work to visible custom lanes, a
   const review = `custom_${randomUUID()}`;
   await post(page, baseURL!, boardPath(p), { lanes: ["in_progress", review, "done"], customLanes: [{ value: review, label: "Review" }] }, "PATCH");
   await page.goto(`/projects/${p.slug}`);
+  const send = actions(page).getByRole("button", { name: "Send to board", exact: true });
+  await expect(actions(page)).toContainText("0 selected");
+  await expect(send).toHaveCount(0);
+  await selectIssue(page, issues[0]);
+  await expect(send).toBeEnabled();
+  await actions(page).getByRole("button", { name: "Clear selection", exact: true }).click();
+  await expect(actions(page)).toContainText("0 selected");
+  await expect(send).toHaveCount(0);
   await page.getByRole("combobox", { name: "Rows per page" }).selectOption("10");
   await page.locator(`a[data-issue-id="${issues[0].id}"]`).click();
   const editor = sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
@@ -57,6 +65,7 @@ test("list selection spans pages, adds and moves work to visible custom lanes, a
   await expect(editor).toContainText("Keep this unsaved body");
   await expect(sidebar(page).locator(".comments [contenteditable=true]")).toContainText("Keep this unsent comment");
   await expect(actions(page)).toContainText("0 selected");
+  await expect(send).toHaveCount(0);
   const detail = await (await page.request.get(`/api/issues/${issues[0].id}`)).json();
   expect(detail.issue.body).toBe(issues[0].body);
   expect(detail.issue.updatedAt).toBe(issues[0].updatedAt);

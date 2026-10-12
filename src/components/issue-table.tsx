@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Filter, ChevronDown, Chevron
 import type { BoardSettings, Issue, Project, User } from "../../shared/types";
 import type { IssueColumn, IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
+import { Tooltip } from "./ui/tooltip";
 import { useNotification } from "./ui/snackbar";
 import { ClosedTag } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
@@ -238,11 +239,13 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       <p className="issue-table-count muted">{issues.length} of {allIssues.length} issues</p>
       <Button ref={columnsButton} type="button" variant="secondary" aria-haspopup="dialog" onClick={() => setConfiguringColumns(true)}><Columns3 size={15} />Columns</Button>
       <span className="issue-selection-count">{selected.length} selected</span>
-      <Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button>
-      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onTagIssues([...selected])}>Tag selected issues</Button>
-      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onLabelIssues([...selected])}>Add tags</Button>
-      <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => setSending(issues.filter((issue) => selected.includes(issue.id)))}>Send to board</Button>
-      <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
+      {selected.length > 0 && <>
+        <Button type="button" disabled={pending || readOnly || !selectedOpen.length} onClick={closeSelected}>{pending ? "Closing…" : "Close selected issues"}</Button>
+        <Tooltip content="Mention user in selected issues"><Button type="button" disabled={pending || readOnly} onClick={() => onTagIssues([...selected])}>Mention</Button></Tooltip>
+        <Tooltip content="Tag selected issues with labels"><Button type="button" disabled={pending || readOnly} onClick={() => onLabelIssues([...selected])}>Tag</Button></Tooltip>
+        <Button type="button" disabled={pending || readOnly} onClick={() => setSending(issues.filter((issue) => selected.includes(issue.id)))}>Send to board</Button>
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
+      </>}
       {(state.filters.conditions.length > 0 || state.filters.conjunction !== "and") && <Button type="button" variant="ghost" onClick={() => patch({ filters: { ...emptyIssueFilters, conditions: [] } })}>Clear column filters</Button>}
     </div>
     {configuringColumns && <IssueColumnConfig columns={columnPreferences} includeProject={includeProject} onSave={saveColumns} onClose={closeColumnConfig} onRestoreFocus={() => columnsButton.current?.focus({ preventScroll: true })} />}
@@ -253,7 +256,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       }} />}
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className={`issue-table${projects ? " all-issues-table" : ""}`} style={{ minWidth: 42 + visibleColumns.reduce((width, column) => width + column.width, 0) }}>
-        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
+        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, mention teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
         <colgroup><col className="selection-column" />{visibleColumns.map(({ key, className, width }) => <col key={key} className={className} style={{ width: key === "title" ? undefined : width }} />)}</colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
           {visibleColumns.map(({ key, label }) => { const filter = columnFilter(key); return <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filter.active} onClear={filter.clear}>{filter.content}</FilterPopover></div></th>; })}

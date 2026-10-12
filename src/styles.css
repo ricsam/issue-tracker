@@ -84,7 +84,7 @@ label,
   font-weight: 550;
   color: #444150;
 }
-input:not([type="checkbox"]),
+input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
   display: block;

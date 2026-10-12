@@ -82,7 +82,7 @@ Search applies within the selected state, so check **Closed** if an expected iss
 
 The **Board lane** column shows each issue's actual board placement, including custom lanes. Hidden lanes are marked **(hidden)**; unplaced and unlinked issues show **Not on board**. Use its filter to see a specific lane or issues not on a board. In **All issues**, each lane option includes its project name so same-named lanes from different projects remain distinct. Closed issues retain their board lane, and placement changes from **Send to board** update the column immediately.
 
-Click a column heading to sort, or its filter button to open column filters. Filters combine with search and the selected state; created-date ranges include both boundary dates. **Clear column filters** resets filters without changing the sort.
+Click a column heading to sort, or its filter button to open column filters. **Filter table** edits the same saved conditions across columns. Add repeatable conditions with **Is not**, **Does not contain**, or **Is outside range** to exclude matches, and use **Match all (AND)** or **Match any (OR)** to combine them. Filters combine with search and the selected state; created-date ranges include both boundary dates. Empty conditions are ignored. Conditions and sorting are remembered per account and list in this browser. **Clear column filters** resets filters without changing the sort.
 
 Choose **Columns** above the table to show or hide columns and move them up or down in the left-to-right order. **Issue** stays visible so you can open issues. Choose **Save columns** to apply, **Cancel** to discard, or **Reset to defaults** then save to restore the original layout. Preferences are saved for your account in this browser, with separate layouts for project lists and **All issues**; they do not change anyone else's view. Hiding a column keeps its sorting and filters active; use **Clear column filters** to remove hidden filters.
 
@@ -92,9 +92,9 @@ The list shows 25 rows per page by default. Use **Rows per page** to choose 10, 
 
 Use Up/Down to open adjacent issues, including across page boundaries. Shift+Up/Down or Shift-click selects a range in the current filtered and sorted order.
 
-Select issues and choose **Tag selected issues** to add teammates as saved body mentions. Existing body mentions are not duplicated, and original content is preserved. Users already mentioned only in comments still receive a body mention. Archived projects cannot be tagged.
+Selection actions appear only when issues are selected. Choose **Mention** (tooltip: **Mention user in selected issues**) to add teammates as saved body mentions. Existing body mentions are not duplicated, and original content is preserved. Users already mentioned only in comments still receive a body mention. Archived projects cannot be tagged.
 
-Select issues in the list or board and choose **Add tags** to tag them together. Choose existing tags, type new tags such as `#bug #needs-review`, or combine both. Use `#[needs review]` for tags containing spaces. The preview shows the tags that will be added.
+Select issues in the list or board and choose **Tag** (tooltip: **Tag selected issues with labels**) to tag them together. Choose existing tags, type new tags such as `#bug #needs-review`, or combine both. Tags must use lowercase kebab-case; spaces and bracketed tags are not supported. The preview shows the tags that will be added.
 
 Tags are appended to each selected issue’s latest saved body without replacing text or duplicating existing tags. If an unclosed Markdown block would hide the tags, they are inserted near the top instead. Closed issues can be tagged; archived projects are read-only. If a selected issue has an unsaved draft, you are asked before discarding it. A failed batch leaves all issues unchanged and keeps the dialog open for retry.
 

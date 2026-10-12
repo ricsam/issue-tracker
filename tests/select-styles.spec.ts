@@ -44,6 +44,37 @@ for (const width of [1440, 390]) {
 
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/projects/${project.slug}/board`);
+    // The retained searchable picker uses native selection inputs. Global text-field
+    // styles must not make radios full-width or push option labels offscreen.
+    await page.evaluate(() => {
+      const dialog = document.createElement("section");
+      dialog.id = "picker-style-fixture";
+      dialog.className = "board-filter-dialog";
+      dialog.style.cssText = "position: fixed; top: 80px; left: 12px";
+      dialog.innerHTML = `<div class="board-filter-options">
+        <label class="board-filter-option"><input type="radio" name="state-style" checked><span>Open</span></label>
+        <label class="board-filter-option"><input type="radio" name="state-style"><span>Closed</span></label>
+        <label class="board-filter-option"><input type="radio" name="lane-style"><span>In progress</span></label>
+        <label class="board-filter-option"><input type="checkbox"><span>A longer lane label that should wrap rather than overflow the options</span></label>
+      </div>`;
+      document.body.append(dialog);
+    });
+    const picker = page.locator("#picker-style-fixture");
+    const pickerBox = (await picker.boundingBox())!;
+    for (const option of await picker.locator("label").all()) {
+      const control = (await option.locator("input").boundingBox())!;
+      const text = (await option.locator("span").boundingBox())!;
+      expect(control.width).toBe(16);
+      expect(control.height).toBe(16);
+      expect(text.x).toBeGreaterThan(control.x + control.width);
+      expect(text.x + text.width).toBeLessThanOrEqual(pickerBox.x + pickerBox.width);
+      expect((await option.boundingBox())!.height).toBeLessThan(90);
+    }
+    expect(await picker.locator(".board-filter-options").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+    await picker.getByRole("radio", { name: "Closed", exact: true }).check();
+    await expect(picker.getByRole("radio", { name: "Open", exact: true })).not.toBeChecked();
+    await picker.screenshot({ path: testInfo.outputPath("picker-inputs.png") });
+    await picker.evaluate((element) => element.remove());
     await page.getByRole("button", { name: "Add issues", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Add issues to board" });
     const lane = dialog.getByLabel("Lane", { exact: true });

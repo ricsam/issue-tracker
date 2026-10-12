@@ -132,12 +132,12 @@ test("all issues combines project filtering and bulk actions while archived rows
   await expect(rows(page).filter({ hasText: `${marker} archived` }).getByRole("checkbox")).toBeDisabled();
   await page.getByRole("checkbox", { name: "Select all issues on this page" }).check();
   await expect(page.locator(".issue-selection-count")).toHaveText("2 selected");
-  await page.getByRole("button", { name: "Tag selected issues" }).click();
+  await page.getByRole("button", { name: "Mention", exact: true }).click();
   const tagDialog = page.getByRole("dialog", { name: "Tag teammates" });
   await tagDialog.getByRole("checkbox", { name: /Alex Morgan/ }).check();
   await tagDialog.getByRole("button", { name: "Add mentions" }).click();
   await expect(tagDialog).toBeHidden();
-  await page.getByRole("group", { name: "Selected issue actions" }).getByRole("button", { name: "Add tags", exact: true }).click();
+  await page.getByRole("group", { name: "Selected issue actions" }).getByRole("button", { name: "Tag", exact: true }).click();
   const labels = page.getByRole("dialog", { name: "Add tags", exact: true });
   await labels.getByRole("textbox", { name: "New tags" }).fill("#workspace");
   await labels.getByRole("button", { name: "Add tags", exact: true }).click();

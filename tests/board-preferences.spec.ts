@@ -18,6 +18,8 @@ async function fixture(page: Page, baseURL: string) {
 }
 
 async function addFilter(page: Page, field: string, value: string, operator = "is") {
+  const toggle = page.getByRole("button", { name: /^Filter board/ });
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
   await page.getByRole("button", { name: "Add filter", exact: true }).click();
   const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();
   await row.getByLabel("Field", { exact: true }).selectOption(field);
@@ -52,6 +54,61 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
 });
 
+test("filter panel defaults to collapsed and remembers both states independently per board", async ({ page, baseURL }) => {
+  const { project, headers } = await fixture(page, baseURL!);
+  const toggle = page.getByRole("button", { name: "Filter board", exact: true });
+  const builder = page.getByRole("button", { name: "Add filter", exact: true });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(builder).toBeHidden();
+  await toggle.click();
+  await expect(builder).toBeVisible();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(builder).toBeVisible();
+
+  const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other collapse ${randomUUID()}` } })).json();
+  await page.goto(`/projects/${other.slug}/board`);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await toggle.click();
+  await page.goto(`/projects/${project.slug}/board`);
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await toggle.click();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(builder).toBeHidden();
+  const preferences = await page.evaluate((boardIds) => boardIds.map((boardId) => {
+    const key = Object.keys(localStorage).find((key) => key.startsWith("threadline:board-preferences:v1:") && key.endsWith(`:${encodeURIComponent(boardId)}`));
+    return key ? JSON.parse(localStorage.getItem(key)!).filtersExpanded : null;
+  }), [project.id, other.id]);
+  expect(preferences).toEqual([false, false]);
+});
+
+for (const width of [1440, 390]) test(`state and lane filter values are readable and usable at ${width}px`, async ({ page, baseURL }, testInfo) => {
+  const { endpoint, headers } = await fixture(page, baseURL!);
+  const { board } = await (await page.request.get(endpoint)).json();
+  expect((await page.request.patch(`/api/issues/${board.cards[0].issueId}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
+  await page.reload();
+  await page.setViewportSize({ width, height: 900 });
+  await addFilter(page, "state", "closed");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await addFilter(page, "lane", "todo");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  const values = page.getByRole("region", { name: "Board filters", exact: true }).getByLabel("Value", { exact: true });
+  await expect(values.nth(0)).toHaveValue("closed");
+  await expect(values.nth(1)).toHaveValue("todo");
+  for (const value of await values.all()) {
+    const box = (await value.boundingBox())!;
+    expect(box.height).toBeLessThanOrEqual(50);
+    expect(box.width).toBeGreaterThan(100);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+  }
+  await page.getByRole("region", { name: "Board filters", exact: true }).screenshot({ path: testInfo.outputPath(`state-lane-${width}.png`) });
+  await values.nth(1).selectOption("done");
+  await expect(page.locator(".board-card:visible")).toHaveCount(0);
+});
+
 test("filter picks, search and collapsed active badge survive reload and stay board-scoped", async ({ page, baseURL }) => {
   const { project, headers } = await fixture(page, baseURL!);
   await addFilter(page, "labels", "label:bug");
@@ -64,7 +121,7 @@ test("filter picks, search and collapsed active badge survive reload and stay bo
   const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other ${randomUUID()}` } })).json();
   await page.goto(`/projects/${other.slug}/board`);
   await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("");
-  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.goto(`/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
   await page.getByRole("button", { name: "Clear filters", exact: true }).click();
