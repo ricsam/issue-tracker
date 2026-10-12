@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import type { Issue, Project } from "../shared/types";
+import { addBoardFilter, clearBoardFilters } from "./board-filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 test.beforeAll(async ({ request, baseURL }) => {
@@ -47,6 +48,7 @@ test("empty and short lane targets stretch to tallest lane and accept low drops"
 
 test("board close preserves placement and failed selection, then retries only open issues", async ({ page, baseURL }) => {
   const { issues, endpoint } = await fixture(page, baseURL!);
+  await clearBoardFilters(page);
   const original = (await (await page.request.get(endpoint)).json()).board;
   await card(page, issues[0]).getByRole("checkbox").check();
   await card(page, issues[1]).getByRole("checkbox").check();
@@ -73,19 +75,17 @@ test("combined filters prune selection and never mutate board persistence", asyn
   const original = (await (await page.request.get(endpoint)).json()).board;
   const writes: string[] = [];
   page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
+  await clearBoardFilters(page);
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board", exact: true }).click();
   for (const [field, value] of [["state", "closed"], ["lane", "todo"], ["labels", "label:bug"], ["tagged", issues[1].authorId!], ["creator", `user:${issues[1].authorId}`]]) {
-    await page.getByRole("button", { name: "Add filter", exact: true }).click();
-    const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();
-    await row.getByLabel("Field", { exact: true }).selectOption(field);
-    await row.getByLabel("Value", { exact: true }).selectOption(value);
+    await addBoardFilter(page, field, value);
   }
   await page.getByRole("textbox", { name: "Search issues" }).fill(`!${issues[1].number}`);
   await expect(page.locator(".board-card")).toHaveCount(1);
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
   await expect(page.locator(".issue-selection-count")).toHaveText("1 selected");
-  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await clearBoardFilters(page);
+  await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
   await expect(page.locator(".board-card")).toHaveCount(6);
   await expect(page.locator(".issue-selection-count")).toHaveText("0 selected");
   expect(writes).toEqual([]);
@@ -97,6 +97,7 @@ test("combined filters prune selection and never mutate board persistence", asyn
 
 test("closing a selected draft requires confirmation and locks board changes while pending", async ({ page, baseURL }) => {
   const { issues } = await fixture(page, baseURL!);
+  await clearBoardFilters(page);
   await card(page, issues[0]).getByRole("link").click();
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("complementary", { name: "Issue details", exact: true }).getByRole("textbox", { name: "Issue", exact: true });

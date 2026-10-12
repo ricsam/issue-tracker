@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { Issue, Project, User } from "../shared/types";
 import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows, type IssueTableState } from "../src/lib/issue-table";
 import { normalizeIssueFilters, type IssueFilter, type IssueFilterField } from "../src/lib/issue-filters";
-import { issueTablePreferencesKey, parseIssueTablePreferences } from "../src/lib/issue-table-preferences";
+import { issueTablePreferencesKey, parseIssueTablePreferences, serializeIssueTablePreferences } from "../src/lib/issue-table-preferences";
 import { boardLaneKey, boardLaneOptions, issueBoardLanes } from "../src/lib/issue-board-lanes";
 import { defaultIssueColumns, issueColumnsStorageKey, moveIssueColumn, normalizeIssueColumns } from "../src/lib/issue-table-columns";
 
@@ -121,7 +121,8 @@ test("creator filters use identity rather than names or tagged users, combine wi
   expect(filtered({ creator: "" })).toEqual([1, 2, 3, 4, 5]);
   expect(hasColumnFilters(tableState({ creator: "user:a" }))).toBe(true);
   expect(hasColumnFilters(tableState({ creator: "unknown" }))).toBe(true);
-  expect(hasColumnFilters(initialIssueTableState)).toBe(false);
+  expect(hasColumnFilters(initialIssueTableState)).toBe(true);
+  expect(hasColumnFilters(tableState({}))).toBe(false);
 });
 
 test("table sorts without mutation and breaks ties by number", () => {
@@ -168,10 +169,38 @@ test("table filters and sort round trip with validated storage and account/proje
   expect(new Set(group.conditions.map((filter) => filter.id)).size).toBe(3);
   expect(group.conditions[2].value).toBe("");
   expect(group.conditions[2].valueTo).toBe("");
-  expect(parseIssueTablePreferences(JSON.stringify({ filters: { conditions: [condition("project", "p")] } }), false).filters.conditions).toEqual([]);
+  expect(parseIssueTablePreferences(JSON.stringify({ version: 2, filters: { conditions: [condition("project", "p")] } }), false).filters.conditions).toEqual([]);
   expect(issueTablePreferencesKey("a", "all")).not.toBe(issueTablePreferencesKey("b", "all"));
   expect(issueTablePreferencesKey("a", "all")).not.toBe(issueTablePreferencesKey("a", "project:p"));
   expect(issueTablePreferencesKey("a:b", "c")).not.toBe(issueTablePreferencesKey("a", "b:c"));
+});
+
+test("state defaults to open, can show both states and sorts in either direction", () => {
+  const rows = [issue(1, { state: "open" }), issue(2, { state: "closed" }), issue(3, { state: "open" })];
+  expect(numbers(issueTableRows(rows, users, initialIssueTableState))).toEqual([1, 3]);
+  const state = { ...initialIssueTableState, sort: "state" as const, filters: { conjunction: "and" as const, conditions: [] } };
+  expect(numbers(issueTableRows(rows, users, state))).toEqual([2, 1, 3]);
+  expect(numbers(issueTableRows(rows, users, { ...state, direction: "descending" }))).toEqual([1, 3, 2]);
+  expect(parseIssueTablePreferences(serializeIssueTablePreferences(state))).toEqual(state);
+  const closed = { ...state, filters: { conjunction: "and" as const, conditions: [condition("state", "closed")] } };
+  expect(parseIssueTablePreferences(serializeIssueTablePreferences(closed), false)).toEqual(closed);
+  expect(numbers(issueTableRows(rows, users, closed))).toEqual([2]);
+  expect(defaultIssueColumns(false)).toContainEqual({ key: "state", visible: true });
+  const oldColumns = defaultIssueColumns(false).filter(({ key }) => key !== "state");
+  expect(normalizeIssueColumns(oldColumns, false)).toContainEqual({ key: "state", visible: true });
+});
+
+test("table filters saved before the State chip keep their open-only list where possible", () => {
+  const open = initialIssueTableState.filters.conditions[0];
+  const legacy = (filters: IssueTableState["filters"]) => parseIssueTablePreferences(JSON.stringify({ sort: "title", direction: "descending", filters })).filters;
+  expect(legacy({ conjunction: "and", conditions: [] })).toEqual(initialIssueTableState.filters);
+  const tag = condition("labels", "label:bug");
+  expect(legacy({ conjunction: "and", conditions: [tag] })).toEqual({ conjunction: "and", conditions: [open, tag] });
+  // The former Open view wrapped OR groups, which one flat chip bar cannot express.
+  const either = { conjunction: "or" as const, conditions: [tag, condition("lane", "none")] };
+  expect(legacy(either)).toEqual(either);
+  const rows = [issue(1, { labels: ["bug"] }), issue(2, { labels: ["bug"], state: "closed" })];
+  expect(numbers(issueTableRows(rows, users, parseIssueTablePreferences(JSON.stringify({ filters: { conjunction: "and", conditions: [tag] } }))))).toEqual([1]);
 });
 
 test("table combines filters and includes both calendar date boundaries", () => {

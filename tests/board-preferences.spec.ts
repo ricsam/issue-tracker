@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
+import { addBoardFilter as addFilter, boardFilters, clearBoardFilters, filterEditor } from "./board-filter-helpers";
 
 async function fixture(page: Page, baseURL: string) {
   const headers = { Origin: baseURL };
@@ -15,16 +16,6 @@ async function fixture(page: Page, baseURL: string) {
   await page.goto(`/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
   return { project, endpoint, headers };
-}
-
-async function addFilter(page: Page, field: string, value: string, operator = "is") {
-  const toggle = page.getByRole("button", { name: /^Filter board/ });
-  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
-  await page.getByRole("button", { name: "Add filter", exact: true }).click();
-  const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();
-  await row.getByLabel("Field", { exact: true }).selectOption(field);
-  await row.getByLabel("Operator", { exact: true }).selectOption(operator);
-  await row.getByLabel("Value", { exact: true }).selectOption(value);
 }
 
 test("personal collapse persists without writes, prunes selection, skips keyboard targets and permits drops", async ({ page, baseURL }) => {
@@ -54,34 +45,34 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
 });
 
-test("filter panel defaults to collapsed and remembers both states independently per board", async ({ page, baseURL }) => {
+test("filters stay visible and remember independent conditions per board", async ({ page, baseURL }) => {
   const { project, headers } = await fixture(page, baseURL!);
-  const toggle = page.getByRole("button", { name: "Filter board", exact: true });
-  const builder = page.getByRole("button", { name: "Add filter", exact: true });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(builder).toBeHidden();
-  await toggle.click();
+  const builder = boardFilters(page).getByRole("button", { name: "Add filter", exact: true });
+  await expect(boardFilters(page)).toBeVisible();
   await expect(builder).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Filter board/ })).toHaveCount(0);
+  await expect(boardFilters(page).getByRole("button", { name: "Edit filter: State is Open", exact: true })).toBeVisible();
+  await addFilter(page, "lane", "todo");
   await page.reload();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(builder).toBeVisible();
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
 
-  const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other collapse ${randomUUID()}` } })).json();
+  const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other filters ${randomUUID()}` } })).json();
   await page.goto(`/projects/${other.slug}/board`);
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await toggle.click();
-  await toggle.click();
+  await expect(builder).toBeVisible();
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(1);
+  await addFilter(page, "lane", "done");
   await page.goto(`/projects/${project.slug}/board`);
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await toggle.click();
+  await expect(builder).toBeVisible();
+  await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Todo", exact: true })).toBeVisible();
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await clearBoardFilters(page);
   await page.reload();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(builder).toBeHidden();
-  const preferences = await page.evaluate((boardIds) => boardIds.map((boardId) => {
-    const key = Object.keys(localStorage).find((key) => key.startsWith("threadline:board-preferences:v1:") && key.endsWith(`:${encodeURIComponent(boardId)}`));
-    return key ? JSON.parse(localStorage.getItem(key)!).filtersExpanded : null;
-  }), [project.id, other.id]);
-  expect(preferences).toEqual([false, false]);
+  await expect(builder).toBeVisible();
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
+  await expect(page.locator(".board-card:visible")).toHaveCount(3);
+  await page.goto(`/projects/${other.slug}/board`);
+  await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Done", exact: true })).toBeVisible();
 });
 
 for (const width of [1440, 390]) test(`state and lane filter values are readable and usable at ${width}px`, async ({ page, baseURL }, testInfo) => {
@@ -90,49 +81,57 @@ for (const width of [1440, 390]) test(`state and lane filter values are readable
   expect((await page.request.patch(`/api/issues/${board.cards[0].issueId}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
   await page.reload();
   await page.setViewportSize({ width, height: 900 });
+  await clearBoardFilters(page);
   await addFilter(page, "state", "closed");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
   await addFilter(page, "lane", "todo");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
-  const values = page.getByRole("region", { name: "Board filters", exact: true }).getByLabel("Value", { exact: true });
-  await expect(values.nth(0)).toHaveValue("closed");
-  await expect(values.nth(1)).toHaveValue("todo");
-  for (const value of await values.all()) {
+  for (const [summary, expected] of [["State is Closed", "closed"], ["Lane is Todo", "todo"]]) {
+    await boardFilters(page).getByRole("button", { name: `Edit filter: ${summary}`, exact: true }).click();
+    const value = filterEditor(page).getByLabel("Value", { exact: true });
+    await expect(value).toHaveValue(expected);
     const box = (await value.boundingBox())!;
     expect(box.height).toBeLessThanOrEqual(50);
     expect(box.width).toBeGreaterThan(100);
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
   }
-  await page.getByRole("region", { name: "Board filters", exact: true }).screenshot({ path: testInfo.outputPath(`state-lane-${width}.png`) });
-  await values.nth(1).selectOption("done");
+  await boardFilters(page).screenshot({ path: testInfo.outputPath(`state-lane-${width}.png`) });
+  await boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Todo", exact: true }).click();
+  await filterEditor(page).getByLabel("Value", { exact: true }).selectOption("done");
+  await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(0);
 });
 
-test("filter picks, search and collapsed active badge survive reload and stay board-scoped", async ({ page, baseURL }) => {
+test("filter chips and search survive reload and stay board-scoped", async ({ page, baseURL }) => {
   const { project, headers } = await fixture(page, baseURL!);
   await addFilter(page, "labels", "label:bug");
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("preference");
-  await page.getByRole("button", { name: /Filter board 2 active/ }).click();
-  await expect(page.getByRole("button", { name: /Filter board 2 active · search/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(2);
   await page.reload();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await expect(page.getByRole("button", { name: /Filter board 2 active · search/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Tags is #bug", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("preference");
   const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other ${randomUUID()}` } })).json();
   await page.goto(`/projects/${other.slug}/board`);
   await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("");
-  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(boardFilters(page)).toBeVisible();
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(1);
   await page.goto(`/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await clearBoardFilters(page);
+  await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("");
-  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(boardFilters(page)).toBeVisible();
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
 });
 
 test("mobile filters support negative AND and OR conditions with stacked collapsed lanes", async ({ page, baseURL }, testInfo) => {
   await fixture(page, baseURL!);
+  await clearBoardFilters(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
   const columns = page.locator(".board-column");
@@ -145,47 +144,55 @@ test("mobile filters support negative AND and OR conditions with stacked collaps
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
   await addFilter(page, "lane", "done");
   await expect(page.locator(".board-card:visible")).toHaveCount(0);
-  await page.getByLabel("Combine filters", { exact: true }).selectOption("or");
+  await boardFilters(page).getByRole("switch", { name: "Match any filter (OR)", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  const box = (await page.getByRole("group", { name: "Filter 2", exact: true }).boundingBox())!;
+  const box = (await boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Done", exact: true }).boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: testInfo.outputPath("mobile-board-filter.png") });
   await page.reload();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await expect(page.getByLabel("Combine filters", { exact: true })).toHaveValue("or");
-  await page.getByRole("button", { name: /Filter board 2 active/ }).click();
-  await expect(page.getByRole("button", { name: /Filter board 2 active/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(boardFilters(page).getByRole("switch", { name: "Match any filter (OR)", exact: true })).toBeChecked();
+  await expect(boardFilters(page)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
 test("desktop negative filters combine with AND or OR and ignore drafts", async ({ page, baseURL }) => {
   await fixture(page, baseURL!);
+  await clearBoardFilters(page);
   await addFilter(page, "labels", "label:bug", "isNot");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
   await addFilter(page, "lane", "done");
   await expect(page.locator(".board-card:visible")).toHaveCount(0);
-  await page.getByLabel("Combine filters", { exact: true }).selectOption("or");
+  await boardFilters(page).getByRole("switch", { name: "Match any filter (OR)", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
   await page.getByRole("button", { name: "Add filter", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await expect(page.getByRole("button", { name: /Filter board 2 active/ })).toBeVisible();
+  await expect(filterEditor(page).getByLabel("Field", { exact: true })).toHaveValue("title");
+  await expect(filterEditor(page).getByLabel("Value", { exact: true })).toHaveValue("");
+  await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
   await page.reload();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(3);
-  await expect(page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Operator", { exact: true })).toHaveValue("isNot");
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(3);
+  await boardFilters(page).getByRole("button", { name: "Edit filter: Tags is not #bug", exact: true }).click();
+  await expect(filterEditor(page).getByLabel("Operator", { exact: true })).toHaveValue("isNot");
+  await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("done");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
-  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await clearBoardFilters(page);
+  await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("done");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
-  await page.getByRole("button", { name: "Add filter", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
-  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(0);
+  await boardFilters(page).getByRole("button", { name: "Add filter", exact: true }).click();
+  await expect(filterEditor(page)).toBeVisible();
+  await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
+  await expect(boardFilters(page).getByRole("button", { name: "Clear filters", exact: true })).toBeEnabled();
+  await clearBoardFilters(page);
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeDisabled();
+  await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
+  await expect(boardFilters(page).getByRole("button", { name: "Clear filters", exact: true })).toHaveCount(0);
 });
 
 test("legacy board preferences migrate on reload and persist when edited", async ({ page, baseURL }) => {
@@ -199,8 +206,10 @@ test("legacy board preferences migrate on reload and persist when edited", async
   }, project.id);
   await page.reload();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await expect(page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Value", { exact: true })).toHaveValue("label:bug");
-  await page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Operator", { exact: true }).selectOption("isNot");
+  await boardFilters(page).getByRole("button", { name: "Edit filter: Tags is #bug", exact: true }).click();
+  await expect(filterEditor(page).getByLabel("Value", { exact: true })).toHaveValue("label:bug");
+  await filterEditor(page).getByLabel("Operator", { exact: true }).selectOption("isNot");
+  await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
   await page.reload();
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
 });
@@ -233,6 +242,7 @@ test("archived boards allow personal collapse and filters but not shared edits",
   await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
   await expect(page.getByRole("button", { name: "Expand Todo lane", exact: true })).toBeEnabled();
+  await clearBoardFilters(page);
   await addFilter(page, "state", "closed");
   await expect(page.locator(".board-card:visible")).toHaveCount(0);
 });

@@ -44,7 +44,7 @@ export function IssueColumnConfig({ columns, includeProject, onSave, onClose, on
         })}
       </ol>
       <p className="sr-only" role="status">{announcement}</p>
-      <p className="muted issue-column-config-help">The Issue column stays visible so you can open issues. Hiding a column keeps its sorting and filters active.</p>
+      <p className="muted issue-column-config-help">The Issue column stays visible so you can open issues. Hiding a column keeps its sorting active. Filters are managed in the filter bar.</p>
       <div className="issue-column-config-actions">
         <Button type="button" variant="ghost" onClick={() => { setDraft(defaultIssueColumns(includeProject)); setAnnouncement("Default columns restored. Save columns to apply."); }}>Reset to defaults</Button>
         <div><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit">Save columns</Button></div>

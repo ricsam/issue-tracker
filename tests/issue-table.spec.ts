@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { filterEditor, openTableFilter } from "./filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 test.beforeAll(async ({ request, baseURL }) => {
@@ -86,9 +87,9 @@ test("table keyboard navigation and reversible ranges cross pages without confla
   await expect(table.locator("tbody input:checked")).toHaveCount(3);
   await expect(sidebar).toContainText("Item 10");
 
-  // Inputs and popovers retain their own keyboard behavior.
-  await table.getByRole("button", { name: "Issue filters", exact: true }).click();
-  const filter = table.getByLabel("Filter by issue", { exact: true });
+  // Filter editor inputs retain their own keyboard behavior.
+  const editor = await openTableFilter(page, "title");
+  const filter = editor.getByLabel("Filter by issue", { exact: true });
   await filter.fill("Item 0");
   await page.keyboard.press("ArrowDown");
   await expect(filter).toBeFocused();
@@ -112,7 +113,7 @@ test("table keyboard navigation and reversible ranges cross pages without confla
 });
 
 for (const width of [1440, 390]) {
-  test(`issue table sorts and combines column filters without page overflow at ${width}px`, async ({ page, baseURL }) => {
+  test(`issue table sorts and combines table filters without page overflow at ${width}px`, async ({ page, baseURL }) => {
     const headers = { Origin: baseURL! };
     const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Table ${randomUUID()}` } })).json();
     const { users } = await (await page.request.get("/api/users")).json();
@@ -133,7 +134,7 @@ for (const width of [1440, 390]) {
     const table = page.getByRole("table");
     const titles = table.locator("tbody .issue-link");
     await expect(titles).toHaveText(["Zebra", "Alpha", "Beta"]);
-    await expect(table.getByRole("columnheader")).toHaveCount(8);
+    await expect(table.getByRole("columnheader")).toHaveCount(9);
     await expect(table.locator(".issue-creator")).toHaveText(["Alex Morgan", "Alex Morgan", "Alex Morgan"]);
     await expect(table.locator(".avatar")).toHaveCount(0);
     await expect(table.locator("time").first()).toHaveAttribute("datetime", created[0].createdAt);
@@ -154,55 +155,63 @@ for (const width of [1440, 390]) {
     await table.getByRole("button", { name: "Sort by tagged users" }).click();
     await expect(titles).toHaveText(["Alpha", "Beta", "Zebra"]);
 
-    const labelFilters = table.getByRole("button", { name: "Tags filters", exact: true });
-    await labelFilters.focus();
+    const filters = page.getByRole("region", { name: "Table filters", exact: true });
+    await expect(filters).toBeVisible();
+    await expect(filters.getByRole("button", { name: "Edit filter: State is Open", exact: true })).toBeVisible();
+    await openTableFilter(page, "labels");
+    const editor = filterEditor(page);
+    await editor.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
+    await page.keyboard.press("Escape");
+    const tagChip = filters.getByRole("button", { name: "Edit filter: Tags is #bug", exact: true });
+    await expect(tagChip).toBeFocused();
     await page.keyboard.press("Enter");
-    const labelPopover = table.getByRole("dialog", { name: "Tags filters", exact: true });
-    await expect(labelPopover).toBeVisible();
-    await expect(table.getByLabel("Filter by tag", { exact: true })).toBeFocused();
-    const popoverBox = (await labelPopover.boundingBox())!;
-    expect(popoverBox.x).toBeGreaterThanOrEqual(0);
-    expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(width);
-    await page.screenshot({ path: `test-results/issue-filter-popover-${width}.png` });
-    await table.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
-    await page.keyboard.press("Escape");
-    await expect(labelPopover).toBeHidden();
-    await expect(table.getByRole("button", { name: "Tags filters (active)", exact: true })).toBeFocused();
-    await table.getByRole("button", { name: "Tags filters (active)", exact: true }).click();
-    await labelPopover.getByRole("button", { name: "Clear tags filter" }).click();
+    await expect(editor).toBeVisible();
+    await expect(editor.getByLabel("Field", { exact: true })).toBeFocused();
+    await expect(editor.getByLabel("Field", { exact: true })).toHaveValue("labels");
+    await expect(editor.getByLabel("Operator", { exact: true })).toHaveValue("is");
+    const editorBox = (await editor.boundingBox())!;
+    expect(editorBox.x).toBeGreaterThanOrEqual(0);
+    expect(editorBox.x + editorBox.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/issue-filter-editor-${width}.png` });
+    await editor.getByRole("button", { name: "Remove filter", exact: true }).click();
+    await expect(editor).toBeHidden();
+    await expect(tagChip).toHaveCount(0);
     await expect(titles).toHaveCount(3);
-    await table.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
-    await labelPopover.getByRole("button", { name: "Done", exact: true }).click();
-    await expect(labelPopover).toBeHidden();
-    await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
-    await table.getByLabel("Filter by tagged user").selectOption(alex.id);
+    await openTableFilter(page, "labels");
+    await editor.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
+    await editor.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(editor).toBeHidden();
+    await expect(tagChip).toBeFocused();
+    await openTableFilter(page, "tagged");
+    await editor.getByLabel("Filter by tagged user").selectOption(alex.id);
     await page.keyboard.press("Escape");
-    await table.getByRole("button", { name: "Issue filters", exact: true }).click();
-    await table.getByLabel("Filter by issue", { exact: true }).fill("zeb");
+    await openTableFilter(page, "title");
+    await editor.getByLabel("Filter by issue", { exact: true }).fill("zeb");
     await page.keyboard.press("Escape");
-    await table.getByRole("button", { name: "Number filters", exact: true }).click();
-    await table.getByLabel("Filter by number").fill(`!${created[0].number}`);
+    await openTableFilter(page, "number");
+    await editor.getByLabel("Filter by number").fill(`!${created[0].number}`);
     await page.keyboard.press("Escape");
     await expect(titles).toHaveText(["Zebra"]);
-    await table.getByRole("button", { name: "Created filters", exact: true }).click();
-    await table.getByLabel("Created on or after").fill("2000-01-01");
-    await table.getByLabel("Created on or before").fill("2000-01-02");
+    await openTableFilter(page, "created");
+    await editor.getByLabel("Created on or after").fill("2000-01-01");
+    await editor.getByLabel("Created on or before").fill("2000-01-02");
     await expect(titles).toHaveCount(0);
     await expect(table.getByText("No matching issues. Adjust or clear your filters.")).toBeVisible();
-    await expect(table.getByLabel("Created on or before")).toBeVisible();
+    await expect(editor.getByLabel("Created on or before")).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Clear column filters" }).click();
+    await expect(filters.getByRole("button", { name: "Edit filter: Created is in range 2000-01-01 – 2000-01-02", exact: true })).toBeVisible();
+    await filters.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(titles).toHaveCount(3);
-    await table.getByRole("button", { name: "Tags filters", exact: true }).click();
-    await table.getByLabel("Filter by tag", { exact: true }).selectOption("none");
+    await openTableFilter(page, "labels");
+    await editor.getByLabel("Filter by tag", { exact: true }).selectOption("none");
     await expect(titles).toHaveText(["Beta"]);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Clear column filters" }).click();
-    await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
-    await table.getByLabel("Filter by tagged user").selectOption("none");
+    await filters.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await openTableFilter(page, "tagged");
+    await editor.getByLabel("Filter by tagged user").selectOption("none");
     await expect(titles).toHaveText(["Alpha", "Beta"]);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Clear column filters" }).click();
+    await filters.getByRole("button", { name: "Clear filters", exact: true }).click();
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("Alex Morgan");
     await expect(titles).toHaveText(["Zebra"]);
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill(`!${created[0].number}`);
@@ -216,8 +225,8 @@ for (const width of [1440, 390]) {
 
     if (width === 1440) {
       // A new comment association updates the active table filter without a reload.
-      await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
-      await table.getByLabel("Filter by tagged user").selectOption("none");
+      await openTableFilter(page, "tagged");
+      await editor.getByLabel("Filter by tagged user").selectOption("none");
       await page.keyboard.press("Escape");
       await table.getByRole("link", { name: `!${created[1].number} Alpha`, exact: true }).click();
       const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
@@ -228,7 +237,7 @@ for (const width of [1440, 390]) {
       await expect(discussion.locator(".comment .mention-chip")).toContainText("Alex Morgan");
       await expect(titles).toHaveText(["Beta"]);
       await sidebar.getByRole("button", { name: "Close issue details" }).click();
-      await page.getByRole("button", { name: "Clear column filters" }).click();
+      await filters.getByRole("button", { name: "Clear filters", exact: true }).click();
       await expect(titles).toHaveCount(3);
     }
 

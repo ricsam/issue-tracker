@@ -51,6 +51,10 @@ test("issues are label-only; boards explicitly place, move and remove work in la
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath + "/board");
+  const filters = page.getByRole("region", { name: "Board filters", exact: true });
+  await expect(filters).toBeVisible();
+  await expect(filters.getByRole("button", { name: "Edit filter: State is Open", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Filter board/ })).toHaveCount(0);
   await expect(page.getByLabel("Filter by lane")).toHaveCount(0);
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-card")).toHaveCount(0);

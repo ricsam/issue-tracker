@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTableState } from "./filter-helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function seed(page: Page, baseURL: string) {
@@ -106,6 +107,6 @@ test("bulk close confirms pending drafts and keeps board membership", async ({ p
   const { issue } = await (await page.request.get(`/api/issues/${ids[0]}`)).json();
   expect(issue.state).toBe("closed");
   expect(issue.body).toBe("Alpha");
-  await page.getByRole("navigation", { name: "Issue state" }).getByRole("link", { name: /Closed/ }).click();
+  await setTableState(page, "closed");
   await expect(page.locator(".issue-row")).toHaveCount(2);
 });

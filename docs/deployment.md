@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.18.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.19.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.19.0
+
+Version 0.19.0 replaces the collapsible filter panels and per-column table filters with an always-visible horizontal bar of editable filter chips, an AND/OR switch, and **is one of** / **matches every** operators. Tables and boards start with **State is Open**, tables gain a sortable **State** column, and the separate Open/Closed list toggle is replaced by that filter; old `?state=closed` links still open closed issues. Saved filters migrate in each browser: the open-state filter is added unless a state was already chosen or active OR filters would be widened by it. Sidebar favorites become personally ordered **Pinned projects**, and unpinned projects are ordered by their latest issue update.
+
+Migration v15 runs once transactionally on startup. It adds a per-user pin position, initialized from each user's previous favorites order, plus indexes for pin order and issue activity, without removing favorites or changing issue content or history. New `/api/me/pinned-projects` routes support ordering; legacy favorites routes and clients keep working. No deployment-value change is required.
+
+Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration or run an older image against upgraded data:** recovery requires the pre-upgrade backup and matching image/chart, preserving newer writes separately first. Select the published SHA image matching this chart's release commit after CI succeeds. Publishing the chart does not automatically upgrade running deployments.
 
 ### Upgrading to 0.18.0
 

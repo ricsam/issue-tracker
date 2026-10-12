@@ -1,53 +1,20 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Filter, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3 } from "lucide-react";
 import type { BoardSettings, Issue, Project, User } from "../../shared/types";
 import type { IssueColumn, IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
 import { Tooltip } from "./ui/tooltip";
 import { useNotification } from "./ui/snackbar";
-import { ClosedTag } from "./lifecycle";
+import { IssueStateBadge } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
 import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
 import { useWorkspace } from "../lib/workspace";
 import { defaultIssueColumns, issueColumnsStorageKey, issueTableColumns, normalizeIssueColumns, type IssueColumnPreference } from "../lib/issue-table-columns";
 import { IssueColumnConfig } from "./issue-column-config";
 import { issuePageSizes, issuePageSizeStorageKey, normalizeIssuePageSize, readIssuePageSize } from "../lib/issue-pagination";
-import { emptyIssueFilters, isActiveIssueFilter, type IssueFilterGroup } from "../lib/issue-filters";
 import { FilterBuilder, type FilterFieldDefinition } from "./filter-builder";
 import "./issue-table.css";
-
-function FilterPopover({ label, active, onClear, children }: { label: string; active: boolean; onClear: () => void; children: ReactNode }) {
-  const id = useId();
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const position = () => {
-    if (!trigger.current || !panel.current) return;
-    const anchor = trigger.current.getBoundingClientRect();
-    const box = panel.current.getBoundingClientRect();
-    panel.current.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - box.width - 8))}px`;
-    panel.current.style.top = `${Math.max(8, Math.min(anchor.bottom + 6, window.innerHeight - box.height - 8))}px`;
-  };
-  useEffect(() => {
-    if (!open) return;
-    position();
-    panel.current?.querySelector<HTMLElement>("[data-filter-value], input, button")?.focus();
-    const observer = new ResizeObserver(position);
-    if (panel.current) observer.observe(panel.current);
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
-    return () => { observer.disconnect(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [open]);
-  return <>
-    <button ref={trigger} type="button" className={`column-filter-trigger${active ? " is-active" : ""}`} popoverTarget={id} aria-label={`${label} filters${active ? " (active)" : ""}`} aria-expanded={open} aria-controls={id} aria-haspopup="dialog"><Filter size={13} /></button>
-    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={`${label} filters`} className="issue-filter-popover" onToggle={(event) => setOpen(event.newState === "open")}>
-      <strong>{label} filters</strong>
-      {children}
-      <div className="filter-popover-actions"><Button type="button" variant="ghost" disabled={!active} onClick={onClear}>Clear {label.toLowerCase()} filter</Button><Button type="button" variant="ghost" onClick={() => { panel.current?.hidePopover(); trigger.current?.focus(); }}>Done</Button></div>
-    </div>
-  </>;
-}
 
 export function IssueTable({ issues, allIssues, users, projects, boardLanes, laneOptions, state, onChange, selectedId, controls, onOpen, onNavigate, paginationKey, preferenceScope, readOnly = false, onCloseIssues, onTagIssues, onLabelIssues, onBoardChanged }: {
   issues: Issue[]; allIssues: Issue[]; users: User[]; projects?: Project[]; state: IssueTableState;
@@ -171,9 +138,6 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     if (nextPage !== page) { focusAfterPage.current = issue.id; setPaging({ key: resetKey, page: nextPage }); }
     else links.current.get(issue.id)?.focus();
   };
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const filterPanelId = useId();
-  const filterCount = state.filters.conditions.filter(isActiveIssueFilter).length;
   const labels = [...new Set(allIssues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b));
   const patch = (value: Partial<IssueTableState>) => onChange({ ...state, ...value });
   const empty = (label: string) => <span className="muted empty-cell" aria-label={label}>—</span>;
@@ -181,7 +145,8 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   const cellContent = (issue: Issue, key: IssueColumn) => {
     switch (key) {
       case "number": return <>!{issue.number}</>;
-      case "title": return <Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong>{issue.state === "closed" && <ClosedTag />}</Link>;
+      case "state": return <IssueStateBadge state={issue.state} />;
+      case "title": return <Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong></Link>;
       case "project": {
         const project = projects?.find((candidate) => candidate.id === issue.projectId);
         return issue.projectId ? project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project" : <span className="muted">No project</span>;
@@ -201,6 +166,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   };
   const cellClasses: Partial<Record<IssueColumn, string>> = { number: "issue-number", project: "issue-project", lane: "issue-board-lane", creator: "issue-creator" };
   const fields: FilterFieldDefinition[] = [
+    { key: "state", label: "State", options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }] },
     { key: "lane", label: "Board lane", valueLabel: "Filter by board lane", options: [{ value: "none", label: "Not on board" }, ...laneOptions] },
     { key: "title", label: "Issue", kind: "text", valueLabel: "Filter by issue" },
     { key: "number", label: "Number", kind: "number", valueLabel: "Filter by number" },
@@ -210,30 +176,9 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     { key: "created", label: "Created", kind: "date", fromLabel: "Created on or after", toLabel: "Created on or before" },
     ...(projects ? [{ key: "project" as const, label: "Project", valueLabel: "Filter by project", options: [{ value: "none", label: "No project" }, ...projects.map((project) => ({ value: project.id, label: `${project.name}${project.archivedAt ? " (archived)" : ""}` }))] }] : []),
   ];
-  const columnFilter = (key: IssueColumn) => {
-    const conditions = state.filters.conditions.filter((filter) => filter.field === key);
-    // A draft may have been moved to another field in the full builder.
-    // Keep the placeholder's key stable while typing, but never reuse that rule's ID.
-    let draftId = `draft-${key}`;
-    while (state.filters.conditions.some((filter) => filter.id === draftId)) draftId += "-new";
-    const onColumnChange = (group: IssueFilterGroup) => {
-      const next = new Map(group.conditions.map((filter) => [filter.id, filter]));
-      const previousIds = new Set(conditions.map((filter) => filter.id));
-      patch({ filters: { conjunction: group.conjunction, conditions: [
-        ...state.filters.conditions.flatMap((filter) => filter.field !== key ? [filter] : next.has(filter.id) ? [next.get(filter.id)!] : []),
-        ...group.conditions.filter((filter) => !previousIds.has(filter.id)),
-      ] } });
-    };
-    return {
-      active: conditions.some(isActiveIssueFilter),
-      clear: () => patch({ filters: { ...state.filters, conditions: state.filters.conditions.filter((filter) => filter.field !== key) } }),
-      content: <FilterBuilder fixedField fields={fields.filter((field) => field.key === key)} value={{ ...state.filters, conditions: conditions.length ? conditions : [{ id: draftId, field: key, operator: "is", value: "" }] }} onChange={onColumnChange} />,
-    };
-  };
   return <section className="issue-table-section" aria-label="Issue list">
     <section className="table-filters" aria-label="Table filters">
-      <div className="table-filters-heading"><Button type="button" variant="ghost" aria-expanded={filtersExpanded} aria-controls={filterPanelId} onClick={() => setFiltersExpanded(!filtersExpanded)}>{filtersExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<Filter size={15} />Filter table{filterCount > 0 && <span className="board-filter-badge">{filterCount} active · {state.filters.conjunction.toUpperCase()}</span>}</Button></div>
-      {filtersExpanded && <div id={filterPanelId}><FilterBuilder fields={fields.map(({ valueLabel, fromLabel, toLabel, ...field }) => field)} value={state.filters} onChange={(filters) => patch({ filters })} /><p className="muted filter-builder-help">Filters are saved for you on this device.</p></div>}
+      <FilterBuilder fields={fields} value={state.filters} onChange={(filters) => patch({ filters })} />
     </section>
     <div className="issue-bulk-actions issue-table-actions" role="group" aria-label="Selected issue actions" aria-busy={pending}>
       <p className="issue-table-count muted">{issues.length} of {allIssues.length} issues</p>
@@ -246,7 +191,6 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
         <Button type="button" disabled={pending || readOnly} onClick={() => setSending(issues.filter((issue) => selected.includes(issue.id)))}>Send to board</Button>
         <Button type="button" variant="ghost" disabled={pending} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
       </>}
-      {(state.filters.conditions.length > 0 || state.filters.conjunction !== "and") && <Button type="button" variant="ghost" onClick={() => patch({ filters: { ...emptyIssueFilters, conditions: [] } })}>Clear column filters</Button>}
     </div>
     {configuringColumns && <IssueColumnConfig columns={columnPreferences} includeProject={includeProject} onSave={saveColumns} onClose={closeColumnConfig} onRestoreFocus={() => columnsButton.current?.focus({ preventScroll: true })} />}
     {sending && <SendToBoardDialog issues={sending} onClose={() => setSending(null)}
@@ -256,10 +200,10 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       }} />}
     <div className="issue-table-scroll" tabIndex={0} role="region" aria-label="Scrollable issues table" onKeyDown={keyboardNavigate}>
       <table className={`issue-table${projects ? " all-issues-table" : ""}`} style={{ minWidth: 42 + visibleColumns.reduce((width, column) => width + column.width, 0) }}>
-        <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, mention teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
+        <caption className="sr-only">Issues. Use column headings to sort and the filter bar to filter. Select issues to send to board lanes, add tags, mention teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
         <colgroup><col className="selection-column" />{visibleColumns.map(({ key, className, width }) => <col key={key} className={className} style={{ width: key === "title" ? undefined : width }} />)}</colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
-          {visibleColumns.map(({ key, label }) => { const filter = columnFilter(key); return <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filter.active} onClear={filter.clear}>{filter.content}</FilterPopover></div></th>; })}
+          {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button></div></th>)}
         </tr></thead>
         <tbody>{rows.map((issue) => <tr key={issue.id} onClickCapture={(event) => { if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).matches('input[type="checkbox"]')) return; event.preventDefault(); event.stopPropagation(); selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); }} className={`issue-row${selectedId === issue.id ? " is-selected" : ""}${selected.includes(issue.id) ? " is-bulk-selected" : ""}`}>
           <td><input type="checkbox" aria-label={`Select issue !${issue.number}`} checked={selected.includes(issue.id)} disabled={pending || !eligible.has(issue.id)} onChange={(event) => { if ((event.nativeEvent as globalThis.MouseEvent).shiftKey) { selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); return; } const checked = event.target.checked; activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: selected.filter((id) => id !== issue.id) }; setSelection((current) => checked ? [...new Set([...current, issue.id])] : current.filter((id) => id !== issue.id)); }} /></td>

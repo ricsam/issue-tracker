@@ -16,10 +16,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  CircleCheck,
   ChevronDown,
   ChevronRight,
-  CircleDot,
   Columns3,
   List,
   Plus,
@@ -67,7 +65,7 @@ import { issueTags } from "../lib/issue-tags";
 import { boardLaneOptions, issueBoardLanes } from "../lib/issue-board-lanes";
 import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib/board-order";
 import { boardArrowTarget, boardSelectionRange, type BoardArrow } from "../lib/board-selection";
-import { BoardFilters, emptyBoardFilters, matchesBoardFilters } from "../components/board-filters";
+import { BoardFilters, matchesBoardFilters } from "../components/board-filters";
 import { useBoardPreferences } from "../components/board-preferences";
 import "./board-order.css";
 import "./board-preferences.css";
@@ -100,10 +98,9 @@ export function IssuesPage() {
 function ProjectIssues({ slug }: { slug: string }) {
   const { refresh, user, users, projects } = useWorkspace();
   const all = !slug;
-  const listPath = all ? "/issues" : `/projects/${slug}`;
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
-  const showClosed = useSearchParams()[0].get("state") === "closed";
+  const [searchParams, setSearchParams] = useSearchParams();
   const desktop = useDesktopIssues();
   const currentDesktop = useRef(desktop);
   currentDesktop.current = desktop;
@@ -215,6 +212,18 @@ function ProjectIssues({ slug }: { slug: string }) {
   });
   const visibleBoardKey = JSON.stringify(visibleBoardCards.map((card) => card.issueId));
   const [tableState, setTableState] = useIssueTablePreferences(user.id, all ? "all" : project ? `project:${project.id}` : null);
+  // Older links to the closed list now initialize the visible State chip.
+  useEffect(() => {
+    const state = searchParams.get("state");
+    if (board || (!all && !project) || (state !== "open" && state !== "closed")) return;
+    setTableState({ ...tableState, filters: { ...tableState.filters, conditions: [
+      { id: "linked-state", field: "state", operator: "is", value: state },
+      ...tableState.filters.conditions.filter((filter) => filter.field !== "state" && filter.id !== "linked-state"),
+    ] } });
+    const next = new URLSearchParams(searchParams);
+    next.delete("state");
+    setSearchParams(next, { replace: true });
+  }, [board, all, project, searchParams]);
   const [open, setOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [editingAccess, setEditingAccess] = useState(false);
@@ -511,11 +520,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const hiddenCount = boardIssues.filter(
     (issue) => !boardSettings.lanes.includes(placements.get(issue.id)!),
   ).length;
-  // Closed issues keep their board placement but leave the open list.
-  const openIssues = issues.filter((issue) => issue.state === "open");
-  const closedIssues = issues.filter((issue) => issue.state === "closed");
-  const listIssues = showClosed ? closedIssues : openIssues;
-  const searched = (board ? boardIssues : listIssues).filter(
+  const searched = (board ? boardIssues : issues).filter(
     (i) =>
       (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
       `${i.title} ${i.number} ${i.labels.join(" ")} ${users.filter((user) => i.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`
@@ -721,27 +726,6 @@ function ProjectIssues({ slug }: { slug: string }) {
               Board
             </Link>
           </div>}
-          {!board && (
-            <nav className="view-toggle" aria-label="Issue state">
-              <Link
-                className={!showClosed ? "active" : ""}
-                aria-current={!showClosed ? "page" : undefined}
-                to={listPath}
-              >
-                <CircleDot size={15} />
-                Open <span className="toggle-count">{openIssues.length}</span>
-              </Link>
-              <Link
-                className={showClosed ? "active" : ""}
-                aria-current={showClosed ? "page" : undefined}
-                to={`${listPath}?state=closed`}
-              >
-                <CircleCheck size={15} />
-                Closed{" "}
-                <span className="toggle-count">{closedIssues.length}</span>
-              </Link>
-            </nav>
-          )}
           <div className="search-field">
             <Search size={16} />
             <input
@@ -772,10 +756,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           <span className="muted results-count">{filtered.length} issues</span>
         </div>
         {board && <BoardFilters value={boardFilters} onChange={setBoardFilters}
-          onClear={() => updateBoardPreferences({ filters: emptyBoardFilters, search: "" })}
-          lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving}
-          search={query} expanded={boardPreferences.filtersExpanded}
-          onExpandedChange={(filtersExpanded) => updateBoardPreferences({ filtersExpanded })} />}
+          lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving} />}
         <ErrorNotice error={error} />
         {board ? (
           <>
@@ -933,14 +914,14 @@ function ProjectIssues({ slug }: { slug: string }) {
           <IssueTable
             preferenceScope={project ? `project:${project.id}` : "all"}
             issues={filtered}
-            allIssues={listIssues}
+            allIssues={issues}
             users={users}
             projects={all ? projects : undefined}
             boardLanes={listBoardLanes}
             laneOptions={laneOptions}
             state={tableState}
             onChange={setTableState}
-            paginationKey={JSON.stringify([query, showClosed])}
+            paginationKey={query}
             readOnly={readOnly}
             onCloseIssues={closeIssues}
             selectedId={selectedId}

@@ -148,7 +148,12 @@ test("closed off-board and unlinked issues explain why they cannot be sent; arch
   const unlinked = await createIssue(page, baseURL!, null, "No board available");
   await post(page, baseURL!, `${boardPath(p)}/issues`, { issueIds: [member.id], lane: "todo" });
   for (const issue of [member, backlog]) await post(page, baseURL!, `/api/issues/${issue.id}`, { state: "closed" }, "PATCH");
-  await page.goto(`/projects/${p.slug}?state=closed`);
+  await page.goto(`/projects/${p.slug}`);
+  await page.getByRole("button", { name: "Edit filter: State is Open", exact: true }).click();
+  const filter = page.getByRole("dialog", { name: "Edit filter", exact: true });
+  await filter.getByLabel("Value", { exact: true }).selectOption("closed");
+  await filter.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.locator(".issue-row")).toHaveCount(2);
   await page.getByRole("checkbox", { name: "Select all issues on this page" }).check();
   await actions(page).getByRole("button", { name: "Send to board", exact: true }).click();
   await expect(modal(page)).toContainText("1 closed issue is not on this board");

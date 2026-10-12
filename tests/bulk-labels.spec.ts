@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { openTableFilter, setTableState } from "./filter-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import type { Issue } from "../shared/types";
 import { extractIssueLabels } from "../shared/labels";
@@ -123,7 +124,7 @@ test("bulk hashtags span pages, protect drafts, preserve latest bodies and retry
   expect(await fetchIssue(page, issues[0].id)).toEqual(first);
   expect(await fetchIssue(page, issues[10].id)).toEqual(last);
   await page.reload();
-  await page.getByRole("button", { name: "Tags filters", exact: true }).click();
+  await openTableFilter(page, "labels");
   await page.getByLabel("Filter by tag", { exact: true }).selectOption("label:triage");
   await page.keyboard.press("Escape");
   await expect(page.locator(".issue-row")).toHaveCount(2);
@@ -151,7 +152,8 @@ test("mobile board and closed-list selection can add hashtags without changing m
   expect((await (await page.request.get(boardEndpoint)).json()).board.cards).toHaveLength(3);
 
   expect((await page.request.patch(`/api/issues/${issues[0].id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}?state=closed`);
+  await page.goto(`/projects/${project.slug}`);
+  await setTableState(page, "closed");
   await select(page, issues[0].number).check();
   await page.getByRole("button", { name: "Tag", exact: true }).click();
   await dialog.getByRole("textbox", { name: "New tags", exact: true }).fill("#closed-tag");

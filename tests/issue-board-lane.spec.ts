@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import type { Issue, Project } from "../shared/types";
 import { boardLaneKey } from "../src/lib/issue-board-lanes";
+import { openTableFilter, setTableState } from "./filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 test.beforeAll(async ({ request, baseURL }) => {
@@ -14,8 +15,7 @@ test.beforeAll(async ({ request, baseURL }) => {
 test.beforeEach(async ({ context }) => { await context.addCookies(session.cookies); });
 const row = (page: Page, issue: Issue) => page.locator(".issue-row").filter({ has: page.locator(`a[data-issue-id="${issue.id}"]`) });
 async function filterLane(page: Page, value: string) {
-  await page.getByRole("button", { name: /^Board lane filters/ }).click();
-  const popover = page.getByRole("dialog", { name: "Board lane filters", exact: true });
+  const popover = await openTableFilter(page, "lane");
   await popover.getByRole("combobox", { name: "Filter by board lane" }).selectOption(value);
   await popover.getByRole("button", { name: "Done", exact: true }).click();
 }
@@ -57,11 +57,12 @@ for (const width of [1440, 390]) {
     await page.getByRole("textbox", { name: "Search issues" }).fill("");
     await filterLane(page, "none");
     await expect(row(page, issues[2])).toBeVisible();
-    await page.getByRole("button", { name: "Clear column filters" }).click();
+    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(page.locator(".issue-row")).toHaveCount(3);
     // Closed issues retain placement, so the column does not infer it from lifecycle state.
     await page.request.patch(`/api/issues/${issues[1].id}`, { headers, data: { state: "closed" } });
-    await page.goto(`/projects/${a.slug}?state=closed`);
+    await page.goto(`/projects/${a.slug}`);
+    await setTableState(page, "closed");
     await expect(row(page, issues[1]).locator(".issue-board-lane")).toHaveText("Review (hidden)");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
@@ -77,8 +78,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   await expect(page.locator(".issue-row")).toHaveCount(5);
   await expect(row(page, issues[3]).locator(".issue-board-lane")).toHaveText("Review");
   await expect(row(page, issues[3]).getByRole("checkbox")).toBeDisabled();
-  await page.getByRole("button", { name: /^Board lane filters/ }).click();
-  const popover = page.getByRole("dialog", { name: "Board lane filters", exact: true });
+  const popover = await openTableFilter(page, "lane");
   await expect(popover.getByRole("option", { name: `${a.name} · Review (hidden)`, exact: true })).toHaveAttribute("value", boardLaneKey(a.id, review));
   await expect(popover.getByRole("option", { name: `${b.name} · Review`, exact: true })).toHaveAttribute("value", boardLaneKey(b.id, otherReview));
   await popover.getByRole("combobox", { name: "Filter by board lane" }).selectOption(boardLaneKey(b.id, otherReview));
@@ -109,7 +109,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   await modal.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".issue-row")).toHaveCount(0);
   await sidebar.getByRole("button", { name: "Close issue details" }).click();
-  await page.getByRole("button", { name: "Clear column filters" }).click();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(row(page, issues[2]).locator(".issue-board-lane")).toHaveText("Todo");
 });
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { initialIssueTableState, type IssueTableState } from "./issue-table";
-import { issueFilterFields, normalizeIssueFilters } from "./issue-filters";
+import { filterPreferencesVersion, issueFilterFields, normalizeIssueFilters, withDefaultStateFilter } from "./issue-filters";
 
 export function issueTablePreferencesKey(userId: string, scope: string) {
   return `threadline:issue-table:v1:${encodeURIComponent(userId)}:${encodeURIComponent(scope)}`;
@@ -8,13 +8,19 @@ export function issueTablePreferencesKey(userId: string, scope: string) {
 export function parseIssueTablePreferences(raw: string | null, includeProject = true): IssueTableState {
   try {
     const value = JSON.parse(raw ?? "null");
-    const fields = issueFilterFields.filter((field) => field !== "state" && (includeProject || field !== "project"));
+    const fields = issueFilterFields.filter((field) => includeProject || field !== "project");
+    const saved = !!value?.filters && typeof value.filters === "object" && !Array.isArray(value.filters);
+    const filters = saved ? normalizeIssueFilters(value.filters, fields) : structuredClone(initialIssueTableState.filters);
     return {
       sort: fields.includes(value?.sort) ? value.sort : initialIssueTableState.sort,
       direction: value?.direction === "descending" ? "descending" : "ascending",
-      filters: normalizeIssueFilters(value?.filters, fields),
+      // Older lists applied their Open/Closed view outside the saved conditions.
+      filters: saved && value.version !== filterPreferencesVersion ? withDefaultStateFilter(filters) : filters,
     };
-  } catch { return { ...initialIssueTableState, filters: { conjunction: "and", conditions: [] } }; }
+  } catch { return { ...initialIssueTableState, filters: structuredClone(initialIssueTableState.filters) }; }
+}
+export function serializeIssueTablePreferences(state: IssueTableState) {
+  return JSON.stringify({ ...state, version: filterPreferencesVersion });
 }
 function load(key: string | null, includeProject: boolean) {
   try { return parseIssueTablePreferences(key ? localStorage.getItem(key) : null, includeProject); }
@@ -28,7 +34,7 @@ export function useIssueTablePreferences(userId: string, scope: string | null) {
   const value = stored.key === key ? stored.value : load(key, includeProject);
   if (stored.key !== key) setStored({ key, value });
   function update(next: IssueTableState) {
-    try { if (key) localStorage.setItem(key, JSON.stringify(next)); } catch { /* Keep filters usable when storage is blocked or full. */ }
+    try { if (key) localStorage.setItem(key, serializeIssueTablePreferences(next)); } catch { /* Keep filters usable when storage is blocked or full. */ }
     setStored({ key, value: next });
   }
   return [value, update] as const;

@@ -227,6 +227,8 @@ test("board counts include closed and hidden issues, stay stable under search, a
   await page.getByRole("textbox", { name: "Search issues" }).fill("no match");
   await expect(summary).toHaveText("7 of 8 issues assigned to board · 1 unassigned · 2 lanes · 2 issues in hidden lanes");
   await page.getByRole("textbox", { name: "Search issues" }).fill("");
+  await page.getByRole("region", { name: "Board filters", exact: true }).getByRole("button", { name: "Remove filter: State is Open", exact: true }).click();
+  await expect(summary).toHaveText("7 of 8 issues assigned to board · 1 unassigned · 2 lanes · 2 issues in hidden lanes");
   await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await page.getByRole("menuitem", { name: "Remove from board", exact: true }).click();
   await expect(summary).toHaveText("6 of 8 issues assigned to board · 2 unassigned · 2 lanes · 2 issues in hidden lanes");

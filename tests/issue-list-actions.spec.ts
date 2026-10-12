@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { openTableFilter, setTableState } from "./filter-helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function seed(page: Page, baseURL: string, count = 31) {
@@ -73,12 +74,12 @@ for (const width of [1440, 1060, 390]) {
     expect((await bar.boundingBox())!.height).toBe(initialHeight);
     expect(await tableOffset()).toBe(initialTableOffset);
 
-    // Filtering keeps the count and clear-filter action in the same permanent bar.
-    await page.getByRole("button", { name: "Tags filters", exact: true }).click();
+    // Filtering updates the count; clearing lives in the permanent filter bar.
+    await openTableFilter(page, "labels");
     await page.getByLabel("Filter by tag", { exact: true }).selectOption("label:keep");
     await page.keyboard.press("Escape");
     await expect(bar.getByText("2 of 12 issues", { exact: true })).toBeVisible();
-    await bar.getByRole("button", { name: "Clear column filters", exact: true }).click();
+    await page.getByRole("region", { name: "Table filters", exact: true }).getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(bar.getByText("12 of 12 issues", { exact: true })).toBeVisible();
   });
 }
@@ -103,13 +104,13 @@ test("pagination, cross-page selection and hidden-row reconciliation", async ({ 
   await page.getByRole("checkbox", { name: "Select all issues on this page" }).uncheck();
   await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
-  await page.getByRole("button", { name: "Tags filters", exact: true }).click();
+  await openTableFilter(page, "labels");
   await page.getByLabel("Filter by tag", { exact: true }).selectOption("label:keep");
   await page.keyboard.press("Escape");
   await expect(pagination).toContainText("Page 1 of 1");
   await expect(rows).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Close selected issues" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Clear column filters" }).click();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await page.getByRole("button", { name: "Sort by issue", exact: true }).click();
   await expect(pagination).toContainText("Page 1 of 2");
@@ -118,10 +119,10 @@ test("pagination, cross-page selection and hidden-row reconciliation", async ({ 
   await expect(pagination).toContainText("Page 1 of 1");
   await page.getByRole("checkbox", { name: `Select issue !${numbers[0]}`, exact: true }).check();
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");
-  await page.getByRole("navigation", { name: "Issue state", exact: true }).getByRole("link", { name: /Closed/ }).click();
+  await setTableState(page, "closed");
   await expect(pagination).toContainText("0–0 of 0");
   await expect(page.getByRole("button", { name: "Close selected issues" })).toHaveCount(0);
-  await page.getByRole("navigation", { name: "Issue state", exact: true }).getByRole("link", { name: /Open/ }).click();
+  await setTableState(page, "open");
   await page.getByLabel("Rows per page").selectOption("10");
   await expect(rows).toHaveCount(10);
   await expect(pagination).toContainText("Page 1 of 4");
@@ -165,13 +166,14 @@ test("bulk close keeps failures selected, disables duplicate actions and clamps 
 test("closed issues can be selected for tagging but not closing; archived issues cannot be selected", async ({ page, baseURL }) => {
   const { project, ids, headers, numbers } = await seed(page, baseURL!, 2);
   expect((await page.request.patch(`/api/issues/${ids[0]}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}?state=closed`);
+  await page.reload();
+  await setTableState(page, "closed");
   await page.getByRole("checkbox", { name: `Select issue !${numbers[0]}`, exact: true }).check();
   await expect(page.getByRole("checkbox", { name: "Select all issues on this page" })).toBeChecked();
   await expect(page.getByRole("button", { name: "Close selected issues" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Mention", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Tag", exact: true })).toBeEnabled();
-  await page.goto(`/projects/${project.slug}`);
+  await setTableState(page, "open");
   await page.getByRole("checkbox", { name: `Select issue !${numbers[1]}`, exact: true }).check();
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await page.getByRole("dialog", { name: "Archive project?" }).getByRole("button", { name: "Archive project", exact: true }).click();

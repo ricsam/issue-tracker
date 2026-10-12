@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { openTableFilter } from "./filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 let userId: string;
@@ -24,11 +25,11 @@ for (const width of [320, 390, 1440]) {
     await page.goto(`/projects/${project.slug}`);
     const table = page.getByRole("table");
     const headings = table.locator(".column-sort");
-    const initial = ["Number", "Issue", "Board lane", "Tags", "Tagged users", "Creator", "Created"];
+    const initial = ["Number", "Issue", "State", "Board lane", "Tags", "Tagged users", "Creator", "Created"];
     await expect(headings).toHaveText(initial);
     await table.getByLabel(`Select issue !${issue.number}`, { exact: true }).check();
-    await table.getByRole("button", { name: "Tags filters", exact: true }).click();
-    await table.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
+    const tagEditor = await openTableFilter(page, "labels");
+    await tagEditor.getByLabel("Filter by tag", { exact: true }).selectOption("label:bug");
     await page.keyboard.press("Escape");
     const configure = page.getByRole("button", { name: "Columns", exact: true });
     await configure.click();
@@ -40,7 +41,7 @@ for (const width of [320, 390, 1440]) {
     await dialog.getByRole("button", { name: "Move Created column up", exact: true }).click();
     await page.keyboard.press("Enter");
     await expect(dialog.getByRole("button", { name: "Move Created column up", exact: true })).toBeFocused();
-    await expect(dialog.getByRole("listitem").nth(4)).toContainText("Created");
+    await expect(dialog.getByRole("listitem").nth(5)).toContainText("Created");
     const box = (await dialog.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
@@ -53,11 +54,14 @@ for (const width of [320, 390, 1440]) {
     await dialog.getByRole("button", { name: "Save columns", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(configure).toBeFocused();
-    const saved = ["Number", "Issue", "Board lane", "Created", "Tagged users", "Creator"];
+    const saved = ["Number", "Issue", "State", "Board lane", "Created", "Tagged users", "Creator"];
     await expect(headings).toHaveText(saved);
-    expect(await table.locator("tbody tr").first().locator("td[data-column]").evaluateAll((cells) => cells.map((cell) => cell.getAttribute("data-column")))).toEqual(["number", "title", "lane", "created", "tagged", "creator"]);
+    expect(await table.locator("tbody tr").first().locator("td[data-column]").evaluateAll((cells) => cells.map((cell) => cell.getAttribute("data-column")))).toEqual(["number", "title", "state", "lane", "created", "tagged", "creator"]);
     await expect(table.locator("tbody input:checked")).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Clear column filters", exact: true })).toBeVisible();
+    const filters = page.getByRole("region", { name: "Table filters", exact: true });
+    await expect(filters.getByRole("button", { name: "Edit filter: Tags is #bug", exact: true })).toBeVisible();
+    await expect(filters.getByRole("button", { name: "Edit filter: State is Open", exact: true })).toBeVisible();
+    await expect(filters.getByRole("button", { name: "Clear filters", exact: true })).toBeVisible();
     await configure.click();
     await dialog.getByLabel("Show Number column", { exact: true }).uncheck();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -76,7 +80,7 @@ for (const width of [320, 390, 1440]) {
     await page.getByRole("link", { name: "List", exact: true }).click();
     await expect(headings).toHaveText(saved);
     await configure.click();
-    for (const label of ["Number", "Board lane", "Tagged users", "Creator", "Created"]) await dialog.getByLabel(`Show ${label} column`, { exact: true }).uncheck();
+    for (const label of ["Number", "State", "Board lane", "Tagged users", "Creator", "Created"]) await dialog.getByLabel(`Show ${label} column`, { exact: true }).uncheck();
     await dialog.getByRole("button", { name: "Save columns", exact: true }).click();
     await expect(headings).toHaveText(["Issue"]);
     await expect(table).toHaveCSS("min-width", "322px");
@@ -88,7 +92,7 @@ for (const width of [320, 390, 1440]) {
     } else await page.getByRole("button", { name: "Close issue details", exact: true }).click();
     await expect(headings).toHaveText(["Issue"]);
     await page.goto("/issues");
-    await expect(headings).toHaveText(["Number", "Issue", "Project", ...initial.slice(2)]);
+    await expect(headings).toHaveText([...initial.slice(0, 3), "Project", ...initial.slice(3)]);
     await configure.click();
     await dialog.getByLabel("Show Project column", { exact: true }).uncheck();
     await dialog.getByRole("button", { name: "Save columns", exact: true }).click();
@@ -111,7 +115,7 @@ test("invalid or inaccessible storage does not break the table or configuration"
   await page.goto(`/projects/${project.slug}`);
   await page.evaluate((id) => localStorage.setItem(`threadline:issue-columns:v1:${encodeURIComponent(id)}:project`, "not-json"), userId);
   await page.reload();
-  await expect(page.getByRole("table").locator(".column-sort")).toHaveCount(7);
+  await expect(page.getByRole("table").locator(".column-sort")).toHaveCount(8);
   await page.addInitScript(() => {
     Storage.prototype.getItem = () => { throw new Error("Storage unavailable"); };
     Storage.prototype.setItem = () => { throw new Error("Storage unavailable"); };
@@ -122,6 +126,6 @@ test("invalid or inaccessible storage does not break the table or configuration"
   await dialog.getByLabel("Show Number column", { exact: true }).uncheck();
   await dialog.getByRole("button", { name: "Save columns", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("table").locator(".column-sort")).toHaveCount(6);
+  await expect(page.getByRole("table").locator(".column-sort")).toHaveCount(7);
   await expect(page.getByText("Columns updated for this visit, but browser storage is unavailable.")).toBeVisible();
 });

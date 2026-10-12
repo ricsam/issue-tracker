@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { openTableFilter, setTableState } from "./filter-helpers";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
@@ -27,8 +28,7 @@ async function createDraft(page: Page, body: string) {
   return href;
 }
 async function filterProject(page: Page, value: string) {
-  await page.getByRole("button", { name: /^Project filters/ }).click();
-  const filter = page.getByRole("dialog", { name: "Project filters", exact: true });
+  const filter = await openTableFilter(page, "project");
   await filter.getByRole("combobox", { name: "Filter by project" }).selectOption(value);
   await filter.getByRole("button", { name: "Done", exact: true }).click();
 }
@@ -85,7 +85,7 @@ test("sidebar creation works without a project, switches projects, and unlinked 
   await filterProject(page, p.id);
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("linked");
-  await page.getByRole("button", { name: "Clear column filters" }).click();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(rows(page)).toHaveCount(3);
 });
 
@@ -152,11 +152,11 @@ test("all issues combines project filtering and bulk actions while archived rows
   await expect(page.locator(".issue-selection-count")).toHaveText("1 selected");
   await page.getByRole("button", { name: "Close selected issues" }).click();
   await expect(rows(page)).toHaveCount(0);
-  await page.getByRole("link", { name: /^Closed \d/ }).click();
+  await setTableState(page, "closed");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("unlinked");
-  await page.getByRole("button", { name: "Clear column filters" }).click();
-  await page.getByRole("link", { name: /^Open \d/ }).click();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await setTableState(page, "open");
   await filterProject(page, archived.id);
   await expect(rows(page)).toHaveCount(1);
   await rows(page).getByRole("link", { name: /!\d+ Filter/ }).click();

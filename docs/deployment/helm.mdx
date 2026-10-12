@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.18.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.19.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,11 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.18.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.18.0 adds persistent AND/OR and negative board/table filters, collapsed-by-default board filters with a saved per-board choice, compact picker controls, and selection actions that appear only when issues are selected. **Mention** adds user mentions and **Tag** adds labels, with explanatory tooltips. Existing board filter selections migrate to equivalent AND conditions. No database migration, API change, or deployment-value change is added by this release.
+Verify `0.19.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.19.0 adds an always-visible horizontal filter bar with editable chips, an AND/OR switch, and **is one of** / **matches every** operators. Tables and boards default to **State is Open**, and tables gain a **State** column. Sidebar favorites become reorderable personal **Pinned projects**, with other projects ordered by latest issue activity.
+
+Migration v15 adds a per-user pin order, initialized from existing favorites, and activity indexes without removing favorites or changing issue content. Back up `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration;** recovery requires restoring a pre-upgrade backup with its matching application. No deployment-value changes are required.
+
+When upgrading from before 0.19.0, version 0.18.0 also adds persistent AND/OR and negative board/table filters, compact picker controls, and selection actions that appear only when issues are selected. **Mention** adds user mentions and **Tag** adds labels, with explanatory tooltips. Existing board filter selections migrate to equivalent filters.
 
 When upgrading from before 0.17.0, public/private projects, ownership, explicit sharing, and full administrator access are also included. Public means signed-in workspace access, not anonymous access. Owners and administrators manage access; authorized members retain collaboration.
 
@@ -53,7 +57,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.18.0 --namespace issue-tracker \
+  --version 0.19.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -93,9 +97,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.18.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.19.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.18.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.19.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTableState } from "./filter-helpers";
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { issuePageSizeStorageKey } from "../src/lib/issue-pagination";
 
@@ -32,7 +33,7 @@ test("rows per page persists per list across navigation, reload, view changes an
   await expect(page.getByText("Page 1 of 1", { exact: true })).toBeVisible();
   await page.reload();
   await expect(rows).toHaveValue("50");
-  await page.getByRole("link", { name: /^Closed/ }).click();
+  await setTableState(page, "closed");
   await expect(rows).toHaveValue("50");
   await page.goto(`/projects/${b.slug}`);
   await expect(rows).toHaveValue("25");

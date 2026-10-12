@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import type { Issue, User } from "../shared/types";
+import { openTableFilter, filterEditor } from "./filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 test.beforeAll(async ({ request, baseURL }) => {
@@ -44,18 +45,19 @@ for (const all of [false, true]) {
     await expect(table.locator('th[aria-sort="ascending"]')).toContainText("Creator");
     await table.getByRole("button", { name: "Sort by creator", exact: true }).click();
     await expect(titles).toHaveText(["Unknown creator", "Created by Bea", "Created by Alex"]);
-    await table.getByRole("button", { name: "Creator filters", exact: true }).click();
-    const filter = table.getByLabel("Filter by creator", { exact: true });
+    await openTableFilter(page, "creator");
+    const filter = filterEditor(page).getByLabel("Filter by creator", { exact: true });
+    await filter.focus();
     await expect(filter).toBeFocused();
     await filter.selectOption(`user:${alex.id}`);
     await expect(titles).toHaveText(["Created by Alex"]);
-    await page.getByRole("dialog", { name: "Creator filters", exact: true }).getByRole("button", { name: "Clear creator filter", exact: true }).click();
+    await filter.selectOption("");
     await expect(titles).toHaveCount(3);
     await filter.selectOption("unknown");
-    await page.getByRole("dialog", { name: "Creator filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+    await filterEditor(page).getByRole("button", { name: "Done", exact: true }).click();
     await expect(titles).toHaveText(["Unknown creator"]);
-    await expect(table.getByRole("button", { name: "Creator filters (active)", exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "Clear column filters", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Edit filter: Creator is / })).toBeFocused();
+    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await expect(titles).toHaveText(["Unknown creator", "Created by Bea", "Created by Alex"]);
     await expect(table.locator('th[aria-sort="descending"]')).toContainText("Creator");
   });

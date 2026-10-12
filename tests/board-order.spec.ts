@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import type { Issue, Project } from "../shared/types";
+import { clearBoardFilters } from "./board-filter-helpers";
 
 let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
 test.beforeAll(async ({ request, baseURL }) => {
@@ -125,6 +126,7 @@ test("failed reorders retain selection/order for retry and closed cards stay reo
   const { project, issues, endpoint, headers } = await fixture(page, baseURL!);
   await page.request.patch(`/api/issues/${issues[2].id}`, { headers, data: { state: "closed" } });
   await page.reload();
+  await clearBoardFilters(page);
   await card(page, issues[2]).getByRole("checkbox").check();
   await page.route(`**${endpoint}/issues/reorder`, (route) => route.fulfill({ status: 409, json: { error: "Destination changed" } }));
   await menuMove(page, issues[2], "Move to top");

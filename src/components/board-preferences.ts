@@ -1,15 +1,14 @@
 import { useState } from "react";
-import { boardFilterFields, emptyBoardFilters, type BoardFilterState } from "./board-filters";
-import { normalizeIssueFilters, type IssueFilter } from "../lib/issue-filters";
+import { boardFilterFields, type BoardFilterState } from "./board-filters";
+import { defaultIssueFilters, filterPreferencesVersion, normalizeIssueFilters, withDefaultStateFilter, type IssueFilter } from "../lib/issue-filters";
 
 export interface BoardPreferences {
   filters: BoardFilterState;
   search: string;
-  filtersExpanded: boolean;
   collapsedLanes: string[];
 }
 export function defaultBoardPreferences(): BoardPreferences {
-  return { filters: { ...emptyBoardFilters, conditions: [] }, search: "", filtersExpanded: false, collapsedLanes: [] };
+  return { filters: structuredClone(defaultIssueFilters), search: "", collapsedLanes: [] };
 }
 export function boardPreferencesKey(userId: string, boardId: string) {
   return `threadline:board-preferences:v1:${encodeURIComponent(userId)}:${encodeURIComponent(boardId)}`;
@@ -17,7 +16,7 @@ export function boardPreferencesKey(userId: string, boardId: string) {
 const strings = (value: unknown): string[] => Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string"))] : [];
 /** Keep the v1 storage key and migrate each old selection to its own AND condition. */
 function parseFilters(raw: unknown): BoardFilterState {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...emptyBoardFilters, conditions: [] };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return structuredClone(defaultIssueFilters);
   if ("conditions" in raw || "conjunction" in raw) return normalizeIssueFilters(raw, boardFilterFields);
   const legacy = raw as Record<string, unknown>;
   const conditions: IssueFilter[] = [];
@@ -36,13 +35,17 @@ export function parseBoardPreferences(raw: string | null): BoardPreferences {
   try {
     const value = JSON.parse(raw ?? "null");
     if (!value || typeof value !== "object") return fallback;
+    const filters = parseFilters(value.filters);
     return {
-      filters: parseFilters(value.filters),
+      // Older boards defaulted to all states; add the visible open default where it only narrows.
+      filters: value.version === filterPreferencesVersion ? filters : withDefaultStateFilter(filters),
       search: typeof value.search === "string" ? value.search : "",
-      filtersExpanded: typeof value.filtersExpanded === "boolean" ? value.filtersExpanded : fallback.filtersExpanded,
       collapsedLanes: strings(value.collapsedLanes),
     };
   } catch { return fallback; }
+}
+export function serializeBoardPreferences(preferences: BoardPreferences) {
+  return JSON.stringify({ ...preferences, version: filterPreferencesVersion });
 }
 function load(key: string | null) {
   try { return parseBoardPreferences(key ? localStorage.getItem(key) : null); }
@@ -57,7 +60,7 @@ export function useBoardPreferences(userId: string, boardId?: string) {
   function update(patch: Partial<BoardPreferences>) {
     setStored((current) => {
       const next = { ...(current.key === key ? current.value : load(key)), ...patch };
-      try { if (key) localStorage.setItem(key, JSON.stringify(next)); } catch { /* Privacy/quota restrictions must not break controls. */ }
+      try { if (key) localStorage.setItem(key, serializeBoardPreferences(next)); } catch { /* Privacy/quota restrictions must not break controls. */ }
       return { key, value: next };
     });
   }

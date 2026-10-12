@@ -3,6 +3,7 @@ import type { IssueColumn } from "./issue-table";
 export const issueTableColumns: { key: IssueColumn; label: string; width: number; className: string }[] = [
   { key: "number", label: "Number", width: 125, className: "number-column" },
   { key: "title", label: "Issue", width: 280, className: "title-column" },
+  { key: "state", label: "State", width: 110, className: "state-column" },
   { key: "project", label: "Project", width: 180, className: "project-column" },
   { key: "lane", label: "Board lane", width: 175, className: "lane-column" },
   { key: "labels", label: "Tags", width: 145, className: "labels-column" },

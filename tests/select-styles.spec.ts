@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { openTableFilter } from "./filter-helpers";
 import { test, expect, type Locator } from "@playwright/test";
 
 async function expectChevron(select: Locator, compact = false) {
@@ -44,24 +45,14 @@ for (const width of [1440, 390]) {
 
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/projects/${project.slug}/board`);
-    // The retained searchable picker uses native selection inputs. Global text-field
-    // styles must not make radios full-width or push option labels offscreen.
-    await page.evaluate(() => {
-      const dialog = document.createElement("section");
-      dialog.id = "picker-style-fixture";
-      dialog.className = "board-filter-dialog";
-      dialog.style.cssText = "position: fixed; top: 80px; left: 12px";
-      dialog.innerHTML = `<div class="board-filter-options">
-        <label class="board-filter-option"><input type="radio" name="state-style" checked><span>Open</span></label>
-        <label class="board-filter-option"><input type="radio" name="state-style"><span>Closed</span></label>
-        <label class="board-filter-option"><input type="radio" name="lane-style"><span>In progress</span></label>
-        <label class="board-filter-option"><input type="checkbox"><span>A longer lane label that should wrap rather than overflow the options</span></label>
-      </div>`;
-      document.body.append(dialog);
-    });
-    const picker = page.locator("#picker-style-fixture");
+    // Exercise the real multi-value popover, not the retired board picker.
+    await page.getByRole("button", { name: "Edit filter: State is Open", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Edit filter", exact: true });
+    await expectChevron(picker.getByLabel("Field", { exact: true }));
+    await expectChevron(picker.getByLabel("Operator", { exact: true }));
+    await picker.getByLabel("Operator", { exact: true }).selectOption("isOneOf");
     const pickerBox = (await picker.boundingBox())!;
-    for (const option of await picker.locator("label").all()) {
+    for (const option of await picker.locator(".filter-value-options label").all()) {
       const control = (await option.locator("input").boundingBox())!;
       const text = (await option.locator("span").boundingBox())!;
       expect(control.width).toBe(16);
@@ -70,11 +61,11 @@ for (const width of [1440, 390]) {
       expect(text.x + text.width).toBeLessThanOrEqual(pickerBox.x + pickerBox.width);
       expect((await option.boundingBox())!.height).toBeLessThan(90);
     }
-    expect(await picker.locator(".board-filter-options").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
-    await picker.getByRole("radio", { name: "Closed", exact: true }).check();
-    await expect(picker.getByRole("radio", { name: "Open", exact: true })).not.toBeChecked();
+    expect(await picker.locator(".filter-value-options").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+    await picker.getByRole("checkbox", { name: "Closed", exact: true }).check();
+    await expect(picker.getByRole("checkbox", { name: "Open", exact: true })).toBeChecked();
     await picker.screenshot({ path: testInfo.outputPath("picker-inputs.png") });
-    await picker.evaluate((element) => element.remove());
+    await picker.getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Add issues", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Add issues to board" });
     const lane = dialog.getByLabel("Lane", { exact: true });
@@ -97,7 +88,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".board-column").filter({ has: page.getByRole("heading", { name: /^Done/ }) }).locator(".board-card")).toHaveCount(1);
 
     await page.goto(`/projects/${project.slug}`);
-    await page.getByRole("button", { name: "Tagged users filters", exact: true }).click();
+    await openTableFilter(page, "tagged");
     const tagged = page.getByRole("combobox", { name: "Filter by tagged user", exact: true });
     await expectChevron(tagged);
     await tagged.focus();

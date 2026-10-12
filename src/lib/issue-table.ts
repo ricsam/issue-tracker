@@ -1,9 +1,9 @@
 import type { Issue, Project, User } from "../../shared/types";
 import type { IssueBoardLane } from "./issue-board-lanes";
-import { emptyIssueFilters, isActiveIssueFilter, matchesIssueFilters, type IssueFilterGroup } from "./issue-filters";
+import { defaultIssueFilters, isActiveIssueFilter, matchesIssueFilters, type IssueFilterGroup } from "./issue-filters";
 export { issueDateKey } from "./issue-filters";
 
-export type IssueColumn = "number" | "title" | "labels" | "tagged" | "creator" | "created" | "project" | "lane";
+export type IssueColumn = "number" | "title" | "labels" | "tagged" | "creator" | "created" | "project" | "lane" | "state";
 export interface IssueTableState {
   sort: IssueColumn;
   direction: "ascending" | "descending";
@@ -12,7 +12,7 @@ export interface IssueTableState {
 export const initialIssueTableState: IssueTableState = {
   sort: "number",
   direction: "ascending",
-  filters: emptyIssueFilters,
+  filters: defaultIssueFilters,
 };
 
 export function hasColumnFilters(state: IssueTableState) {
@@ -28,6 +28,7 @@ export function issueTableRows(issues: Issue[], users: User[], state: IssueTable
   return issues.filter((issue) => matchesIssueFilters(issue, state.filters, { users, lane: boardLanes.get(issue.id)?.value })).sort((a, b) => {
     let comparison: number;
     switch (state.sort) {
+      case "state": comparison = compareText(a.state, b.state); break;
       case "lane": comparison = compareText(boardLanes.get(a.id)?.label ?? "Not on board", boardLanes.get(b.id)?.label ?? "Not on board"); break;
       case "project": comparison = compareText(projectName(a), projectName(b)); break;
       case "title": comparison = compareText(a.title, b.title); break;

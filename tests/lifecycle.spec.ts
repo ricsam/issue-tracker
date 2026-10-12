@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTableState } from "./filter-helpers";
 import { test, expect, type Page } from "@playwright/test";
 
 async function seed(page: Page, baseURL: string, name: string) {
@@ -84,18 +85,16 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await page.reload();
   await expect(page.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
 
-  // The list defaults to open issues and links to the closed ones.
+  // The list defaults to open issues and the state chip switches to closed ones.
   await page.goto(projectPath);
-  const state = page.getByRole("navigation", { name: "Issue state" });
-  await expect(state.getByRole("link", { name: /Open/ })).toContainText("1");
-  await expect(state.getByRole("link", { name: /Closed/ })).toContainText("1");
+  await expect(page.getByRole("button", { name: "Edit filter: State is Open", exact: true })).toBeVisible();
   await expect(page.locator(".issue-row")).toHaveCount(1);
   await expect(page.locator(".issue-row")).toContainText("Write release notes");
-  await state.getByRole("link", { name: /Closed/ }).click();
-  await expect(page).toHaveURL(/\?state=closed$/);
+  await setTableState(page, "closed");
+  await expect(page.getByRole("button", { name: "Edit filter: State is Closed", exact: true })).toBeVisible();
   await expect(page.locator(".issue-row")).toHaveCount(1);
   await expect(page.locator(".issue-row")).toContainText("Ship the beta");
-  await expect(page.locator(".issue-row .closed-tag")).toHaveText("Closed");
+  await expect(page.locator('.issue-row [data-column="state"] .state-badge')).toHaveText("Closed");
   await page.reload();
   await expect(page.locator(".issue-row")).toContainText("Ship the beta");
 
@@ -105,9 +104,10 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await panel.getByRole("button", { name: "Reopen issue", exact: true }).click();
   await expect(panel.locator(".state-badge")).toHaveText("Open");
   await expect(page.locator(".issue-row")).toHaveCount(0);
-  await expect(page.getByRole("table").getByText("No issues in this view.")).toBeVisible();
-  await expect(state.getByRole("link", { name: /Open/ })).toContainText("2");
+  await expect(page.getByRole("table").getByText("No matching issues. Adjust or clear your filters.")).toBeVisible();
   await panel.getByRole("button", { name: "Close issue details", exact: true }).click();
+  await setTableState(page, "open");
+  await expect(page.locator(".issue-row")).toHaveCount(2);
 
   // Closed cards keep their lane on the board and are clearly marked.
   const closeSecond = await page.request.patch(`/api/issues/${issues[1]!.id}`, {
@@ -116,6 +116,8 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   });
   expect(closeSecond.ok()).toBeTruthy();
   await page.goto(`${projectPath}/board`);
+  await expect(page.locator(".board-card")).toHaveCount(1);
+  await page.getByRole("region", { name: "Board filters", exact: true }).getByRole("button", { name: "Clear filters", exact: true }).click();
   const todo = page
     .locator(".board-column")
     .filter({ has: page.getByRole("heading", { name: /^Todo/ }) });
