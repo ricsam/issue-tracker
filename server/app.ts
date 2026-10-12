@@ -106,7 +106,7 @@ const boardFields = z
     customLanes: z.array(customLaneField).max(30).optional(),
   })
   .strict();
-const projectSql = `SELECT p.*, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
+const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
 
 export function createApp(options: AppOptions = {}) {
   const production =
@@ -653,20 +653,49 @@ export function createApp(options: AppOptions = {}) {
   const historyTransaction = <T>(c: Context<Env>, ids: string[], mutate: () => T) => ({
     immediate: () => withIssueHistory(db, c.get("user").id, ids, mutate),
   });
-  const favoriteProjects = (user: User) => ({ projectIds: (db.query(`SELECT f.projectId FROM favorite_projects f JOIN projects p ON p.id=f.projectId WHERE f.userId=? AND ${visibleProjectSql} ORDER BY f.projectId`)
+  const pinnedProjects = (user: User, legacy = false) => ({ projectIds: (db.query(`SELECT f.projectId FROM favorite_projects f JOIN projects p ON p.id=f.projectId WHERE f.userId=? AND ${visibleProjectSql} ORDER BY ${legacy ? "f.projectId" : "f.position,f.projectId"}`)
     .all(user.id, ...accessParams(user)) as { projectId: string }[]).map((row) => row.projectId) });
-  app.get("/api/me/favorite-projects", (c) => c.json(favoriteProjects(c.get("user"))));
-  for (const method of ["put", "delete"] as const) app[method]("/api/me/favorite-projects/:projectId", (c) => {
-    const projectId = c.req.param("projectId");
-    const userId = c.get("user").id;
-    const result = db.transaction(() => {
-      access.requireRead(projectId, c.get("user"));
-      if (method === "put") db.query("INSERT OR IGNORE INTO favorite_projects (userId,projectId) VALUES (?,?)").run(userId, projectId);
-      else db.query("DELETE FROM favorite_projects WHERE userId=? AND projectId=?").run(userId, projectId);
-      return favoriteProjects(c.get("user"));
-    }).immediate();
-    return c.json(result);
-  });
+  for (const resource of ["favorite-projects", "pinned-projects"] as const) {
+    const legacy = resource === "favorite-projects";
+    app.get(`/api/me/${resource}`, (c) => c.json(pinnedProjects(c.get("user"), legacy)));
+    for (const method of ["put", "delete"] as const) app[method](`/api/me/${resource}/:projectId`, async (c) => {
+      const projectId = c.req.param("projectId");
+      const user = c.get("user");
+      let beforeProjectId: string | null | undefined;
+      if (method === "put" && !legacy) {
+        const raw = await c.req.text();
+        let body: unknown = {};
+        if (raw.length) {
+          try { body = JSON.parse(raw); } catch { fail(400, "Invalid JSON"); }
+        }
+        beforeProjectId = z.object({ beforeProjectId: z.string().min(1).max(200).nullable().optional() }).strict().parse(body).beforeProjectId;
+      }
+      const result = db.transaction(() => {
+        access.requireRead(projectId, user);
+        if (method === "delete") {
+          db.query("DELETE FROM favorite_projects WHERE userId=? AND projectId=?").run(user.id, projectId);
+        } else {
+          // Include inaccessible/archived pins in the stored order; never discard
+          // preferences merely because access is temporarily revoked.
+          const ids = (db.query("SELECT projectId FROM favorite_projects WHERE userId=? ORDER BY position,projectId")
+            .all(user.id) as { projectId: string }[]).map((row) => row.projectId);
+          if (beforeProjectId !== undefined || !ids.includes(projectId)) {
+            if (beforeProjectId != null) {
+              if (beforeProjectId === projectId) fail(400, "Cannot move a project before itself");
+              access.requireRead(beforeProjectId, user);
+              if (!ids.includes(beforeProjectId)) fail(400, "Target project is not pinned");
+            }
+            const ordered = ids.filter((id) => id !== projectId);
+            ordered.splice(beforeProjectId == null ? ordered.length : ordered.indexOf(beforeProjectId), 0, projectId);
+            const save = db.query("INSERT INTO favorite_projects (userId,projectId,position) VALUES (?,?,?) ON CONFLICT(userId,projectId) DO UPDATE SET position=excluded.position");
+            for (const [position, id] of ordered.entries()) save.run(user.id, id, position);
+          }
+        }
+        return pinnedProjects(user, legacy);
+      }).immediate();
+      return c.json(result);
+    });
+  }
   const tagIssues = async (c: Context<Env>) => {
     const ids = z.array(z.string().uuid()).min(1).max(1000)
       .refine((values) => new Set(values).size === values.length);

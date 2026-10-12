@@ -29,8 +29,8 @@ import {
 import type { AuthStatus, Issue, Project, User } from "../shared/types";
 import { api, AUTH_EXPIRED_EVENT, message } from "./lib/api";
 import { WorkspaceContext } from "./lib/workspace";
-import { FavoriteProjectsProvider } from "./lib/favorite-projects";
-import { SidebarProjects } from "./components/favorite-projects";
+import { PinnedProjectsProvider } from "./lib/pinned-projects";
+import { SidebarProjects } from "./components/pinned-projects";
 import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
@@ -178,7 +178,7 @@ function AppContent() {
     <WorkspaceContext.Provider
       value={{ user: auth.user, users, projects, refresh, updateProject }}
     >
-      <FavoriteProjectsProvider key={auth.user.id}>
+      <PinnedProjectsProvider key={auth.user.id}>
       <IssueCreationProvider>
       <IssueBreadcrumbContext.Provider value={setBreadcrumbIssue}>
       <a className="skip-link" href="#main-content">
@@ -302,7 +302,7 @@ function AppContent() {
       </div>
       </IssueBreadcrumbContext.Provider>
       </IssueCreationProvider>
-      </FavoriteProjectsProvider>
+      </PinnedProjectsProvider>
     </WorkspaceContext.Provider>
   );
 }

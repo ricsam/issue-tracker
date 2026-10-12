@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 = 14) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 = 15) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -342,6 +342,22 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
         .flatMap((change) => [change.before ?? "", change.after ?? ""]));
     }
     db.query("INSERT INTO migrations VALUES (14)").run();
+  }).immediate();
+  if (targetVersion < 15) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=15").get()) return;
+    // Keep the favorites table as the single source of truth for old clients.
+    // Initialize each user's pins in the same project-ID order the legacy API used.
+    db.exec(`ALTER TABLE favorite_projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+      WITH ordered AS (
+        SELECT userId,projectId,ROW_NUMBER() OVER (PARTITION BY userId ORDER BY projectId)-1 AS position
+        FROM favorite_projects
+      )
+      UPDATE favorite_projects SET position=(SELECT position FROM ordered
+        WHERE ordered.userId=favorite_projects.userId AND ordered.projectId=favorite_projects.projectId);
+      CREATE INDEX favorite_projects_order ON favorite_projects(userId,position,projectId);
+      CREATE INDEX issues_project_updated ON issues(projectId,updatedAt);
+      INSERT INTO migrations VALUES (15);`);
   }).immediate();
   return db;
 }

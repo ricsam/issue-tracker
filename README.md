@@ -21,7 +21,7 @@ Create issues from the sidebar or with **Alt+N**, even before creating any proje
 
 Use **Move issue** in full-page issue details or the desktop detail panel to choose another active project or **No project**. Moves preserve the global ID/number, URL, content, comments, tags and lifecycle, without saving or discarding body/comment drafts. Changing project removes the old board placement and does not add a destination placement; selecting the same project keeps lane and order. Archived sources and destinations must be restored first.
 
-Star a project in the sidebar or on its project card to add it to **Favorites** for quick access. Favorites are personal to your signed-in account and persist across devices; they do not change anyone else's navigation. Unstar to remove one. Archiving hides a favorite from the sidebar without forgetting it, so restoring the project brings it back.
+Drag a project into **Pinned projects** in the sidebar, or use its pin button in the sidebar or on its project card. Drag pins to rearrange them; **Reorder pinned projects** provides up/down buttons for keyboard and touch use. Unpin with the pin button or by dragging back to **Projects**. Pins and their order are personal to your signed-in account and persist across devices. Other sidebar projects are ordered by their most recently updated issue (newest first), using creation time for projects without issues. Archiving hides a pin without forgetting it, so restoring the project brings it back. Existing favorites become pins automatically on upgrade.
 
 Use **Edit project** on a project's list or board to change its name and description. Names are required; descriptions can be cleared. Updates appear in the sidebar and project cards immediately, while URLs, issues, boards, and unsaved issue drafts stay unchanged. Archived projects must be restored before editing.
 
@@ -40,6 +40,8 @@ Migration v10 adds persistent board-card ordering, initially preserving every la
 Migration v11 replaces issue UUID keys and per-project numbers with one global, auto-incrementing sequence across every project and unlinked issue. Existing issues are numbered in creation order; comments, board placements/order, tags, lifecycle, content, and timestamps are retained. Issue URLs use `/issues/12`-style numeric IDs; old UUID links are not supported. New IDs are never reused. Back up `DATA_DIR` before upgrading; rollback requires restoring the backup, not just the old application.
 
 Migration v14 adds project access controls. Existing projects stay public and are assigned to the earliest administrator (creation time, then user ID); databases without an administrator retain a null owner until an administrator assigns one. Sharing starts empty. Legacy referenced uploads follow issue access; legacy unreferenced uploads are administrator-only. Back up the full `DATA_DIR` before upgrading; rollback requires restoring a pre-upgrade backup. Access revocation removes projects from lists, references, and favorites and makes direct links return not found; saved favorites are retained for later access restoration.
+
+Migration v15 adds personal pin ordering without removing existing favorites, including archived or temporarily inaccessible projects. Legacy favorite endpoints remain compatible. Back up `DATA_DIR` before upgrading; restore that backup for a rollback.
 
 ## Issue table and mentions
 

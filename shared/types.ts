@@ -26,6 +26,8 @@ export interface Project {
   /** Archived projects are hidden from navigation and read-only until restored. */
   archivedAt: string | null;
   archivedById: string | null;
+  /** Latest updatedAt among issues currently belonging to this project. */
+  lastIssueUpdatedAt: string | null;
   issueCount: number;
   openCount: number;
 }

@@ -16,7 +16,7 @@ New projects default to public and belong to their creator. Choose private visib
 
 Sharing grants collaboration, not a read-only role: readers can edit active project details, issues, and boards, and archive or restore projects. Comment editing and deletion still require the comment author or an administrator. Tagging someone does not share a private project with them.
 
-Users who lose access stop seeing the project in lists, favorites, issue references, and move destinations. Direct project, issue, comment, and history routes return not found. Saved favorites return if access is restored. Attachments follow current issue access, including references retained in history.
+Users who lose access stop seeing the project in lists, pins, issue references, and move destinations. Direct project, issue, comment, and history routes return not found. Saved pins return if access is restored. Attachments follow current issue access, including references retained in history.
 
 On upgrade, existing projects remain public. Their owner is the earliest administrator by creation time, then user ID; if no administrator exists, the owner stays unset until an administrator assigns one. Existing shared-user lists start empty.
 
@@ -61,6 +61,12 @@ Issues that are not on the board count only toward the total.
   Keep the description focused on the project's purpose.
   Put changing implementation details and discussion in issues, where teammates can update them.
 </Tip>
+
+## Pin projects
+
+Drag a project into **Pinned projects** in the sidebar, or use its pin button in the sidebar or on its project card. Drag pins to rearrange them; **Reorder pinned projects** provides up/down buttons for keyboard and touch use. Unpin with the pin button or by dragging the project back to **Projects**.
+
+Pins and their order are personal to your signed-in account and follow you across devices. Other sidebar projects are ordered by their most recently updated issue, newest first; projects without issues use their creation time. Archiving hides a pin without forgetting it, so restoring the project brings it back. Favorites from earlier versions become pins automatically.
 
 ## Start organizing work
 

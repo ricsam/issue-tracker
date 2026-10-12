@@ -5,7 +5,7 @@ import type { Project } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
-import { FavoriteProjectButton } from "../components/favorite-projects";
+import { PinProjectButton } from "../components/pinned-projects";
 import { ProjectAccessFields, ProjectAccessSummary } from "../components/project-access";
 export function ProjectsPage() {
   const { projects, refresh, user } = useWorkspace();
@@ -122,7 +122,7 @@ export function ProjectsPage() {
                 <span>{p.issueCount} total</span>
               </footer>
             </Link>
-            <FavoriteProjectButton project={p} />
+            <PinProjectButton project={p} />
             </div>
           ))}
         </div>

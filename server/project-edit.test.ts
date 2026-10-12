@@ -32,10 +32,11 @@ test("project metadata edits validate atomically, preserve links and children, r
     await req(`${path}/board/issues`, "POST", { issueIds: [issue.id], lane: "todo" });
     const children = () => ["issues", "comments", "board_issues", "project_boards"].map((table) => app.db.query(`SELECT * FROM ${table}`).all());
     const before = children();
+    const lastIssueUpdatedAt = (await (await req(`/api/issues/${issue.id}`)).json()).issue.updatedAt;
     const patch = (data: unknown, auth = member) => req(path, "PATCH", data, auth);
     expect((await patch({ name: "  Renamed  ", description: "Updated\nDescription" })).status).toBe(200);
     let saved = (await (await req(path)).json()).project;
-    expect(saved).toMatchObject({ ...project, name: "Renamed", description: "Updated\nDescription", issueCount: 1, openCount: 1 });
+    expect(saved).toMatchObject({ ...project, name: "Renamed", description: "Updated\nDescription", issueCount: 1, openCount: 1, lastIssueUpdatedAt });
     expect(children()).toEqual(before);
     expect((await patch({ description: "" })).status).toBe(200);
     expect((await (await req(path)).json()).project).toMatchObject({ name: "Renamed", description: "" });
