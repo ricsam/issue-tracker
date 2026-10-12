@@ -1,42 +1,22 @@
 import type { Issue, Project, User } from "../../shared/types";
 import type { IssueBoardLane } from "./issue-board-lanes";
+import { emptyIssueFilters, isActiveIssueFilter, matchesIssueFilters, type IssueFilterGroup } from "./issue-filters";
+export { issueDateKey } from "./issue-filters";
 
 export type IssueColumn = "number" | "title" | "labels" | "tagged" | "creator" | "created" | "project" | "lane";
 export interface IssueTableState {
   sort: IssueColumn;
   direction: "ascending" | "descending";
-  number: string;
-  title: string;
-  label: string;
-  tagged: string;
-  creator: string;
-  project: string;
-  lane: string;
-  createdFrom: string;
-  createdTo: string;
+  filters: IssueFilterGroup;
 }
 export const initialIssueTableState: IssueTableState = {
   sort: "number",
   direction: "ascending",
-  number: "",
-  title: "",
-  label: "",
-  tagged: "",
-  creator: "",
-  project: "",
-  lane: "",
-  createdFrom: "",
-  createdTo: "",
+  filters: emptyIssueFilters,
 };
 
 export function hasColumnFilters(state: IssueTableState) {
-  return !!(state.number || state.title || state.label || state.tagged || state.creator || state.project || state.lane || state.createdFrom || state.createdTo);
-}
-
-/** Compare/filter the same local calendar dates that the table displays. */
-export function issueDateKey(value: string) {
-  const date = new Date(value);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return state.filters.conditions.some(isActiveIssueFilter);
 }
 
 export function issueTableRows(issues: Issue[], users: User[], state: IssueTableState, projects: Project[] = [], boardLanes: ReadonlyMap<string, IssueBoardLane> = new Map()) {
@@ -45,20 +25,7 @@ export function issueTableRows(issues: Issue[], users: User[], state: IssueTable
   const names = new Map(users.map((user) => [user.id, user.name]));
   const compareText = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   const taggedNames = (issue: Issue) => issue.taggedUserIds.map((id) => names.get(id) || id).sort(compareText).join(", ");
-  return issues.filter((issue) => {
-    const date = issueDateKey(issue.createdAt);
-    return (
-      String(issue.number).includes(state.number.trim().replace(/^!/, "")) &&
-      issue.title.toLocaleLowerCase().includes(state.title.trim().toLocaleLowerCase()) &&
-      (!state.label || (state.label === "none" ? issue.labels.length === 0 : issue.labels.includes(state.label.slice(6)))) &&
-      (!state.tagged || (state.tagged === "none" ? issue.taggedUserIds.length === 0 : issue.taggedUserIds.includes(state.tagged))) &&
-      (!state.creator || (state.creator === "unknown" ? !names.has(issue.authorId) : issue.authorId === state.creator.slice(5))) &&
-      (!state.project || (state.project === "none" ? issue.projectId === null : issue.projectId === state.project)) &&
-      (!state.lane || (state.lane === "none" ? !boardLanes.has(issue.id) : boardLanes.get(issue.id)?.value === state.lane)) &&
-      (!state.createdFrom || date >= state.createdFrom) &&
-      (!state.createdTo || date <= state.createdTo)
-    );
-  }).sort((a, b) => {
+  return issues.filter((issue) => matchesIssueFilters(issue, state.filters, { users, lane: boardLanes.get(issue.id)?.value })).sort((a, b) => {
     let comparison: number;
     switch (state.sort) {
       case "lane": comparison = compareText(boardLanes.get(a.id)?.label ?? "Not on board", boardLanes.get(b.id)?.label ?? "Not on board"); break;

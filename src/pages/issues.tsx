@@ -46,7 +46,8 @@ import { CreateIssueDialog } from "../components/create-issue-dialog";
 import { EditProjectDialog } from "../components/edit-project-dialog";
 import { ProjectAccessDialog, ProjectAccessSummary } from "../components/project-access";
 import { IssueTable } from "../components/issue-table";
-import { initialIssueTableState, issueTableRows } from "../lib/issue-table";
+import { issueTableRows } from "../lib/issue-table";
+import { useIssueTablePreferences } from "../lib/issue-table-preferences";
 import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { BoardActionsMenu } from "../components/board-actions-menu";
@@ -209,11 +210,11 @@ function ProjectIssues({ slug }: { slug: string }) {
   const visibleBoardCards = boardSettings.cards.filter((card) => {
     const issue = issues.find((item) => item.id === card.issueId);
     return issue && boardSettings.lanes.includes(card.lane) && !collapsedLanes.includes(card.lane)
-      && matchesBoardFilters(issue, card.lane, boardFilters)
+      && matchesBoardFilters(issue, card.lane, boardFilters, users)
       && `${issue.title} ${issue.number} ${issue.labels.join(" ")} ${users.filter((user) => issue.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`.toLowerCase().includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase());
   });
   const visibleBoardKey = JSON.stringify(visibleBoardCards.map((card) => card.issueId));
-  const [tableState, setTableState] = useState(initialIssueTableState);
+  const [tableState, setTableState] = useIssueTablePreferences(user.id, all ? "all" : project ? `project:${project.id}` : null);
   const [open, setOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [editingAccess, setEditingAccess] = useState(false);
@@ -521,7 +522,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         .toLowerCase()
         .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
-  const filtered = board ? searched.filter((issue) => matchesBoardFilters(issue, placements.get(issue.id), boardFilters)) : issueTableRows(searched, users, tableState, projects, listBoardLanes);
+  const filtered = board ? searched.filter((issue) => matchesBoardFilters(issue, placements.get(issue.id), boardFilters, users)) : issueTableRows(searched, users, tableState, projects, listBoardLanes);
   const boardColumns = lanes.map((lane) => collapsedLanes.includes(lane.value) ? [] : filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const boardOrder = boardColumns.flat();
   const boardOrderKey = JSON.stringify([query, boardFilters, boardSettings.lanes, boardColumns]);

@@ -74,18 +74,12 @@ test("combined filters prune selection and never mutate board persistence", asyn
   const writes: string[] = [];
   page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board state", exact: true }).click();
-  await page.getByRole("radio", { name: "Closed", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board lane", exact: true }).click();
-  await page.getByRole("radio", { name: "Todo", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board tags", exact: true }).click();
-  await page.getByRole("checkbox", { name: "bug", exact: true }).check();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board tagged users", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Alex Morgan", exact: true }).check();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await page.getByRole("button", { name: "Filter board creator", exact: true }).click();
-  await page.getByRole("radio", { name: "Alex Morgan", exact: true }).click();
+  for (const [field, value] of [["state", "closed"], ["lane", "todo"], ["labels", "label:bug"], ["tagged", issues[1].authorId!], ["creator", `user:${issues[1].authorId}`]]) {
+    await page.getByRole("button", { name: "Add filter", exact: true }).click();
+    const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();
+    await row.getByLabel("Field", { exact: true }).selectOption(field);
+    await row.getByLabel("Value", { exact: true }).selectOption(value);
+  }
   await page.getByRole("textbox", { name: "Search issues" }).fill(`!${issues[1].number}`);
   await expect(page.locator(".board-card")).toHaveCount(1);
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
@@ -96,7 +90,7 @@ test("combined filters prune selection and never mutate board persistence", asyn
   expect(writes).toEqual([]);
   expect((await (await page.request.get(endpoint)).json()).board).toEqual(original);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByLabel("Filter board state")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add filter", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 

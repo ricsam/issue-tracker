@@ -17,6 +17,14 @@ async function fixture(page: Page, baseURL: string) {
   return { project, endpoint, headers };
 }
 
+async function addFilter(page: Page, field: string, value: string, operator = "is") {
+  await page.getByRole("button", { name: "Add filter", exact: true }).click();
+  const row = page.getByRole("group", { name: /^Filter \d+$/ }).last();
+  await row.getByLabel("Field", { exact: true }).selectOption(field);
+  await row.getByLabel("Operator", { exact: true }).selectOption(operator);
+  await row.getByLabel("Value", { exact: true }).selectOption(value);
+}
+
 test("personal collapse persists without writes, prunes selection, skips keyboard targets and permits drops", async ({ page, baseURL }) => {
   const { endpoint } = await fixture(page, baseURL!);
   const original = (await (await page.request.get(endpoint)).json()).board;
@@ -36,7 +44,8 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
   expect(writes).toEqual([]);
   expect((await (await page.request.get(endpoint)).json()).board).toEqual(original);
   const collapsed = page.locator(".board-column.is-collapsed");
-  await page.locator(".board-card:visible .board-card-handle").first().dragTo(collapsed);
+  // Drop near the heading so the larger filter panel cannot push the target offscreen.
+  await page.locator(".board-card:visible .board-card-handle").first().dragTo(collapsed, { targetPosition: { x: 60, y: 90 } });
   await expect(collapsed).toContainText("2 matching issues");
   await page.getByRole("button", { name: "Expand In progress lane", exact: true }).click();
   await expect(collapsed).toHaveCount(0);
@@ -45,11 +54,7 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
 
 test("filter picks, search and collapsed active badge survive reload and stay board-scoped", async ({ page, baseURL }) => {
   const { project, headers } = await fixture(page, baseURL!);
-  await page.getByRole("button", { name: "Filter board tags", exact: true }).click();
-  await page.getByRole("checkbox", { name: "bug", exact: true }).check();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Filter board tags", exact: true })).toBeFocused();
-  await expect(page.getByRole("button", { name: "Filter board tags", exact: true })).toHaveAccessibleDescription("1 selected");
+  await addFilter(page, "labels", "label:bug");
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("preference");
   await page.getByRole("button", { name: /Filter board 2 active/ }).click();
   await expect(page.getByRole("button", { name: /Filter board 2 active · search/ })).toHaveAttribute("aria-expanded", "false");
@@ -69,7 +74,7 @@ test("filter picks, search and collapsed active badge survive reload and stay bo
   await expect(page.getByRole("button", { name: "Filter board", exact: true })).toHaveAttribute("aria-expanded", "false");
 });
 
-test("mobile filters support searchable multiple choices and stacked collapsed lanes", async ({ page, baseURL }, testInfo) => {
+test("mobile filters support negative AND and OR conditions with stacked collapsed lanes", async ({ page, baseURL }, testInfo) => {
   await fixture(page, baseURL!);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
@@ -79,19 +84,68 @@ test("mobile filters support searchable multiple choices and stacked collapsed l
   const second = (await columns.nth(1).boundingBox())!;
   expect(second.y).toBeGreaterThan(first.y + first.height);
   expect(second.x).toBeCloseTo(first.x, 0);
-  await page.getByRole("button", { name: "Filter board tags", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Filter board tags", exact: true });
-  await picker.getByRole("textbox", { name: "Search tags options" }).fill("bug");
-  await picker.getByRole("checkbox", { name: "bug", exact: true }).check();
-  await expect(picker.getByRole("checkbox", { name: "feature", exact: true })).toHaveCount(0);
-  const box = (await picker.boundingBox())!;
+  await addFilter(page, "labels", "label:bug", "isNot");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await addFilter(page, "lane", "done");
+  await expect(page.locator(".board-card:visible")).toHaveCount(0);
+  await page.getByLabel("Combine filters", { exact: true }).selectOption("or");
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  const box = (await page.getByRole("group", { name: "Filter 2", exact: true }).boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: testInfo.outputPath("mobile-board-filter.png") });
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /Filter board 1 active/ }).click();
-  await expect(page.getByRole("button", { name: /Filter board 1 active/ })).toHaveAttribute("aria-expanded", "false");
+  await page.reload();
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  await expect(page.getByLabel("Combine filters", { exact: true })).toHaveValue("or");
+  await page.getByRole("button", { name: /Filter board 2 active/ }).click();
+  await expect(page.getByRole("button", { name: /Filter board 2 active/ })).toHaveAttribute("aria-expanded", "false");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
+test("desktop negative filters combine with AND or OR and ignore drafts", async ({ page, baseURL }) => {
+  await fixture(page, baseURL!);
+  await addFilter(page, "labels", "label:bug", "isNot");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await addFilter(page, "lane", "done");
+  await expect(page.locator(".board-card:visible")).toHaveCount(0);
+  await page.getByLabel("Combine filters", { exact: true }).selectOption("or");
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  await page.getByRole("button", { name: "Add filter", exact: true }).click();
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: /Filter board 2 active/ })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(3);
+  await expect(page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Operator", { exact: true })).toHaveValue("isNot");
+  await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("done");
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page.locator(".board-card:visible")).toHaveCount(3);
+  await page.getByRole("button", { name: "Add filter", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Filter board", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("group", { name: /^Filter \d+$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeDisabled();
+});
+
+test("legacy board preferences migrate on reload and persist when edited", async ({ page, baseURL }) => {
+  const { project } = await fixture(page, baseURL!);
+  // Trigger a preference write to discover the exact current user/board scope.
+  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
+  await page.evaluate((boardId) => {
+    const key = Object.keys(localStorage).find((key) => key.startsWith("threadline:board-preferences:v1:") && key.endsWith(`:${encodeURIComponent(boardId)}`));
+    if (!key) throw new Error("Board preference scope missing");
+    localStorage.setItem(key, JSON.stringify({ filters: { state: "all", lane: "", tags: ["bug"], users: [], creator: "" }, search: "", filtersExpanded: true, collapsedLanes: [] }));
+  }, project.id);
+  await page.reload();
+  await expect(page.locator(".board-card:visible")).toHaveCount(2);
+  await expect(page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Value", { exact: true })).toHaveValue("label:bug");
+  await page.getByRole("group", { name: "Filter 1", exact: true }).getByLabel("Operator", { exact: true }).selectOption("isNot");
+  await page.reload();
+  await expect(page.locator(".board-card:visible")).toHaveCount(1);
 });
 
 test("closing details restores focus to expand when its card's lane is collapsed", async ({ page, baseURL }) => {
@@ -111,9 +165,7 @@ test("blocked board storage does not prevent personal controls", async ({ page, 
   await fixture(page, baseURL!);
   await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
-  await page.getByRole("button", { name: "Filter board tags", exact: true }).click();
-  await page.getByRole("checkbox", { name: "feature", exact: true }).check();
-  await page.keyboard.press("Escape");
+  await addFilter(page, "labels", "label:feature");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
 });
 
@@ -124,7 +176,6 @@ test("archived boards allow personal collapse and filters but not shared edits",
   await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
   await expect(page.getByRole("button", { name: "Expand Todo lane", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Filter board state", exact: true }).click();
-  await page.getByRole("radio", { name: "Closed", exact: true }).click();
+  await addFilter(page, "state", "closed");
   await expect(page.locator(".board-card:visible")).toHaveCount(0);
 });

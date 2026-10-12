@@ -81,7 +81,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   const popover = page.getByRole("dialog", { name: "Board lane filters", exact: true });
   await expect(popover.getByRole("option", { name: `${a.name} · Review (hidden)`, exact: true })).toHaveAttribute("value", boardLaneKey(a.id, review));
   await expect(popover.getByRole("option", { name: `${b.name} · Review`, exact: true })).toHaveAttribute("value", boardLaneKey(b.id, otherReview));
-  await popover.getByRole("combobox").selectOption(boardLaneKey(b.id, otherReview));
+  await popover.getByRole("combobox", { name: "Filter by board lane" }).selectOption(boardLaneKey(b.id, otherReview));
   await popover.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".issue-row")).toHaveCount(1);
   await expect(row(page, issues[3])).toBeVisible();

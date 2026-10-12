@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { Issue, Project, User } from "../shared/types";
-import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows } from "../src/lib/issue-table";
+import { hasColumnFilters, initialIssueTableState, issueDateKey, issueTableRows, type IssueTableState } from "../src/lib/issue-table";
+import { normalizeIssueFilters, type IssueFilter, type IssueFilterField } from "../src/lib/issue-filters";
+import { issueTablePreferencesKey, parseIssueTablePreferences } from "../src/lib/issue-table-preferences";
 import { boardLaneKey, boardLaneOptions, issueBoardLanes } from "../src/lib/issue-board-lanes";
 import { defaultIssueColumns, issueColumnsStorageKey, moveIssueColumn, normalizeIssueColumns } from "../src/lib/issue-table-columns";
 
@@ -50,6 +52,16 @@ const issues = [
   issue(3, { title: "alpha", labels: ["bug", "design"], taggedUserIds: ["a", "b"] }),
 ];
 const numbers = (rows: Issue[]) => rows.map((row) => row.number);
+const condition = (field: IssueFilterField, value: string, operator: IssueFilter["operator"] = "is", valueTo?: string): IssueFilter => ({ id: `${field}-${value}-${operator}`, field, operator, value, ...(valueTo !== undefined ? { valueTo } : {}) });
+// Shorthand for the existing single-condition regression cases.
+type FilterValues = Partial<Record<"number" | "title" | "label" | "tagged" | "creator" | "project" | "lane" | "createdFrom" | "createdTo", string>> & Partial<Pick<IssueTableState, "sort" | "direction">>;
+const tableState = (values: FilterValues): IssueTableState => ({
+  ...initialIssueTableState, sort: values.sort || "number", direction: values.direction || "ascending",
+  filters: { conjunction: "and", conditions: [
+    ...Object.entries(values).filter(([key]) => !["sort", "direction", "createdFrom", "createdTo"].includes(key)).map(([key, value]) => condition(key === "label" ? "labels" : key as IssueFilterField, value)),
+    ...(values.createdFrom || values.createdTo ? [condition("created", values.createdFrom || "", "is", values.createdTo || "")] : []),
+  ] },
+});
 
 test("board lane display, filter and sort reflect membership including hidden custom lanes and project identity", () => {
   const boards = {
@@ -59,14 +71,14 @@ test("board lane display, filter and sort reflect membership including hidden cu
   const lanes = issueBoardLanes(boards);
   expect(lanes.get("2")).toEqual({ value: boardLaneKey("p", "review"), label: "Review", hidden: true });
   const rows = [issue(1, {}), issue(2, { state: "closed", labels: ["bug"] }), issue(3, { projectId: "q" }), issue(4, { projectId: "q" }), issue(5, {}), issue(6, { projectId: null })];
-  const filtered = (state: Partial<typeof initialIssueTableState>) => numbers(issueTableRows(rows, users, { ...initialIssueTableState, ...state }, projects, lanes));
+  const filtered = (state: FilterValues) => numbers(issueTableRows(rows, users, tableState(state), projects, lanes));
   expect(filtered({ lane: boardLaneKey("p", "todo") })).toEqual([1]);
   expect(filtered({ lane: boardLaneKey("p", "review"), label: "label:bug" })).toEqual([2]);
   expect(filtered({ lane: boardLaneKey("p", "review"), project: "q" })).toEqual([]);
   expect(filtered({ lane: "none" })).toEqual([5, 6]);
   expect(filtered({ sort: "lane" })).toEqual([5, 6, 2, 4, 1, 3]);
   expect(filtered({ sort: "lane", direction: "descending" })).toEqual([1, 3, 2, 4, 5, 6]);
-  expect(hasColumnFilters({ ...initialIssueTableState, lane: "none" })).toBe(true);
+  expect(hasColumnFilters(tableState({ lane: "none" }))).toBe(true);
   expect(boardLaneOptions(boards, projects, true)).toContainEqual({ value: boardLaneKey("p", "review"), label: "Alpha · Review (hidden)" });
   expect(boardLaneOptions(boards, projects, true)).toContainEqual({ value: boardLaneKey("q", "review"), label: "Zebra · Review (hidden)" });
 });
@@ -78,14 +90,14 @@ const projects: Project[] = [
 
 test("project filters distinguish unlinked and archived-project issues and combine with other filters", () => {
   const rows = [issue(1, { projectId: "p", labels: ["bug"] }), issue(2, { projectId: null, labels: ["bug"] }), issue(3, { projectId: "q" })];
-  const ids = (state: Partial<typeof initialIssueTableState>) => issueTableRows(rows, users, { ...initialIssueTableState, ...state }, projects).map((row) => row.id);
+  const ids = (state: FilterValues) => issueTableRows(rows, users, tableState(state), projects).map((row) => row.id);
   expect(ids({ project: "none" })).toEqual(["2"]);
   expect(ids({ project: "q" })).toEqual(["3"]);
   expect(ids({ project: "p", label: "label:bug" })).toEqual(["1"]);
   expect(ids({ project: "none", label: "label:other" })).toEqual([]);
   expect(ids({ sort: "project" })).toEqual(["1", "2", "3"]);
   expect(ids({ sort: "project", direction: "descending" })).toEqual(["3", "2", "1"]);
-  expect(hasColumnFilters({ ...initialIssueTableState, project: "none" })).toBe(true);
+  expect(hasColumnFilters(tableState({ project: "none" }))).toBe(true);
   // Global numeric identifiers retain deterministic numeric order across projects.
   expect(issueTableRows([...rows].reverse(), users, initialIssueTableState)).toEqual(issueTableRows(rows, users, initialIssueTableState));
 });
@@ -100,15 +112,15 @@ test("creator sorting uses displayed names, with numeric ties and an unknown-aut
 test("creator filters use identity rather than names or tagged users, combine with project and tags, and clear", () => {
   const sameNames = [...users, { ...users[0], id: "other", email: "other@example.test" }, { ...users[1], id: "unknown" }];
   const rows = [issue(1, { authorId: "a", taggedUserIds: ["b"], labels: ["bug"] }), issue(2, { authorId: "other", projectId: "q" }), issue(3, { authorId: "missing", projectId: null }), issue(4, { authorId: "unknown" }), issue(5, { authorId: "also-missing" })];
-  const filtered = (state: Partial<typeof initialIssueTableState>) => numbers(issueTableRows(rows, sameNames, { ...initialIssueTableState, ...state }, projects));
+  const filtered = (state: FilterValues) => numbers(issueTableRows(rows, sameNames, tableState(state), projects));
   expect(filtered({ creator: "user:a", tagged: "b", label: "label:bug", project: "p" })).toEqual([1]);
   expect(filtered({ creator: "user:a", project: "q" })).toEqual([]);
   expect(filtered({ creator: "user:other" })).toEqual([2]);
   expect(filtered({ creator: "unknown" })).toEqual([3, 5]);
   expect(filtered({ creator: "user:unknown" })).toEqual([4]);
   expect(filtered({ creator: "" })).toEqual([1, 2, 3, 4, 5]);
-  expect(hasColumnFilters({ ...initialIssueTableState, creator: "user:a" })).toBe(true);
-  expect(hasColumnFilters({ ...initialIssueTableState, creator: "unknown" })).toBe(true);
+  expect(hasColumnFilters(tableState({ creator: "user:a" }))).toBe(true);
+  expect(hasColumnFilters(tableState({ creator: "unknown" }))).toBe(true);
   expect(hasColumnFilters(initialIssueTableState)).toBe(false);
 });
 
@@ -121,14 +133,55 @@ test("table sorts without mutation and breaks ties by number", () => {
   expect(issues[2].labels).toEqual(["bug", "design"]);
 });
 
+test("negative filters invert each field including missing values and inclusive date ranges", () => {
+  const rows = [issue(1, { title: "Bug fix", labels: ["bug"], taggedUserIds: ["a"] }), issue(2, { projectId: null, authorId: "missing", createdAt: "2026-01-02T12:00:00Z" })];
+  const lanes = issueBoardLanes({ p: { lanes: ["todo"], customLanes: [], cards: [{ issueId: "1", lane: "todo" }] } });
+  for (const rule of [condition("number", "!1"), condition("title", "BUG"), condition("labels", "label:bug"), condition("tagged", "a"), condition("creator", "user:a"), condition("project", "p"), condition("lane", boardLaneKey("p", "todo")), condition("created", issueDateKey(rows[0].createdAt), "is", issueDateKey(rows[0].createdAt))]) {
+    expect(numbers(issueTableRows(rows, users, { ...initialIssueTableState, filters: { conjunction: "and", conditions: [{ ...rule, operator: "isNot" }] } }, projects, lanes))).toEqual([2]);
+  }
+  for (const rule of [condition("labels", "none"), condition("tagged", "none"), condition("creator", "unknown"), condition("project", "none"), condition("lane", "none")]) {
+    expect(numbers(issueTableRows(rows, users, { ...initialIssueTableState, filters: { conjunction: "or", conditions: [{ ...rule, operator: "isNot" }] } }, projects, lanes))).toEqual([1]);
+  }
+});
+
+test("AND/OR combine repeated and different fields; blank conditions do not affect either mode", () => {
+  const filtered = (conditions: IssueFilter[], conjunction: "and" | "or") => numbers(issueTableRows(issues, users, { ...initialIssueTableState, filters: { conjunction, conditions } }));
+  const tags = [condition("labels", "label:bug"), condition("labels", "label:design")];
+  expect(filtered(tags, "and")).toEqual([3]);
+  expect(filtered(tags, "or")).toEqual([2, 3, 10]);
+  const mixed = [condition("labels", "label:design", "isNot"), condition("title", "Alpha")];
+  expect(filtered(mixed, "and")).toEqual([]);
+  expect(filtered(mixed, "or")).toEqual([2, 3, 10]);
+  for (const mode of ["and", "or"] as const) {
+    const blanks = [condition("lane", "", "isNot"), condition("title", "   "), condition("number", "!"), condition("created", "", "isNot", "")];
+    expect(filtered(blanks, mode)).toEqual([2, 3, 10]);
+    expect(filtered([...blanks, condition("labels", "label:bug")], mode)).toEqual([3, 10]);
+  }
+});
+
+test("table filters and sort round trip with validated storage and account/project scoping", () => {
+  const value: IssueTableState = { sort: "lane", direction: "descending", filters: { conjunction: "or", conditions: [condition("lane", "deleted", "isNot"), condition("labels", "label:bug")] } };
+  expect(parseIssueTablePreferences(JSON.stringify(value))).toEqual(value);
+  for (const raw of [null, "oops", "null", "[]", "42"]) expect(parseIssueTablePreferences(raw)).toEqual(initialIssueTableState);
+  expect(parseIssueTablePreferences(JSON.stringify({ sort: "invalid", direction: "invalid", filters: { conjunction: "bad", conditions: [null, {}, { field: "lane", operator: "is", value: 42 }] } }))).toEqual(initialIssueTableState);
+  const group = normalizeIssueFilters({ conjunction: "or", conditions: [condition("lane", "none"), condition("lane", "none"), condition("created", "not-a-date", "is", "2026-02-30")] });
+  expect(new Set(group.conditions.map((filter) => filter.id)).size).toBe(3);
+  expect(group.conditions[2].value).toBe("");
+  expect(group.conditions[2].valueTo).toBe("");
+  expect(parseIssueTablePreferences(JSON.stringify({ filters: { conditions: [condition("project", "p")] } }), false).filters.conditions).toEqual([]);
+  expect(issueTablePreferencesKey("a", "all")).not.toBe(issueTablePreferencesKey("b", "all"));
+  expect(issueTablePreferencesKey("a", "all")).not.toBe(issueTablePreferencesKey("a", "project:p"));
+  expect(issueTablePreferencesKey("a:b", "c")).not.toBe(issueTablePreferencesKey("a", "b:c"));
+});
+
 test("table combines filters and includes both calendar date boundaries", () => {
   const day = issueDateKey(issues[0].createdAt);
   for (const number of ["10", "!10", " !10 "]) {
-    expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, number }))).toEqual([10]);
+    expect(numbers(issueTableRows(issues, users, tableState({ number })))).toEqual([10]);
   }
-  expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, number: "!1", title: "ZEB", label: "label:bug", tagged: "a", createdFrom: day, createdTo: day }))).toEqual([10]);
-  expect(issueTableRows(issues, users, { ...initialIssueTableState, createdFrom: "2026-01-03", createdTo: "2026-01-01" })).toEqual([]);
-  expect(numbers(issueTableRows(issues, users, { ...initialIssueTableState, label: "label:design", tagged: "a" }))).toEqual([3]);
-  expect(issueTableRows(issues, users, { ...initialIssueTableState, tagged: "none" })).toEqual([]);
-  expect(issueTableRows(issues, users, { ...initialIssueTableState, label: "none" })).toEqual([]);
+  expect(numbers(issueTableRows(issues, users, tableState({ number: "!1", title: "ZEB", label: "label:bug", tagged: "a", createdFrom: day, createdTo: day })))).toEqual([10]);
+  expect(issueTableRows(issues, users, tableState({ createdFrom: "2026-01-03", createdTo: "2026-01-01" }))).toEqual([]);
+  expect(numbers(issueTableRows(issues, users, tableState({ label: "label:design", tagged: "a" })))).toEqual([3]);
+  expect(issueTableRows(issues, users, tableState({ tagged: "none" }))).toEqual([]);
+  expect(issueTableRows(issues, users, tableState({ label: "none" }))).toEqual([]);
 });

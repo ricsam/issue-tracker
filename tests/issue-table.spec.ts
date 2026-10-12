@@ -190,15 +190,18 @@ for (const width of [1440, 390]) {
     await expect(titles).toHaveCount(0);
     await expect(table.getByText("No matching issues. Adjust or clear your filters.")).toBeVisible();
     await expect(table.getByLabel("Created on or before")).toBeVisible();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear column filters" }).click();
     await expect(titles).toHaveCount(3);
     await table.getByRole("button", { name: "Tags filters", exact: true }).click();
     await table.getByLabel("Filter by tag", { exact: true }).selectOption("none");
     await expect(titles).toHaveText(["Beta"]);
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear column filters" }).click();
     await table.getByRole("button", { name: "Tagged users filters", exact: true }).click();
     await table.getByLabel("Filter by tagged user").selectOption("none");
     await expect(titles).toHaveText(["Alpha", "Beta"]);
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear column filters" }).click();
     await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("Alex Morgan");
     await expect(titles).toHaveText(["Zebra"]);

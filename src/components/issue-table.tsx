@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Filter } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Filter, ChevronDown, ChevronRight } from "lucide-react";
 import type { BoardSettings, Issue, Project, User } from "../../shared/types";
-import { hasColumnFilters, initialIssueTableState, type IssueColumn, type IssueTableState } from "../lib/issue-table";
+import type { IssueColumn, IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
 import { useNotification } from "./ui/snackbar";
 import { ClosedTag } from "./lifecycle";
@@ -12,6 +12,8 @@ import { useWorkspace } from "../lib/workspace";
 import { defaultIssueColumns, issueColumnsStorageKey, issueTableColumns, normalizeIssueColumns, type IssueColumnPreference } from "../lib/issue-table-columns";
 import { IssueColumnConfig } from "./issue-column-config";
 import { issuePageSizes, issuePageSizeStorageKey, normalizeIssuePageSize, readIssuePageSize } from "../lib/issue-pagination";
+import { emptyIssueFilters, isActiveIssueFilter, type IssueFilterGroup } from "../lib/issue-filters";
+import { FilterBuilder, type FilterFieldDefinition } from "./filter-builder";
 import "./issue-table.css";
 
 function FilterPopover({ label, active, onClear, children }: { label: string; active: boolean; onClear: () => void; children: ReactNode }) {
@@ -29,10 +31,12 @@ function FilterPopover({ label, active, onClear, children }: { label: string; ac
   useEffect(() => {
     if (!open) return;
     position();
-    panel.current?.querySelector<HTMLElement>("input, select, button")?.focus();
+    panel.current?.querySelector<HTMLElement>("[data-filter-value], input, button")?.focus();
+    const observer = new ResizeObserver(position);
+    if (panel.current) observer.observe(panel.current);
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
-    return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
+    return () => { observer.disconnect(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
   }, [open]);
   return <>
     <button ref={trigger} type="button" className={`column-filter-trigger${active ? " is-active" : ""}`} popoverTarget={id} aria-label={`${label} filters${active ? " (active)" : ""}`} aria-expanded={open} aria-controls={id} aria-haspopup="dialog"><Filter size={13} /></button>
@@ -166,6 +170,9 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     if (nextPage !== page) { focusAfterPage.current = issue.id; setPaging({ key: resetKey, page: nextPage }); }
     else links.current.get(issue.id)?.focus();
   };
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const filterPanelId = useId();
+  const filterCount = state.filters.conditions.filter(isActiveIssueFilter).length;
   const labels = [...new Set(allIssues.flatMap((issue) => issue.labels))].sort((a, b) => a.localeCompare(b));
   const patch = (value: Partial<IssueTableState>) => onChange({ ...state, ...value });
   const empty = (label: string) => <span className="muted empty-cell" aria-label={label}>—</span>;
@@ -192,17 +199,41 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     }
   };
   const cellClasses: Partial<Record<IssueColumn, string>> = { number: "issue-number", project: "issue-project", lane: "issue-board-lane", creator: "issue-creator" };
-  const filters: Record<IssueColumn, { active: boolean; clear: () => void; content: ReactNode }> = {
-    project: { active: !!state.project, clear: () => patch({ project: "" }), content: <select aria-label="Filter by project" value={state.project} onChange={(e) => patch({ project: e.target.value })}><option value="">All projects</option><option value="none">No project</option>{projects?.map((project) => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? " (archived)" : ""}</option>)}</select> },
-    lane: { active: !!state.lane, clear: () => patch({ lane: "" }), content: <select aria-label="Filter by board lane" value={state.lane} onChange={(event) => patch({ lane: event.target.value })}><option value="">All board lanes</option><option value="none">Not on board</option>{laneOptions.map((lane) => <option key={lane.value} value={lane.value}>{lane.label}</option>)}</select> },
-    number: { active: !!state.number, clear: () => patch({ number: "" }), content: <input aria-label="Filter by number" placeholder="!" inputMode="numeric" value={state.number} onChange={(e) => patch({ number: e.target.value })} /> },
-    title: { active: !!state.title, clear: () => patch({ title: "" }), content: <input aria-label="Filter by issue" placeholder="Filter title…" value={state.title} onChange={(e) => patch({ title: e.target.value })} /> },
-    labels: { active: !!state.label, clear: () => patch({ label: "" }), content: <select aria-label="Filter by tag" value={state.label} onChange={(e) => patch({ label: e.target.value })}><option value="">All tags</option><option value="none">No tags</option>{labels.map((label) => <option key={label} value={`label:${label}`}>{label}</option>)}</select> },
-    tagged: { active: !!state.tagged, clear: () => patch({ tagged: "" }), content: <select aria-label="Filter by tagged user" value={state.tagged} onChange={(e) => patch({ tagged: e.target.value })}><option value="">Anyone</option><option value="none">No tagged users</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}</select> },
-    creator: { active: !!state.creator, clear: () => patch({ creator: "" }), content: <select aria-label="Filter by creator" value={state.creator} onChange={(e) => patch({ creator: e.target.value })}><option value="">All creators</option><option value="unknown">Unknown user</option>{users.map((user) => <option key={user.id} value={`user:${user.id}`}>{user.name} ({user.email})</option>)}</select> },
-    created: { active: !!(state.createdFrom || state.createdTo), clear: () => patch({ createdFrom: "", createdTo: "" }), content: <div className="date-filter"><label><span>From</span><input type="date" aria-label="Created on or after" value={state.createdFrom} max={state.createdTo || undefined} onChange={(e) => patch({ createdFrom: e.target.value })} /></label><label><span>To</span><input type="date" aria-label="Created on or before" value={state.createdTo} min={state.createdFrom || undefined} onChange={(e) => patch({ createdTo: e.target.value })} /></label></div> },
+  const fields: FilterFieldDefinition[] = [
+    { key: "lane", label: "Board lane", valueLabel: "Filter by board lane", options: [{ value: "none", label: "Not on board" }, ...laneOptions] },
+    { key: "title", label: "Issue", kind: "text", valueLabel: "Filter by issue" },
+    { key: "number", label: "Number", kind: "number", valueLabel: "Filter by number" },
+    { key: "labels", label: "Tags", valueLabel: "Filter by tag", options: [{ value: "none", label: "No tags" }, ...labels.map((label) => ({ value: `label:${label}`, label }))] },
+    { key: "tagged", label: "Tagged users", valueLabel: "Filter by tagged user", options: [{ value: "none", label: "No tagged users" }, ...users.map((user) => ({ value: user.id, label: `${user.name} (${user.email})` }))] },
+    { key: "creator", label: "Creator", valueLabel: "Filter by creator", options: [{ value: "unknown", label: "Unknown user" }, ...users.map((user) => ({ value: `user:${user.id}`, label: `${user.name} (${user.email})` }))] },
+    { key: "created", label: "Created", kind: "date", fromLabel: "Created on or after", toLabel: "Created on or before" },
+    ...(projects ? [{ key: "project" as const, label: "Project", valueLabel: "Filter by project", options: [{ value: "none", label: "No project" }, ...projects.map((project) => ({ value: project.id, label: `${project.name}${project.archivedAt ? " (archived)" : ""}` }))] }] : []),
+  ];
+  const columnFilter = (key: IssueColumn) => {
+    const conditions = state.filters.conditions.filter((filter) => filter.field === key);
+    // A draft may have been moved to another field in the full builder.
+    // Keep the placeholder's key stable while typing, but never reuse that rule's ID.
+    let draftId = `draft-${key}`;
+    while (state.filters.conditions.some((filter) => filter.id === draftId)) draftId += "-new";
+    const onColumnChange = (group: IssueFilterGroup) => {
+      const next = new Map(group.conditions.map((filter) => [filter.id, filter]));
+      const previousIds = new Set(conditions.map((filter) => filter.id));
+      patch({ filters: { conjunction: group.conjunction, conditions: [
+        ...state.filters.conditions.flatMap((filter) => filter.field !== key ? [filter] : next.has(filter.id) ? [next.get(filter.id)!] : []),
+        ...group.conditions.filter((filter) => !previousIds.has(filter.id)),
+      ] } });
+    };
+    return {
+      active: conditions.some(isActiveIssueFilter),
+      clear: () => patch({ filters: { ...state.filters, conditions: state.filters.conditions.filter((filter) => filter.field !== key) } }),
+      content: <FilterBuilder fixedField fields={fields.filter((field) => field.key === key)} value={{ ...state.filters, conditions: conditions.length ? conditions : [{ id: draftId, field: key, operator: "is", value: "" }] }} onChange={onColumnChange} />,
+    };
   };
   return <section className="issue-table-section" aria-label="Issue list">
+    <section className="table-filters" aria-label="Table filters">
+      <div className="table-filters-heading"><Button type="button" variant="ghost" aria-expanded={filtersExpanded} aria-controls={filterPanelId} onClick={() => setFiltersExpanded(!filtersExpanded)}>{filtersExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<Filter size={15} />Filter table{filterCount > 0 && <span className="board-filter-badge">{filterCount} active · {state.filters.conjunction.toUpperCase()}</span>}</Button></div>
+      {filtersExpanded && <div id={filterPanelId}><FilterBuilder fields={fields.map(({ valueLabel, fromLabel, toLabel, ...field }) => field)} value={state.filters} onChange={(filters) => patch({ filters })} /><p className="muted filter-builder-help">Filters are saved for you on this device.</p></div>}
+    </section>
     <div className="issue-bulk-actions issue-table-actions" role="group" aria-label="Selected issue actions" aria-busy={pending}>
       <p className="issue-table-count muted">{issues.length} of {allIssues.length} issues</p>
       <Button ref={columnsButton} type="button" variant="secondary" aria-haspopup="dialog" onClick={() => setConfiguringColumns(true)}><Columns3 size={15} />Columns</Button>
@@ -212,7 +243,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
       <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => onLabelIssues([...selected])}>Add tags</Button>
       <Button type="button" disabled={pending || readOnly || !selected.length} onClick={() => setSending(issues.filter((issue) => selected.includes(issue.id)))}>Send to board</Button>
       <Button type="button" variant="ghost" disabled={pending || !selected.length} onClick={() => { setSelection([]); range.current = null; }}>Clear selection</Button>
-      {hasColumnFilters(state) && <Button type="button" variant="ghost" onClick={() => onChange({ ...initialIssueTableState, sort: state.sort, direction: state.direction })}>Clear column filters</Button>}
+      {(state.filters.conditions.length > 0 || state.filters.conjunction !== "and") && <Button type="button" variant="ghost" onClick={() => patch({ filters: { ...emptyIssueFilters, conditions: [] } })}>Clear column filters</Button>}
     </div>
     {configuringColumns && <IssueColumnConfig columns={columnPreferences} includeProject={includeProject} onSave={saveColumns} onClose={closeColumnConfig} onRestoreFocus={() => columnsButton.current?.focus({ preventScroll: true })} />}
     {sending && <SendToBoardDialog issues={sending} onClose={() => setSending(null)}
@@ -225,7 +256,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
         <caption className="sr-only">Issues. Use column headings to sort and filter. Select issues to send to board lanes, add tags, tag teammates or close selected open issues. Up and Down open adjacent issues. Hold Shift with arrows or click to select a range.</caption>
         <colgroup><col className="selection-column" />{visibleColumns.map(({ key, className, width }) => <col key={key} className={className} style={{ width: key === "title" ? undefined : width }} />)}</colgroup>
         <thead><tr><th scope="col"><input ref={headerCheckbox} type="checkbox" aria-label="Select all issues on this page" checked={pageIds.length > 0 && checkedCount === pageIds.length} disabled={pending || !pageIds.length} onChange={(event) => { const checked = event.target.checked; range.current = null; setSelection((current) => checked ? [...new Set([...current, ...pageIds])] : current.filter((id) => !pageIds.includes(id))); }} /></th>
-          {visibleColumns.map(({ key, label }) => <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filters[key].active} onClear={filters[key].clear}>{filters[key].content}</FilterPopover></div></th>)}
+          {visibleColumns.map(({ key, label }) => { const filter = columnFilter(key); return <th key={key} scope="col" aria-sort={state.sort === key ? state.direction : "none"}><div className="issue-column-heading"><button type="button" className="column-sort" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => patch({ sort: key, direction: state.sort === key && state.direction === "ascending" ? "descending" : "ascending" })}>{label}{state.sort !== key ? <ArrowUpDown size={13} /> : state.direction === "ascending" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button><FilterPopover label={label} active={filter.active} onClear={filter.clear}>{filter.content}</FilterPopover></div></th>; })}
         </tr></thead>
         <tbody>{rows.map((issue) => <tr key={issue.id} onClickCapture={(event) => { if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).matches('input[type="checkbox"]')) return; event.preventDefault(); event.stopPropagation(); selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); }} className={`issue-row${selectedId === issue.id ? " is-selected" : ""}${selected.includes(issue.id) ? " is-bulk-selected" : ""}`}>
           <td><input type="checkbox" aria-label={`Select issue !${issue.number}`} checked={selected.includes(issue.id)} disabled={pending || !eligible.has(issue.id)} onChange={(event) => { if ((event.nativeEvent as globalThis.MouseEvent).shiftKey) { selectRange(issue.id); activeId.current = issue.id; links.current.get(issue.id)?.focus(); return; } const checked = event.target.checked; activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: selected.filter((id) => id !== issue.id) }; setSelection((current) => checked ? [...new Set([...current, issue.id])] : current.filter((id) => id !== issue.id)); }} /></td>

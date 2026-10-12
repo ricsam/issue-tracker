@@ -26,7 +26,7 @@ for (const width of [1440, 1060, 390]) {
     const hashtags = bar.getByRole("button", { name: "Add tags", exact: true });
     const clear = bar.getByRole("button", { name: "Clear selection", exact: true });
     const table = page.getByRole("region", { name: "Scrollable issues table", exact: true });
-    const tableOffset = () => table.evaluate((element) => element.getBoundingClientRect().top - element.closest(".issue-table-section")!.getBoundingClientRect().top);
+    const tableOffset = () => table.evaluate((element) => element.getBoundingClientRect().top - element.closest(".issue-table-section")!.querySelector(".issue-table-actions")!.getBoundingClientRect().top);
     await expect(bar).toBeVisible();
     await expect(bar.getByText("12 of 12 issues", { exact: true })).toBeVisible();
     await expect(bar.getByText("0 selected", { exact: true })).toBeVisible();
