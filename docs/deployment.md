@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.19.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.20.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.20.0
+
+Version 0.20.0 replaces the sidebar pin buttons with a **⋮** menu on each project, shown on hover or keyboard focus and always on touch screens. It offers **Pin project**/**Unpin project**, **Move up**/**Move down** for pinned projects, **Rename project** (name only), and **Archive project** with the usual confirmation. The sidebar's drag instructions are removed, and the pinned section is hidden until something is pinned; dragging pinned projects still works. An open project page reflects renames and archiving from the sidebar immediately. Pressing Escape in a menu or dialog opened from the mobile navigation drawer now closes only that menu or dialog. Project cards keep their pin buttons.
+
+No database migration, API change, or deployment-value change is added by this release. Preserve `/data`, the encryption-key Secret and existing values, and select the published SHA image matching the chart release commit after CI succeeds. Upgrades from before 0.19.0 still run migration v15 and carry the rollback restrictions below. Publishing this chart does not automatically upgrade running deployments.
 
 ### Upgrading to 0.19.0
 

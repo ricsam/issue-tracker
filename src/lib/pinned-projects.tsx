@@ -8,9 +8,10 @@ type PinnedProjects = {
   busy: boolean;
   error: string;
   retry: () => void;
-  toggle: (projectId: string) => Promise<void>;
-  pin: (projectId: string, beforeProjectId?: string | null) => Promise<void>;
-  unpin: (projectId: string) => Promise<void>;
+  /** Each write resolves true when the server confirmed it. */
+  toggle: (projectId: string) => Promise<boolean>;
+  pin: (projectId: string, beforeProjectId?: string | null) => Promise<boolean>;
+  unpin: (projectId: string) => Promise<boolean>;
 };
 const PinnedProjectsContext = createContext<PinnedProjects | null>(null);
 
@@ -34,7 +35,7 @@ export function PinnedProjectsProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [attempt]);
   const update = useCallback(async (projectId: string, removing: boolean, beforeProjectId?: string | null) => {
-    if (pending.current || loading || error) return;
+    if (pending.current || loading || error) return false;
     pending.current = true;
     setBusy(true);
     try {
@@ -45,8 +46,10 @@ export function PinnedProjectsProvider({ children }: { children: ReactNode }) {
       // Apply only confirmed writes, so failed pin/reorder requests preserve the saved order.
       setProjectIds(result.projectIds);
       notify(removing ? "Project unpinned" : projectIds.includes(projectId) ? "Pinned projects reordered" : "Project pinned");
+      return true;
     } catch (cause) {
       notify(`Could not update pinned projects: ${message(cause)}`, "error");
+      return false;
     } finally {
       pending.current = false;
       setBusy(false);

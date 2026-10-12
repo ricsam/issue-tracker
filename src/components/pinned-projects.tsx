@@ -1,11 +1,14 @@
-import { useRef, useState, type DragEvent } from "react";
-import * as Popover from "@radix-ui/react-popover";
-import { ArrowDown, ArrowUp, FolderKanban, ListOrdered, Pin, X } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type DragEvent } from "react";
+import { Archive, ArrowDown, ArrowUp, FolderKanban, PencilLine, Pin, PinOff } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import type { Project } from "../../shared/types";
 import { usePinnedProjects } from "../lib/pinned-projects";
 import { projectNavigation } from "../lib/project-navigation";
 import { Tooltip } from "./ui/tooltip";
+import { ActionMenu, type ActionMenuItem } from "./ui/action-menu";
+import { useNotification } from "./ui/snackbar";
+import { EditProjectDialog } from "./edit-project-dialog";
+import { ArchiveProjectDialog } from "./lifecycle";
 import "./pinned-projects.css";
 
 export function PinProjectButton({ project }: { project: Project }) {
@@ -19,36 +22,43 @@ export function PinProjectButton({ project }: { project: Project }) {
   </button></Tooltip>;
 }
 
-function ReorderPins({ projects }: { projects: Project[] }) {
-  const { busy, pin } = usePinnedProjects();
-  return <Popover.Root>
-    <Tooltip content="Reorder pinned projects"><Popover.Trigger asChild>
-      <button type="button" className="icon-button reorder-pins-button" aria-label="Reorder pinned projects"><ListOrdered size={15} /></button>
-    </Popover.Trigger></Tooltip>
-    <Popover.Portal><Popover.Content className="reorder-pins-popover" sideOffset={6} align="start" collisionPadding={12} aria-label="Reorder pinned projects">
-      <header><strong>Pinned projects</strong><Popover.Close asChild><button type="button" className="icon-button" aria-label="Close reorder controls"><X size={16} /></button></Popover.Close></header>
-      <p>Move projects up or down, or drag them in the sidebar.</p>
-      <ol>{projects.map((project, index) => <li key={project.id}>
-        <span title={project.name}>{project.name}</span>
-        <button type="button" className="icon-button" aria-label={`Move ${project.name} up`} aria-disabled={busy || index === 0}
-          onClick={() => { if (!busy && index > 0) void pin(project.id, projects[index - 1]!.id); }}><ArrowUp size={16} /></button>
-        <button type="button" className="icon-button" aria-label={`Move ${project.name} down`} aria-disabled={busy || index === projects.length - 1}
-          onClick={() => { if (!busy && index < projects.length - 1) void pin(project.id, projects[index + 2]?.id ?? null); }}><ArrowDown size={16} /></button>
-      </li>)}</ol>
-    </Popover.Content></Popover.Portal>
-  </Popover.Root>;
-}
-
 const PROJECT_DRAG_TYPE = "application/x-threadline-sidebar-project";
 type DropTarget = { section: "pinned"; beforeId: string | null; rowId?: string; after?: boolean } | { section: "others" };
 
 export function SidebarProjects({ projects }: { projects: Project[] }) {
   const { projectIds, loading, busy, error, retry, pin, unpin } = usePinnedProjects();
   const { pinned, others } = projectNavigation(projects, projectIds);
+  const notify = useNotification();
   const [dragging, setDragging] = useState<string | null>(null);
   const dragId = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [renaming, setRenaming] = useState<Project | null>(null);
+  const [archiving, setArchiving] = useState<Project | null>(null);
+  const root = useRef<HTMLDivElement>(null);
   const enabled = !loading && !busy && !error;
+  const menuTrigger = (id: string) => root.current?.querySelector<HTMLElement>(`[data-project-id="${CSS.escape(id)}"] .action-menu-trigger`);
+  // Pinning and reordering can remount a row in its new position; keep keyboard focus on its menu.
+  const focusAfterPinChange = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = focusAfterPinChange.current;
+    if (!id) return;
+    focusAfterPinChange.current = null;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) menuTrigger(id)?.focus({ preventScroll: true });
+  }, [projectIds]);
+  function updatePins(id: string, change: () => Promise<boolean>) {
+    focusAfterPinChange.current = id;
+    // A rejected write leaves the row, and its focused menu button, in place.
+    void change().then((saved) => { if (!saved && focusAfterPinChange.current === id) focusAfterPinChange.current = null; });
+  }
+  /** These dialogs have no Radix trigger, so return focus to the project's menu explicitly. */
+  function restoreFocus(event: Event, id: string) {
+    // An archived row leaves the sidebar; its project is then under All projects.
+    const target = menuTrigger(id) ?? document.querySelector<HTMLElement>('#workspace-navigation nav a.nav-item[href="/projects"]');
+    if (!target) return;
+    event.preventDefault();
+    target.focus({ preventScroll: true });
+  }
   function finishDrag() {
     dragId.current = null;
     setDragging(null);
@@ -89,6 +99,22 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
   function leave(event: DragEvent) {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null);
   }
+  function menuItems(project: Project, isPinned: boolean): ActionMenuItem[] {
+    const index = pinned.findIndex((item) => item.id === project.id);
+    return [
+      isPinned
+        ? { id: "unpin", label: "Unpin project", icon: <PinOff size={15} />, disabled: !enabled, onSelect: () => updatePins(project.id, () => unpin(project.id)) }
+        : { id: "pin", label: "Pin project", icon: <Pin size={15} />, disabled: !enabled, onSelect: () => updatePins(project.id, () => pin(project.id)) },
+      ...(isPinned ? [
+        { id: "up", label: "Move up", icon: <ArrowUp size={15} />, disabled: !enabled || index <= 0,
+          onSelect: () => updatePins(project.id, () => pin(project.id, pinned[index - 1]!.id)) },
+        { id: "down", label: "Move down", icon: <ArrowDown size={15} />, disabled: !enabled || index === pinned.length - 1,
+          onSelect: () => updatePins(project.id, () => pin(project.id, pinned[index + 2]?.id ?? null)) },
+      ] : []),
+      { id: "rename", label: "Rename project", icon: <PencilLine size={15} />, separated: true, onSelect: () => setRenaming(project) },
+      { id: "archive", label: "Archive project", icon: <Archive size={15} />, onSelect: () => setArchiving(project) },
+    ];
+  }
   const links = (items: Project[], isPinned: boolean) => items.map((project) => {
     const indicator = dropTarget?.section === "pinned" && dropTarget.rowId === project.id && dragging !== project.id;
     return <div key={project.id} data-project-id={project.id}
@@ -107,23 +133,21 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
       <NavLink to={`/projects/${project.slug}`} className="nav-item" draggable={false} title={project.name}>
         <FolderKanban size={17} /><span>{project.name}</span>
       </NavLink>
-      <PinProjectButton project={project} />
+      <ActionMenu label={`Actions for ${project.name}`} items={menuItems(project, isPinned)} triggerClassName="sidebar-project-menu" />
     </div>;
   });
   const endTarget: DropTarget = { section: "pinned", beforeId: null };
   const otherTarget: DropTarget = { section: "others" };
-  return <div className="sidebar-projects">
-    <section aria-label="Pinned projects" aria-busy={loading || busy}
-      className={`pinned-projects-section${dragging ? " is-drag-active" : ""}${dropTarget?.section === "pinned" && !dropTarget.rowId ? " is-drop-target" : ""}`}
+  return <div ref={root} className="sidebar-projects">
+    {/* With no pins, the section stays hidden; pin projects from their menus. */}
+    {(loading || !!error || pinned.length > 0) && <section aria-label="Pinned projects" aria-busy={loading || busy}
+      className={`pinned-projects-section${dropTarget?.section === "pinned" && !dropTarget.rowId ? " is-drop-target" : ""}`}
       onDragOver={(event) => over(event, endTarget)} onDrop={(event) => drop(event, endTarget)} onDragLeave={leave}>
-      <div className="nav-label"><span>PINNED PROJECTS</span><span className="pin-section-actions">{pinned.length}
-        {pinned.length > 1 && <ReorderPins projects={pinned} />}
-      </span></div>
+      <div className="nav-label"><span>PINNED PROJECTS</span><span>{pinned.length}</span></div>
       {loading ? <p className="sidebar-empty" role="status">Loading pinned projects…</p> : error ?
         <div className="sidebar-empty"><p role="alert">Could not load pinned projects.</p><button type="button" className="btn btn-ghost" onClick={retry}>Retry pinned projects</button></div> :
-        pinned.length ? links(pinned, true) : <p className="sidebar-empty pin-empty">Drag projects here or use the pin button.</p>}
-      {pinned.length > 0 && <p className="project-drop-hint">{dragging ? "Drop here to pin at the end" : "Drag projects to pin or reorder"}</p>}
-    </section>
+        links(pinned, true)}
+    </section>}
     <section aria-label="Other projects" className={dropTarget?.section === "others" ? "is-drop-target" : undefined}
       onDragOver={(event) => over(event, otherTarget)} onDrop={(event) => drop(event, otherTarget)} onDragLeave={leave}>
       <div className="nav-label" title="Ordered by latest issue update"><span>PROJECTS</span><span>{others.length}</span></div>
@@ -131,5 +155,12 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
       {dragging && projectIds.includes(dragging) && <p className="project-drop-hint">Drop here to unpin</p>}
       {!pinned.length && !others.length && <p className="sidebar-empty">{projects.length ? "Archived projects are under All projects." : "Your projects will appear here."}</p>}
     </section>
+    {renaming && <EditProjectDialog rename project={renaming}
+      onSaved={() => notify("Project renamed")} onClose={() => setRenaming(null)}
+      onCloseAutoFocus={(event) => restoreFocus(event, renaming.id)} />}
+    {archiving && <ArchiveProjectDialog project={archiving} open
+      onOpenChange={(open) => { if (!open) setArchiving(null); }}
+      onChange={() => notify("Project archived")}
+      onCloseAutoFocus={(event) => restoreFocus(event, archiving.id)} />}
   </div>;
 }

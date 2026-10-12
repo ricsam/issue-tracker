@@ -170,6 +170,21 @@ function ProjectIssues({ slug }: { slug: string }) {
     return true;
   }
   const [project, setProject] = useState<Project | null>(null);
+  // Sidebar menus rename or archive projects through the shared workspace copy. Apply only
+  // later changes to that copy: when this page loads, its own project response is fresher.
+  const sharedProject = project ? projects.find((item) => item.id === project.id) : undefined;
+  const previousSharedProject = useRef<Project | undefined>(undefined);
+  useEffect(() => {
+    const previous = previousSharedProject.current;
+    previousSharedProject.current = sharedProject;
+    if (!sharedProject || previous?.id !== sharedProject.id) return;
+    const changes: Partial<Project> = {};
+    if (previous.name !== sharedProject.name) changes.name = sharedProject.name;
+    if (previous.description !== sharedProject.description) changes.description = sharedProject.description;
+    if (previous.archivedAt !== sharedProject.archivedAt) Object.assign(changes, { archivedAt: sharedProject.archivedAt, archivedById: sharedProject.archivedById });
+    const keys = Object.keys(changes) as (keyof Project)[];
+    if (keys.length) setProject((current) => current?.id === sharedProject.id && keys.some((key) => current[key] !== changes[key]) ? { ...current, ...changes } : current);
+  }, [sharedProject]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const movedOutIds = useRef(new Set<string>());
   const globallyCreated = useGloballyCreatedIssues();

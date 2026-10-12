@@ -115,7 +115,8 @@ function AppContent() {
   useEffect(() => setMobile(false), [location.pathname]);
   useEffect(() => {
     function escape(e: KeyboardEvent) {
-      if (e.key === "Escape") setMobile(false);
+      // Dialogs and menus opened from the drawer handle their own Escape first.
+      if (e.key === "Escape" && !e.defaultPrevented) setMobile(false);
     }
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);

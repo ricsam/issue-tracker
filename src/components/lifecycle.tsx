@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Archive, ArchiveRestore, CircleCheck, CircleDot } from "lucide-react";
 import type { IssueState, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
@@ -28,7 +28,7 @@ function useArchiveRequest(
   project: Project,
   onChange: (project: Project) => void,
 ) {
-  const { refresh } = useWorkspace();
+  const { refresh, updateProject } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function setArchived(archived: boolean) {
@@ -40,7 +40,8 @@ function useArchiveRequest(
         { method: "PATCH", body: JSON.stringify({ archived }) },
       );
       onChange(result.project);
-      // Navigation reads workspace projects; the change itself already succeeded.
+      // Update navigation immediately; the refresh also reloads counts.
+      updateProject(result.project);
       void refresh().catch((e) => setError(message(e)));
       return true;
     } catch (e) {
@@ -53,6 +54,60 @@ function useArchiveRequest(
   return { busy, error, setError, setArchived };
 }
 
+export function ArchiveProjectDialog({
+  project,
+  open,
+  onOpenChange,
+  onChange,
+  onCloseAutoFocus,
+}: {
+  project: Project;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChange: (project: Project) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
+  const { busy, error, setError, setArchived } = useArchiveRequest(
+    project,
+    onChange,
+  );
+  useEffect(() => {
+    if (open) setError("");
+  }, [open]);
+  return (
+    <Modal
+      title="Archive project?"
+      description={`${project.name} will be hidden from the sidebar and project list and become read-only. Its issues, comments and board are kept, and you can restore it at any time.`}
+      open={open}
+      onOpenChange={(value) => !busy && onOpenChange(value)}
+      onCloseAutoFocus={onCloseAutoFocus}
+    >
+      <div className="form-stack">
+        <ErrorNotice error={error} />
+        <div className="form-actions">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void setArchived(true).then((done) => done && onOpenChange(false))
+            }
+          >
+            {busy ? "Archiving…" : "Archive project"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function ArchiveProjectButton({
   project,
   onChange,
@@ -61,51 +116,18 @@ export function ArchiveProjectButton({
   onChange: (project: Project) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { busy, error, setError, setArchived } = useArchiveRequest(
-    project,
-    onChange,
-  );
   return (
     <>
-      <Button
-        variant="secondary"
-        onClick={() => {
-          setError("");
-          setOpen(true);
-        }}
-      >
+      <Button variant="secondary" onClick={() => setOpen(true)}>
         <Archive size={15} />
         Archive
       </Button>
-      <Modal
-        title="Archive project?"
-        description={`${project.name} will be hidden from the sidebar and project list and become read-only. Its issues, comments and board are kept, and you can restore it at any time.`}
+      <ArchiveProjectDialog
+        project={project}
         open={open}
-        onOpenChange={(value) => !busy && setOpen(value)}
-      >
-        <div className="form-stack">
-          <ErrorNotice error={error} />
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void setArchived(true).then((done) => done && setOpen(false))
-              }
-            >
-              {busy ? "Archiving…" : "Archive project"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onOpenChange={setOpen}
+        onChange={onChange}
+      />
     </>
   );
 }

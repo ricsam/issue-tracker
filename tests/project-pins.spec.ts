@@ -25,6 +25,12 @@ const pinnedRegion = (page: Page) => page.getByRole("region", { name: "Pinned pr
 const otherRegion = (page: Page) => page.getByRole("region", { name: "Other projects", exact: true });
 const row = (section: Locator, project: Project) => section.locator(`[data-project-id="${project.id}"]`);
 const expectOrder = (section: Locator, projects: Project[]) => expect(section.getByRole("link")).toHaveText(projects.map((project) => project.name));
+const actions = (section: Locator, name: string) => section.getByRole("button", { name: `Actions for ${name}`, exact: true });
+const actionMenu = (page: Page, name: string) => page.getByRole("menu", { name: `Actions for ${name}`, exact: true });
+async function chooseAction(page: Page, section: Locator, name: string, item: string) {
+  await actions(section, name).click();
+  await actionMenu(page, name).getByRole("menuitem", { name: item, exact: true }).click();
+}
 async function pin(page: Page, baseURL: string, project: Project) {
   expect((await page.request.put(`/api/me/pinned-projects/${project.id}`, { headers: { Origin: baseURL } })).ok()).toBeTruthy();
 }
@@ -47,9 +53,15 @@ for (const width of [1440, 390]) {
     await pins.getByRole("link", { name: project.name, exact: true }).click();
     await expect(page).toHaveURL(`/projects/${project.slug}`);
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
-    await pins.getByRole("button", { name: `Unpin ${project.name}`, exact: true }).click();
+    // The sidebar uses row menus, not pin buttons or drag instructions.
+    const navigation = page.locator("#workspace-navigation");
+    await expect(navigation.getByRole("button", { name: /^(Pin|Unpin) / })).toHaveCount(0);
+    await expect(navigation.getByText(/Drag projects|pin button/)).toHaveCount(0);
+    await chooseAction(page, pins, project.name, "Unpin project");
     await expect(pins.getByRole("link", { name: project.name, exact: true })).toHaveCount(0);
+    await expect(pins).toHaveCount(0);
     await expect(otherRegion(page).getByRole("link", { name: project.name, exact: true })).toBeVisible();
+    await expect(actions(otherRegion(page), project.name)).toBeFocused();
   });
 }
 
@@ -63,7 +75,9 @@ test("pins are personal and archived pins return on restore", async ({ page, bro
     expect((await other.request.post("/api/auth/login", { headers, data: { email, password: "another-browser-test-password" } })).ok()).toBeTruthy();
     const otherPage = await other.newPage();
     await otherPage.goto("/projects");
-    await expect(pinnedRegion(otherPage)).toContainText("Drag projects here");
+    // Without pins of their own, the pinned section is hidden for this member.
+    await expect(otherRegion(otherPage).getByRole("link", { name: project.name, exact: true })).toBeVisible();
+    await expect(pinnedRegion(otherPage)).toHaveCount(0);
     expect((await (await other.request.get("/api/me/pinned-projects")).json()).projectIds).not.toContain(project.id);
   } finally { await other.close(); }
   expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
@@ -105,8 +119,8 @@ test("sidebar drag pins, inserts, reorders both ways, persists and unpins", asyn
   await page.goto("/projects");
   const pins = pinnedRegion(page);
   const others = otherRegion(page);
-  await expect(pins).toContainText("Drag projects here");
-  await row(others, a).dragTo(pins, { targetPosition: { x: 70, y: 10 } });
+  await expect(pins).toHaveCount(0);
+  await chooseAction(page, others, a.name, "Pin project");
   await expectOrder(pins, [a]);
   await row(others, b).dragTo(row(pins, a), { targetPosition: { x: 70, y: 5 } });
   await expectOrder(pins, [b, a]);
@@ -147,7 +161,7 @@ test("failed reorders leave the prior order and unrelated drops do not pin", asy
 });
 
 for (const width of [1440, 390]) {
-  test(`reorder buttons work without dragging at ${width}px`, async ({ page, baseURL }) => {
+  test(`pinned projects reorder from their menus without dragging at ${width}px`, async ({ page, baseURL }) => {
     const a = (await seed(page, baseURL!, "Alpha")).project;
     const b = (await seed(page, baseURL!, "Beta")).project;
     await pin(page, baseURL!, a);
@@ -157,26 +171,84 @@ for (const width of [1440, 390]) {
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
     const pins = pinnedRegion(page);
     await expectOrder(pins, [a, b]);
-    const trigger = pins.getByRole("button", { name: "Reorder pinned projects" });
+    await expect(pins.getByRole("button", { name: "Reorder pinned projects" })).toHaveCount(0);
+    const trigger = actions(pins, b.name);
     await trigger.focus();
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "Reorder pinned projects" });
-    await expect(dialog).toBeVisible();
-    const up = dialog.getByRole("button", { name: `Move ${b.name} up`, exact: true });
-    await up.focus();
+    const menu = actionMenu(page, b.name);
+    await expect(menu.getByRole("menuitem")).toHaveText(["Unpin project", "Move up", "Move down", "Rename project", "Archive project"]);
+    await expect(menu.getByRole("menuitem", { name: "Unpin project", exact: true })).toBeFocused();
+    await expect(menu.getByRole("menuitem", { name: "Move down", exact: true })).toHaveAttribute("aria-disabled", "true");
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Move up", exact: true })).toBeFocused();
     await page.keyboard.press("Enter");
     await expectOrder(pins, [b, a]);
-    await expect(up).toBeFocused();
-    await expect(up).toHaveAttribute("aria-disabled", "true");
-    await dialog.getByRole("button", { name: `Move ${b.name} down`, exact: true }).click();
-    await expectOrder(pins, [a, b]);
-    await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Move up", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await menu.getByRole("menuitem", { name: "Move down", exact: true }).click();
+    await expectOrder(pins, [a, b]);
+    await actions(pins, a.name).click();
+    await expect(actionMenu(page, a.name)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(actionMenu(page, a.name)).toBeHidden();
+    await expect(actions(pins, a.name)).toBeFocused();
+    // Escape closes only the menu, not the mobile navigation drawer.
+    if (width < 768) await expect(page.locator("#workspace-navigation")).toHaveClass(/is-open/);
+    // Dialogs opened from a row menu also close alone and return focus to that menu.
+    await chooseAction(page, pins, a.name, "Rename project");
+    await expect(page.getByRole("dialog", { name: "Rename project", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Rename project", exact: true })).toBeHidden();
+    await expect(actions(pins, a.name)).toBeFocused();
+    if (width < 768) await expect(page.locator("#workspace-navigation")).toHaveClass(/is-open/);
     await page.reload();
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
     await expectOrder(pins, [a, b]);
   });
 }
+
+test("sidebar menus rename and archive projects and keep the open project in sync", async ({ page, baseURL }) => {
+  const { project } = await seed(page, baseURL!, "Menu");
+  const renamed = `Renamed ${randomUUID().slice(0, 8)}`;
+  await page.goto(`/projects/${project.slug}`);
+  const others = otherRegion(page);
+  await actions(others, project.name).click();
+  const menu = actionMenu(page, project.name);
+  await expect(menu.getByRole("menuitem")).toHaveText(["Pin project", "Rename project", "Archive project"]);
+  await menu.getByRole("menuitem", { name: "Rename project", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Rename project", exact: true });
+  await expect(dialog.getByLabel("Project name")).toBeFocused();
+  await expect(dialog.getByLabel("Description")).toHaveCount(0);
+  await page.keyboard.type(renamed);
+  await dialog.getByRole("button", { name: "Rename", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(renamed);
+  await expect(others.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+  await expect(page.locator(".snackbar")).toContainText("Project renamed");
+  await expect(actions(others, renamed)).toBeFocused();
+  // Cancelling also returns focus to the project's menu button.
+  await chooseAction(page, others, renamed, "Rename project");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(actions(others, renamed)).toBeFocused();
+  await chooseAction(page, others, renamed, "Archive project");
+  const confirm = page.getByRole("dialog", { name: "Archive project?", exact: true });
+  await confirm.getByRole("button", { name: "Archive project", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(page.locator("#workspace-navigation").getByRole("link", { name: renamed, exact: true })).toHaveCount(0);
+  // The open project page becomes read-only without a reload.
+  await expect(page.getByRole("region", { name: "Archived project", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "All projects", exact: true })).toBeFocused();
+  expect((await (await page.request.get(`/api/projects/${project.slug}`)).json()).project).toMatchObject({ name: renamed, archivedAt: expect.any(String) });
+  await page.getByRole("button", { name: "Restore project", exact: true }).click();
+  await expect(others.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit project", exact: true })).toBeVisible();
+});
 
 test("unpinned sidebar follows latest issue update, including an in-app edit, while pins stay fixed", async ({ page, baseURL }) => {
   const { project: a, headers } = await seed(page, baseURL!, "Alpha");
@@ -195,6 +267,21 @@ test("unpinned sidebar follows latest issue update, including an in-app edit, wh
   await expectOrder(pinnedRegion(page), [c]);
   await page.reload();
   await expect(others.getByRole("link").first()).toHaveText(a.name);
+});
+
+test("project pages keep details fresher than the loaded sidebar", async ({ page, baseURL }) => {
+  const { project, headers } = await seed(page, baseURL!, "Stale");
+  await page.goto("/projects");
+  const others = otherRegion(page);
+  await expect(others.getByRole("link", { name: project.name, exact: true })).toBeVisible();
+  // Another member renames and archives it after this workspace loaded.
+  const renamed = `Elsewhere ${randomUUID().slice(0, 8)}`;
+  expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { name: renamed } })).ok()).toBeTruthy();
+  expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
+  await others.getByRole("link", { name: project.name, exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(renamed);
+  await expect(page.getByRole("region", { name: "Archived project", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
 });
 
 test("projects is the root breadcrumb and redundant sidebar copy is removed", async ({ page, baseURL }) => {
