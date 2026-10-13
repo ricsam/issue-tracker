@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import {
   BrowserRouter,
@@ -31,6 +32,7 @@ import { api, AUTH_EXPIRED_EVENT, message } from "./lib/api";
 import { WorkspaceContext } from "./lib/workspace";
 import { PinnedProjectsProvider } from "./lib/pinned-projects";
 import { SidebarProjects } from "./components/pinned-projects";
+import { useNavigationWidth } from "./lib/use-navigation-width";
 import { IssueBreadcrumbContext } from "./lib/issue-breadcrumb";
 import { IssueCreationProvider, useIssueCreation } from "./lib/issue-creation";
 import { NEW_ISSUE_KEYS, newIssueTooltip } from "./lib/issue-shortcuts";
@@ -70,6 +72,7 @@ function AppContent() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [mobile, setMobile] = useState(false);
+  const navigation = useNavigationWidth(!!auth?.user && ready);
   const location = useLocation();
   const [breadcrumbIssue, setBreadcrumbIssue] = useState<Issue | null>(null);
   const recheckingAuth = useRef(false);
@@ -185,7 +188,8 @@ function AppContent() {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <div className="app-shell">
+      <div className={`app-shell${navigation.resizing ? " is-resizing-navigation" : ""}`}
+        style={{ "--navigation-width": `${navigation.width}px` } as CSSProperties}>
         {mobile && (
           <button
             className="nav-backdrop"
@@ -246,6 +250,7 @@ function AppContent() {
               </button></Tooltip>
             </div>
           </div>
+          {navigation.desktop && <div className="navigation-resizer" {...navigation.separatorProps} />}
         </aside>
         <div className="main-shell">
           <header className="topbar">
