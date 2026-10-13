@@ -62,14 +62,14 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   const editorBox = (await page.locator(".issue-detail-body .rich-editor").boundingBox())!;
   expect(editorBox.y - (saveBox.y + saveBox.height)).toBeGreaterThanOrEqual(12);
 
-  await expect(page.locator(".detail-heading .state-badge")).toHaveText("Open");
+  await expect(page.locator(".issue-detail-header .state-badge")).toHaveText("Open");
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.click();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" Draft kept.");
   await page.getByRole("button", { name: "Close issue", exact: true }).click();
-  await expect(page.locator(".detail-heading .state-badge")).toHaveText("Closed");
+  await expect(page.locator(".issue-detail-header .state-badge")).toHaveText("Closed");
   await expect(page.getByText("Issue closed", { exact: true })).toBeVisible();
   await expect(page.locator(".issue-created-meta")).toContainText("Closed");
   await expect(page.locator(".issue-created-meta")).toContainText("Alex Morgan");

@@ -25,6 +25,7 @@ import {
   GripVertical,
   SlidersHorizontal,
   Maximize2,
+  Minimize2,
   X,
 } from "lucide-react";
 import {
@@ -52,6 +53,7 @@ import { BoardActionsMenu } from "../components/board-actions-menu";
 import { BulkTagDialog } from "../components/bulk-tag-dialog";
 import { BulkLabelDialog } from "../components/bulk-label-dialog";
 import { IssueDetails } from "./detail";
+import { IssueDetailPanel } from "../components/issue-detail-panel";
 import {
   ArchiveProjectButton,
   ArchivedProjectNotice,
@@ -105,6 +107,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const currentDesktop = useRef(desktop);
   currentDesktop.current = desktop;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => { if (!selectedId) setExpanded(false); }, [selectedId]);
   const pending = useRef(false);
   const focusDetails = useRef(true);
   const opener = useRef<HTMLAnchorElement | null>(null);
@@ -113,7 +117,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   const collection = useRef<HTMLDivElement | null>(null);
   const { width: sidebarWidth, resizing, separatorProps } = useIssueSidebarWidth(
     detailSidebar,
-    desktop && !!selectedId,
+    desktop && !!selectedId && !expanded,
   );
   const onPendingChange = useCallback((value: boolean) => {
     pending.current = value;
@@ -136,11 +140,16 @@ function ProjectIssues({ slug }: { slug: string }) {
       opener.current = null;
     }
   }, [selectedId]);
+  const previousDesktop = useRef(desktop);
   useEffect(() => {
-    if (!desktop && selectedId && canLeaveDetails()) {
+    const shrank = previousDesktop.current && !desktop;
+    previousDesktop.current = desktop;
+    // Keep the existing narrow-screen fallback only for a viewport transition.
+    // Collapsing a fullscreen modal must never navigate or discard a draft.
+    if (shrank && selectedId && !expanded && canLeaveDetails()) {
       navigate(`/issues/${selectedId}`);
     }
-  }, [desktop, selectedId, navigate, canLeaveDetails]);
+  }, [desktop, selectedId, expanded, navigate, canLeaveDetails]);
   function closeDetails() {
     if (!canLeaveDetails()) return;
     setSelectedId(null);
@@ -950,40 +959,25 @@ function ProjectIssues({ slug }: { slug: string }) {
         )}
       </div>
       {selectedId && (
-        <aside
-          id="issue-detail-sidebar"
-          className="issue-detail-sidebar"
-          aria-label="Issue details"
-          ref={detailSidebar}
-          tabIndex={-1}
-        >
-          {desktop && <div className="issue-sidebar-resizer" {...separatorProps} />}
-          <header className="issue-sidebar-header">
-            <h2>Issue details</h2>
-            <Tooltip content="Open issue in full page"><Link
-              className="icon-button"
-              to={`/issues/${selectedId}`}
-              aria-label="Open issue in full page"
-              onClick={(event) => {
-                if (isPlainClick(event) && !canLeaveDetails())
-                  event.preventDefault();
-              }}
-            >
-              <Maximize2 size={17} />
-            </Link></Tooltip>
-            <Tooltip content="Close issue details"><button
-              className="icon-button"
-              aria-label="Close issue details"
-              onClick={closeDetails}
-            >
-              <X size={18} />
-            </button></Tooltip>
-          </header>
+        <IssueDetailPanel expanded={expanded} onCollapse={() => setExpanded(false)} panelRef={detailSidebar}>
+          {desktop && !expanded && <div className="issue-sidebar-resizer" {...separatorProps} />}
           <div className="issue-detail-scroll" inert={closingIssues}>
             <IssueDetails
               id={selectedId}
               existingTags={existingTags}
               embedded
+              boards={listBoards}
+              panelActions={<>
+                <button type="button" className="icon-button issue-expand-button"
+                  title={expanded ? "Collapse to sidebar" : "Expand issue"}
+                  aria-label={expanded ? "Collapse to sidebar" : "Expand issue"}
+                  aria-expanded={expanded} aria-controls="issue-detail-sidebar"
+                  onClick={() => setExpanded((value) => !value)}>
+                  {expanded ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+                </button>
+                <Button type="button" variant="ghost" className="icon-button" title="Close issue details"
+                  aria-label="Close issue details" onClick={closeDetails}><X size={18} /></Button>
+              </>}
               onBoardChanged={listBoardChanged}
               onPendingChange={onPendingChange}
               onSaved={(updated) => {
@@ -1010,7 +1004,7 @@ function ProjectIssues({ slug }: { slug: string }) {
               }}
             />
           </div>
-        </aside>
+        </IssueDetailPanel>
       )}
       {editingAccess && project && <ProjectAccessDialog project={project}
         onSaved={(updated, refreshFailed) => {

@@ -158,11 +158,11 @@ test("global lane creation survives a stale load, then moving updates All issues
   await expect(row).toContainText("Todo");
   await page.unroute("**/api/issues");
   await row.locator(".issue-link").click();
-  await page.locator(".detail-form").getByRole("button", { name: "Move issue", exact: true }).click();
-  const move = page.getByRole("dialog", { name: "Move issue", exact: true });
-  await move.getByLabel("Destination project").selectOption(target.id);
-  await move.getByRole("button", { name: "Move issue", exact: true }).click();
+  await page.locator(".detail-form").getByRole("button", { name: "Change project", exact: true }).click();
+  const move = page.getByRole("dialog", { name: "Choose project", exact: true });
+  await move.getByRole("combobox", { name: "Project", exact: true }).selectOption(target.id);
   await expect(move).toBeHidden();
+  await expect(page.locator(".detail-form").getByRole("button", { name: "Change project", exact: true })).toContainText(target.name);
   await expect(row).toContainText(target.name);
   await expect(row).toContainText("Not on board");
   await page.getByRole("button", { name: "Close issue details", exact: true }).click();

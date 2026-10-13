@@ -121,22 +121,22 @@ for (const width of [1440, 390]) {
     const editor = page.getByRole("textbox", { name: "Issue", exact: true });
     await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await editor.fill("Unsaved detail draft");
-    await page.getByRole("button", { name: "Send to board", exact: true }).click();
-    await modal(page).getByRole("combobox", { name: `Lane for ${p.name}` }).selectOption("in_progress");
-    await submit(page, 1);
-    await modal(page).getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Change board lane", exact: true }).click();
+    await page.getByRole("combobox", { name: "Board lane", exact: true }).selectOption("in_progress");
+    await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toContainText("In progress");
+    await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toBeHidden();
     await expect(editor).toContainText("Unsaved detail draft");
     await expect(page.getByText("Board placement updated", { exact: true })).toBeVisible();
     expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.body).toBe(issue.body);
-    await page.getByRole("button", { name: "Send to board", exact: true }).click();
-    const lane = modal(page).getByRole("combobox", { name: `Lane for ${p.name}` });
+    await page.getByRole("button", { name: "Change board lane", exact: true }).click();
+    const lane = page.getByRole("combobox", { name: "Board lane", exact: true });
     await expect(lane).toHaveValue("in_progress");
     await lane.selectOption("done");
     await page.screenshot({ path: `test-results/send-to-board-detail-${width}.png` });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await submit(page, 1);
+    await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toContainText("Done");
     expect((await board(page, p)).cards).toEqual([{ issueId: issue.id, lane: "done" }]);
-    await modal(page).getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toBeHidden();
     await expect(editor).toContainText("Unsaved detail draft");
   });
 }
@@ -163,16 +163,17 @@ test("closed off-board and unlinked issues explain why they cannot be sent; arch
   await expect(actions(page)).toContainText("1 selected");
   expect((await board(page, p)).cards).toEqual([{ issueId: member.id, lane: "done" }]);
   await page.goto(`/issues/${backlog.id}`);
-  await page.getByRole("button", { name: "Send to board", exact: true }).click();
-  await expect(modal(page)).toContainText("Reopen it before adding");
-  await expect(modal(page).getByRole("button", { name: "Send to board", exact: true })).toBeDisabled();
-  await modal(page).getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Change board lane", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toContainText("Reopen this closed issue before adding it to the board");
+  await expect(page.getByRole("combobox", { name: "Board lane", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
   await page.goto(`/issues/${unlinked.id}`);
-  await expect(page.getByRole("button", { name: "Send to board", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
   await post(page, baseURL!, `/api/projects/${p.slug}`, { archived: true }, "PATCH");
   await page.goto(`/issues/${member.id}`);
   await expect(page.getByText(/belongs to an archived project/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send to board", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Change project", exact: true })).toBeDisabled();
 });
 
 test("embedded detail placement updates the board immediately and stale destinations can reload", async ({ page, baseURL }) => {
@@ -184,21 +185,21 @@ test("embedded detail placement updates the board immediately and stale destinat
   const editor = sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
   await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Draft remains on the board");
-  await sidebar(page).getByRole("button", { name: "Send to board", exact: true }).click();
-  const lane = modal(page).getByRole("combobox", { name: `Lane for ${p.name}` });
-  await lane.selectOption("in_progress");
-  // Another teammate hides the selected destination before submission.
+  await sidebar(page).getByRole("button", { name: "Change board lane", exact: true }).click();
+  const lane = page.getByRole("combobox", { name: "Board lane", exact: true });
+  await expect(lane).toHaveValue("todo");
+  // Another teammate hides the displayed destination before immediate selection.
   await post(page, baseURL!, boardPath(p), { lanes: ["todo", "done"] }, "PATCH");
-  await modal(page).getByRole("button", { name: "Send to board", exact: true }).click();
-  await expect(modal(page).getByRole("alert")).toContainText("Destination lane is hidden");
+  await lane.selectOption("in_progress");
+  await expect(sidebar(page).getByRole("alert")).toContainText("Destination lane is hidden");
   expect((await board(page, p)).cards).toEqual([{ issueId: issue.id, lane: "todo" }]);
-  await modal(page).getByRole("button", { name: `Reload lanes for ${p.name}` }).click();
-  await expect(lane.locator("option")).toHaveText(["Todo", "Done"]);
+  await page.getByRole("button", { name: "Retry loading board lanes", exact: true }).click();
+  await expect(lane.locator("option")).toHaveText(["No board lane", "Todo", "Done"]);
   await lane.focus();
   await lane.press("End");
-  await expect(lane).toHaveValue("done");
-  await submit(page, 1);
-  await modal(page).getByRole("button", { name: "Done", exact: true }).click();
+  await expect(sidebar(page).getByRole("button", { name: "Change board lane", exact: true })).toContainText("Done");
+  await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toBeHidden();
+  expect((await board(page, p)).cards).toEqual([{ issueId: issue.id, lane: "done" }]);
   await expect(editor).toContainText("Draft remains on the board");
   await expect(page.locator(".board-column").filter({ has: page.getByRole("heading", { name: /Done/ }) }).locator(".board-card")).toHaveCount(1);
   await expect(page.locator(".board-column")).toHaveCount(2);
@@ -207,30 +208,36 @@ test("embedded detail placement updates the board immediately and stale destinat
 test("lane loading can retry, pending placement is locked, and counts failures never retry a committed write", async ({ page, baseURL }) => {
   const p = await createProject(page, baseURL!, `Retry ${randomUUID()}`);
   const issue = await createIssue(page, baseURL!, p.id, "Retry placement");
-  await page.goto(`/issues/${issue.id}`);
   await page.route(`**${boardPath(p)}`, (route) => route.fulfill({ status: 500, json: { error: "Lane load failed" } }));
-  await page.getByRole("button", { name: "Send to board", exact: true }).click();
-  await expect(modal(page).getByRole("alert")).toContainText("Lane load failed");
-  await expect(modal(page).getByRole("button", { name: "Send to board", exact: true })).toBeDisabled();
+  await page.goto(`/issues/${issue.id}`);
+  await page.getByRole("button", { name: "Change board lane", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose board lane", exact: true });
+  await expect(picker.getByRole("alert")).toContainText("Lane load failed");
+  await expect(picker.getByRole("combobox")).toHaveCount(0);
   await page.unroute(`**${boardPath(p)}`);
-  await modal(page).getByRole("button", { name: `Reload lanes for ${p.name}` }).click();
-  await modal(page).getByRole("combobox", { name: `Lane for ${p.name}` }).selectOption("todo");
+  await picker.getByRole("button", { name: "Retry loading board lanes", exact: true }).click();
+  await expect(picker.getByRole("combobox", { name: "Board lane", exact: true })).toBeEnabled();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let writes = 0;
   await page.route(`**${boardPath(p)}/issues`, async (route) => { if (route.request().method() === "PUT") { writes++; await gate; } await route.continue(); });
   await page.route("**/api/projects", (route) => route.fulfill({ status: 500, json: { error: "Counts unavailable" } }));
   try {
-    await modal(page).getByRole("button", { name: "Send to board", exact: true }).click();
-    await expect(modal(page).getByRole("button", { name: "Sending…" })).toBeDisabled();
-    await expect(modal(page).getByRole("combobox")).toBeDisabled();
+    await picker.getByRole("combobox", { name: "Board lane", exact: true }).selectOption("todo");
+    await expect(page.getByRole("button", { name: "Change project", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
+    await expect(picker.getByRole("combobox")).toBeDisabled();
     await page.keyboard.press("Escape");
-    await modal(page).getByRole("button", { name: "Close dialog" }).click();
-    await expect(modal(page)).toBeVisible();
-    expect(writes).toBe(1);
+    await expect(picker).toBeVisible();
+    await expect.poll(() => writes).toBe(1);
   } finally { release(); }
-  await expect(modal(page).getByRole("alert")).toContainText("Board updated, but workspace counts could not refresh: Counts unavailable");
-  await expect(modal(page).getByRole("button", { name: "Send to board", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "Placement saved, but workspace counts could not refresh: Counts unavailable" })).toBeVisible();
+  await expect(picker).toBeHidden();
+  await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toContainText("Todo");
+  // Selecting the already-committed lane must not retry the successful write.
+  await page.getByRole("button", { name: "Change board lane", exact: true }).click();
+  await expect(picker.getByRole("combobox", { name: "Board lane", exact: true })).toHaveValue("todo");
+  await picker.getByRole("combobox", { name: "Board lane", exact: true }).selectOption("todo");
   expect(writes).toBe(1);
   expect((await board(page, p)).cards).toEqual([{ issueId: issue.id, lane: "todo" }]);
 });

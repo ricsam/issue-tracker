@@ -111,7 +111,7 @@ for (const width of [1440, 1024]) {
     await expect(alpha).toHaveAttribute("aria-current", "true");
     await expect(page.locator("tr.issue-row.is-selected")).toHaveCount(1);
     await expect(
-      sidebar(page).getByRole("link", { name: "Open issue in full page" }),
+      sidebar(page).getByRole("link", { name: /^ISSUE !\d+$/ }),
     ).toHaveAttribute("href", (await alpha.getAttribute("href"))!);
     await assertLayout(page, width);
     await page.screenshot({ path: `test-results/issue-sidebar-${width}.png` });
@@ -394,7 +394,7 @@ test("mobile links, direct issue URLs, full-page link and shrinking viewport use
   await page.goto(projectPath);
   await issueLink(page, "Sidebar alpha").click();
   await sidebar(page)
-    .getByRole("link", { name: "Open issue in full page" })
+    .getByRole("link", { name: /^ISSUE !\d+$/ })
     .click();
   await expect(page).toHaveURL(issuePath);
   await expect(sidebar(page)).toHaveCount(0);

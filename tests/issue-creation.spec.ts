@@ -110,7 +110,7 @@ for (const width of [1440, 1024, 1023, 390]) {
         await expect(page).toHaveURL(path + (board ? "/board" : ""));
         await expect(sidebar(page)).toBeVisible();
         await expect(sidebar(page)).toBeFocused();
-        await expect(sidebar(page).getByRole("link", { name: "Open issue in full page" })).toHaveAttribute("href", href!);
+        await expect(sidebar(page).getByRole("link", { name: /^ISSUE !\d+$/ })).toHaveAttribute("href", href!);
         if (board) await expect(page.locator(".board-card")).toHaveCount(0);
         await sidebar(page).getByRole("button", { name: "Close issue details" }).click();
         await expect(sidebar(page)).toBeHidden();

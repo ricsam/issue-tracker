@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Archive,
@@ -7,7 +7,6 @@ import {
   RotateCcw,
   Save,
   Plus,
-  Columns3,
 } from "lucide-react";
 import type {
   Issue,
@@ -21,7 +20,8 @@ import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
-import { MoveIssueDialog } from "../components/move-issue-dialog";
+import { IssuePlacementControls } from "../components/issue-placement-controls";
+import { ShareIssue } from "../components/share-issue";
 import { CopyIssueBody } from "../components/copy-issue-body";
 import { IssueHistory } from "../components/issue-history";
 import { RichEditor } from "../components/rich-editor";
@@ -29,7 +29,6 @@ import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
 import { CommentItem } from "./comment";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
-import { SendToBoardDialog } from "../components/send-to-board-dialog";
 import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { useIssueCreationHandler } from "../lib/issue-creation";
 import { useProjectTags } from "../lib/issue-tags";
@@ -49,6 +48,8 @@ export function DetailPage() {
 type IssueDetailsProps = {
   id: string;
   embedded?: boolean;
+  panelActions?: ReactNode;
+  boards?: Record<string, BoardSettings>;
   existingTags?: string[];
   onSaved?: (issue: Issue) => void;
   onBoardChanged?: (projectId: string, board: BoardSettings) => void;
@@ -99,6 +100,10 @@ export function IssueDetails(props: IssueDetailsProps) {
 
   return (
     <div className="issue-detail-loader" aria-busy={loading}>
+      {(!detail || stale) && props.embedded && <header className="issue-detail-header">
+        <strong>{loading ? "Loading issue…" : "Issue unavailable"}</strong>
+        <div className="issue-window-actions">{props.panelActions}</div>
+      </header>}
       {detail && loading && (
         <div className="issue-load-progress" role="status" aria-label="Loading issue">
           <span className="sr-only">Loading issue…</span>
@@ -139,6 +144,8 @@ function IssueDetailForm({
   onPendingChange,
   initialDetail,
   existingTags,
+  panelActions,
+  boards,
 }: IssueDetailsProps & { initialDetail: IssueDetail }) {
   const { users, projects, refresh } = useWorkspace();
   const [issue, setIssue] = useState<Issue>(initialDetail.issue);
@@ -153,11 +160,9 @@ function IssueDetailForm({
   const [posting, setPosting] = useState(false);
   const notify = useNotification();
   const [moving, setMoving] = useState(false);
-  const [moveBusy, setMoveBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [creating, setCreating] = useState(false);
-  const [sending, setSending] = useState(false);
   const [newTags, setNewTags] = useState<string[]>([]);
   const project = projects.find((p) => p.id === issue.projectId);
   const archived = !!project?.archivedAt;
@@ -172,7 +177,7 @@ function IssueDetailForm({
     setBreadcrumb(persisted);
     return () => setBreadcrumb(null);
   }, [embedded, persisted, setBreadcrumb]);
-  const pending = dirty || !!comment.trim() || busy || posting || changingState || moveBusy;
+  const pending = dirty || !!comment.trim() || busy || posting || changingState || moving;
   // The post-creation toast can outlive its dialog; always guard the latest draft.
   const currentPending = useRef(pending);
   currentPending.current = pending;
@@ -281,35 +286,47 @@ function IssueDetailForm({
       )}
       <ErrorNotice error={error} />
       <form ref={form} onSubmit={save} className="detail-form">
+        <header className="issue-detail-header">
+          <div className="detail-title">
+            <h2><Link className="issue-permalink" to={`/issues/${id}`} onClick={(event) => {
+              if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
+                && currentPending.current && !window.confirm("Discard unsaved issue changes or comment?")) event.preventDefault();
+            }}>ISSUE !{issue.number}</Link></h2>
+            <IssueStateBadge state={issue.state} />
+            <IssuePlacementControls issue={persisted} board={issue.projectId ? boards?.[issue.projectId] : undefined}
+              disabled={busy || changingState || posting} onBusyChange={setMoving}
+              onMoved={(updated) => {
+                setIssue((current) => ({ ...updated, body: current.body }));
+                setPersisted(updated);
+                refreshHistory();
+                setNewTags([]);
+                onSaved?.(updated);
+                notify("Issue moved");
+              }}
+              onBoardChanged={(projectId, board) => { refreshHistory(); onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />
+          </div>
+          <div className="issue-window-actions"><ShareIssue id={id} />{panelActions}</div>
+        </header>
         <fieldset
           disabled={busy || changingState}
           inert={busy || changingState}
           className={archived ? "is-read-only" : undefined}
         >
           <div className="detail-heading">
-            <div className="detail-title">
-              <span className="eyebrow">ISSUE !{issue.number}</span>
-              <IssueStateBadge state={issue.state} />
-              <span className="muted">{project ? project.name : "No project"}</span>
               <small className="issue-created-meta muted">
                 Created <time dateTime={issue.createdAt}>{new Date(issue.createdAt).toLocaleDateString()}</time>
                 {" · by "}{users.find((u) => u.id === issue.authorId)?.name || "a teammate"}
                 {issue.closedAt && <> · Closed {new Date(issue.closedAt).toLocaleDateString()}{closer && ` by ${closer}`}</>}
               </small>
-            </div>
             {!archived && (
               <div className="save-actions">
-                <Button type="button" variant="secondary" disabled={busy || changingState || moving} onClick={() => setMoving(true)}>Move issue</Button>
                 {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                   <Plus size={15} /> Create issue
                 </Button>}
-                <Button type="button" variant="secondary" disabled={busy || changingState || !project}
-                  title={project ? "Add or move this issue to a board lane" : "Issues without a project have no board"}
-                  onClick={() => setSending(true)}><Columns3 size={15} /> Send to board</Button>
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={busy || changingState}
+                  disabled={busy || changingState || moving}
                   onClick={() => void changeState(closed ? "open" : "closed")}
                 >
                   {closed ? <RotateCcw size={15} /> : <CircleCheck size={15} />}
@@ -398,17 +415,6 @@ function IssueDetailForm({
         )}
       </section>
       <IssueHistory issueId={id} revision={historyRevision} />
-      {moving && <MoveIssueDialog issue={persisted} onBusyChange={setMoveBusy} onClose={() => setMoving(false)} onMoved={(updated) => {
-        setIssue((current) => ({ ...updated, body: current.body }));
-        setPersisted(updated);
-        refreshHistory();
-        setNewTags([]);
-        onSaved?.(updated);
-        notify("Issue moved");
-        void refresh().catch((cause) => setError(`Issue moved, but workspace could not refresh: ${message(cause)}`));
-      }} />}
-      {sending && <SendToBoardDialog issues={[persisted]} onClose={() => setSending(false)}
-        onPlaced={(projectId, board) => { refreshHistory(); onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />}
       {creating && <CreateIssueDialog project={archived ? null : project} existingTags={archived ? undefined : tags} onBoardChanged={onBoardChanged}
         onCreated={(created) => { setNewTags((current) => [...new Set([...current, ...created.labels])]); void refresh().catch((cause) => setError(message(cause))); }}
         onClose={() => setCreating(false)}

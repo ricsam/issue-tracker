@@ -79,13 +79,14 @@ test(`${embedded ? "sidebar" : "full page"}: move preserves identity and drafts,
   await source.fill("Unsaved moved draft");
   const comment = page.locator(".comments [contenteditable=true]");
   await comment.fill("Unsaved discussion");
-  await form.getByRole("button", { name: "Move issue", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Move issue", exact: true });
-  await expect(dialog.getByRole("button", { name: "Move issue", exact: true })).toBeDisabled();
+  await form.getByRole("button", { name: "Change project", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose project", exact: true });
+  const destination = dialog.getByRole("combobox", { name: "Project", exact: true });
+  await expect(destination).toHaveValue(project.id);
   await expect(dialog).toContainText("previous project’s board");
-  await dialog.getByLabel("Destination project").selectOption(target.id);
-  await dialog.getByRole("button", { name: "Move issue", exact: true }).click();
+  await destination.selectOption(target.id);
   await expect(dialog).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Change project", exact: true })).toContainText(target.name);
   await visibleToast(page, "Issue moved");
   await expect(source).toHaveValue("Unsaved moved draft");
   await expect(comment).toContainText("Unsaved discussion");
@@ -99,11 +100,11 @@ test(`${embedded ? "sidebar" : "full page"}: move preserves identity and drafts,
   await form.getByRole("button", { name: "Discard changes", exact: true }).click();
   await expect(source).toHaveValue("Original body");
   await expect(comment).toContainText("Unsaved discussion");
-  await form.getByRole("button", { name: "Move issue", exact: true }).click();
-  await dialog.getByLabel("Destination project").selectOption("");
-  await dialog.getByRole("button", { name: "Move issue", exact: true }).click();
+  await form.getByRole("button", { name: "Change project", exact: true }).click();
+  await destination.selectOption("");
   await expect(dialog).toHaveCount(0);
-  await expect(form.getByRole("button", { name: "Send to board", exact: true })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Change project", exact: true })).toContainText("No project");
+  await expect(form.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
   expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.projectId).toBeNull();
 });
 }

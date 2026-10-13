@@ -102,11 +102,10 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   // An embedded detail move also updates the list without reloading.
   await row(page, issues[2]).getByRole("link", { name: `!${issues[2].number} ${issues[2].title}`, exact: true }).click();
   const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
-  await sidebar.getByRole("button", { name: "Send to board", exact: true }).click();
-  await modal.getByRole("combobox", { name: `Lane for ${a.name}` }).selectOption("todo");
-  await modal.getByRole("button", { name: "Send to board", exact: true }).click();
-  await expect(modal).toContainText("1 issue sent to board.");
-  await modal.getByRole("button", { name: "Done", exact: true }).click();
+  await sidebar.getByRole("button", { name: "Change board lane", exact: true }).click();
+  await page.getByRole("combobox", { name: "Board lane", exact: true }).selectOption("todo");
+  await expect(sidebar.getByRole("button", { name: "Change board lane", exact: true })).toContainText("Todo");
+  await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toBeHidden();
   await expect(page.locator(".issue-row")).toHaveCount(0);
   await sidebar.getByRole("button", { name: "Close issue details" }).click();
   await page.getByRole("button", { name: "Clear filters", exact: true }).click();

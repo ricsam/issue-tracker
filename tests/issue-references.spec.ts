@@ -25,7 +25,7 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   expect(unlinked.number).toBe(target.number + 1);
   expect(unlinked.id).toMatch(/^[1-9]\d*$/);
   await page.goto(`/issues/${unlinked.id}`);
-  await expect(page.locator(".eyebrow")).toHaveText(`ISSUE !${unlinked.number}`);
+  await expect(page.getByRole("link", { name: `ISSUE !${unlinked.number}`, exact: true })).toHaveAttribute("href", `/issues/${unlinked.id}`);
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   const picker = page.getByRole("listbox", { name: "Issue suggestions" });
@@ -68,7 +68,7 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   expect(saved.labels).toEqual(["bug"]);
   await reference.click();
   await expect(page).toHaveURL(`${baseURL}/issues/${target.id}`);
-  await expect(page.locator(".eyebrow")).toHaveText(`ISSUE !${target.number}`);
+  await expect(page.getByRole("link", { name: `ISSUE !${target.number}`, exact: true })).toHaveAttribute("href", `/issues/${target.id}`);
   expect(errors).toEqual([]);
 });
 

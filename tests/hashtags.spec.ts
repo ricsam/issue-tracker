@@ -27,7 +27,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await dialog.getByRole("link", { name: "View issue" }).click();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(`/projects/${project.slug}`);
-  await page.getByRole("link", { name: "Open issue in full page" }).click();
+  await page.getByRole("link", { name: /^ISSUE !\d+$/ }).click();
   const form = page.locator(".detail-form");
   await expect(form.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(page.locator(".back-link")).toHaveCount(0);
@@ -47,8 +47,8 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByRole("heading", { name: "Properties", exact: true })).toHaveCount(0);
   await expect(page.locator(".properties, .detail-grid")).toHaveCount(0);
-  await expect(form.locator(".detail-title")).toContainText("Created");
-  await expect(form.locator(".detail-title")).toContainText("Alex Morgan");
+  await expect(form.locator(".issue-created-meta")).toContainText("Created");
+  await expect(form.locator(".issue-created-meta")).toContainText("Alex Morgan");
   await expect(page.getByRole("heading", { name: /Discussion/ })).toHaveCount(0);
   await expect(page.getByText("No comments yet. Start the conversation.", { exact: true })).toHaveCount(0);
   await expect(page.locator(".comments legend")).toHaveClass("sr-only");

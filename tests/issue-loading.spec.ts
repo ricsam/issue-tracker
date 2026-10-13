@@ -80,7 +80,7 @@ test("failed loads keep previous content inert, retry successfully, and late res
   release();
   await page.waitForTimeout(150);
   await expect(preview(page)).toContainText("Gamma");
-  await expect(sidebar(page).getByRole("link", { name: "Open issue in full page" })).toHaveAttribute("href", `/issues/${ids[2]}`);
+  await expect(sidebar(page).getByRole("link", { name: /^ISSUE !\d+$/ })).toHaveAttribute("href", `/issues/${ids[2]}`);
 });
 
 test("bulk close confirms pending drafts and keeps board membership", async ({ page, baseURL }) => {

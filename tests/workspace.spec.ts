@@ -95,7 +95,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await modal.getByRole("link", { name: "View issue", exact: true }).click();
   await expect(modal).toBeHidden();
   await expect(page).toHaveURL(projectUrl);
-  await page.getByRole("link", { name: "Open issue in full page" }).click();
+  await page.getByRole("link", { name: /^ISSUE !\d+$/ }).click();
   await expect(page).toHaveURL(/\/issues\/[1-9]\d*$/);
   await expect(
     page.locator(".detail-form .editor-preview"),
