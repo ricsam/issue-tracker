@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 = 15) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 = 16) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -358,6 +358,12 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
       CREATE INDEX favorite_projects_order ON favorite_projects(userId,position,projectId);
       CREATE INDEX issues_project_updated ON issues(projectId,updatedAt);
       INSERT INTO migrations VALUES (15);`);
+  }).immediate();
+  if (targetVersion < 16) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=16").get()) return;
+    db.exec(`ALTER TABLE project_boards ADD COLUMN laneLabels TEXT NOT NULL DEFAULT '{}';
+      INSERT INTO migrations VALUES (16);`);
   }).immediate();
   return db;
 }

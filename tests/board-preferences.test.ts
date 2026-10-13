@@ -22,7 +22,7 @@ test("new boards default to open, ignore retired expansion settings and preserve
     expect(parseBoardPreferences(JSON.stringify(value))).toEqual(defaultBoardPreferences());
   }
   // Current saves are versioned, so an explicitly cleared bar stays cleared.
-  const cleared: BoardPreferences = { filters: { conjunction: "and", conditions: [] }, search: "", collapsedLanes: [] };
+  const cleared: BoardPreferences = { filters: { conjunction: "and", conditions: [] }, search: "", collapsedLanes: [], hiddenLanes: [] };
   expect(JSON.parse(serializeBoardPreferences(cleared)).version).toBe(2);
   expect(parseBoardPreferences(serializeBoardPreferences(cleared))).toEqual(cleared);
 });
@@ -58,7 +58,7 @@ test("all preferences round trip negative OR and unavailable selections", () => 
     { id: "tags", field: "labels", operator: "isNot", value: "label:missing-tag" },
     { id: "users", field: "tagged", operator: "is", value: "missing-user" },
     { id: "creator", field: "creator", operator: "is", value: "user:author" },
-  ] }, search: "!42", collapsedLanes: ["todo"] };
+  ] }, search: "!42", collapsedLanes: ["todo"], hiddenLanes: ["done"] };
   // An older active OR group is unchanged: an added State chip would widen it.
   expect(parseBoardPreferences(JSON.stringify(value))).toEqual(value);
   expect(parseBoardPreferences(serializeBoardPreferences(value))).toEqual(value);
@@ -71,6 +71,14 @@ test("modern preferences reject malformed and unsupported conditions", () => {
     { id: "valid", field: "state", operator: "isNot", value: "closed" },
   ] });
   expect(filters.conditions).toEqual([{ id: "valid", field: "state", operator: "isNot", value: "closed" }]);
+});
+test("hidden lanes migrate safely, deduplicate and remain independent of collapse", () => {
+  expect(parseBoardPreferences(JSON.stringify({ collapsedLanes: ["todo"] })).hiddenLanes).toEqual([]);
+  const parsed = parseBoardPreferences(JSON.stringify({ hiddenLanes: ["done", 12, null, "done"], collapsedLanes: ["todo"] }));
+  expect(parsed.hiddenLanes).toEqual(["done"]);
+  expect(parsed.collapsedLanes).toEqual(["todo"]);
+  expect(parseBoardPreferences(serializeBoardPreferences(parsed))).toEqual(parsed);
+  expect(parseBoardPreferences(JSON.stringify({ hiddenLanes: false })).hiddenLanes).toEqual([]);
 });
 test("empty draft rules persist and defaults are independently mutable", () => {
   const filters: BoardPreferences["filters"] = { conjunction: "or", conditions: [{ id: "draft", field: "state", operator: "isNot", value: "" }] };

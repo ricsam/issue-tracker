@@ -180,7 +180,7 @@ export function CreateIssueDialog({
                     rememberCreationSelection(user.id, { lane: { projectId, value: event.target.value } });
                   }}>
                   <option value="">Not on board</option>
-                  {board && orderedLanes(board.lanes, board.customLanes).map((item) => (
+                  {board && orderedLanes(board.lanes, board.customLanes, board.laneLabels).map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
                 </select>

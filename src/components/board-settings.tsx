@@ -38,8 +38,8 @@ export function BoardSettingsDialog({
   const [announcement, setAnnouncement] = useState("");
   const idPrefix = useId();
   const refocus = useRef<{ lane: Lane; direction: Direction } | null>(null);
-  const definitions = [...LANES, ...customLanes];
-  const visible = orderedLanes(lanes, customLanes);
+  const definitions = orderedLanes([...LANES, ...customLanes].map((lane) => lane.value), customLanes, settings.laneLabels);
+  const visible = orderedLanes(lanes, customLanes, settings.laneLabels);
   const duplicate = definitions.some(
     (lane) => lane.label.toLowerCase() === name.trim().toLowerCase(),
   );

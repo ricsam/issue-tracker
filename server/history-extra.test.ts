@@ -7,7 +7,7 @@ test("history snapshots custom lane labels and same-name project identity, with 
   try {
     db.exec(`INSERT INTO users (id,name,email,role,createdAt) VALUES ('user','User','u@example.com','admin','now');
       INSERT INTO projects (id,slug,name,description,createdAt) VALUES ('a','a','Same name','','now'),('b','b','Same name','','now');
-      INSERT INTO project_boards VALUES ('a','["custom_lane"]','[{"value":"custom_lane","label":"Review & ship"}]');
+      INSERT INTO project_boards (projectId,lanes,customLanes) VALUES ('a','["custom_lane"]','[{"value":"custom_lane","label":"Review & ship"}]');
       INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (1,'a','One','# One','backlog','none','[]','user','now','now');
       INSERT INTO board_issues VALUES ('a','1','custom_lane',1);`);
     expect(issueSnapshot(db, "1")?.boardLane).toBe("Review & ship");

@@ -43,8 +43,8 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
   const loading = !!project && (loaded?.projectId !== project.id ? !knownBoard : loaded.loading);
   const loadError = loaded?.projectId === issue.projectId ? loaded.error : "";
   const card = board?.cards.find((item) => item.issueId === issue.id);
-  const lanes = board ? orderedLanes(board.lanes, board.customLanes) : [];
-  const laneLabel = card ? [...LANES, ...(board?.customLanes || [])].find((lane) => lane.value === card.lane)?.label || card.lane : "No board lane";
+  const lanes = board ? orderedLanes(board.lanes, board.customLanes, board.laneLabels) : [];
+  const laneLabel = card ? board?.laneLabels?.[card.lane] || [...LANES, ...(board?.customLanes || [])].find((lane) => lane.value === card.lane)?.label || card.lane : "No board lane";
   const readOnly = !!project?.archivedAt || (!!issue.projectId && !project);
   const locked = disabled || busy || readOnly;
   const closedOffBoard = issue.state === "closed" && !!board && !card;

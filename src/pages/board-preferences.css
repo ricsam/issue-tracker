@@ -1,14 +1,17 @@
-.board { grid-template-columns: var(--board-template); }
-.board-lane-collapse.btn { padding: 3px; width: 24px; height: 24px; flex: none; }
-.board-column.is-collapsed .board-lane-heading { flex-wrap: wrap; gap: 7px; }
-.board-column.is-collapsed .board-lane-select { display: none; }
-.board-column.is-collapsed h2 { flex-basis: 100%; }
-.board-column.is-collapsed .lane-name { overflow-wrap: anywhere; }
-.board-column.is-collapsed .board-lane-collapse { margin-left: auto; }
+.project-issues .board { grid-template-columns: var(--board-template); }
+.board-lane-menu-trigger.icon-button { padding: 3px; width: 24px; height: 24px; flex: none; }
+.board-column.is-collapsed { padding: 4px; width: 32px; min-width: 0; box-sizing: border-box; }
+.board-column.is-collapsed .board-lane-heading { flex-direction: column; gap: 12px; margin: 0; }
+.board-column.is-collapsed .board-lane-select,
+.board-column.is-collapsed .lane-grip { display: none; }
+.board-column.is-collapsed h2 { flex: none; writing-mode: vertical-rl; text-orientation: sideways; gap: 9px; max-height: 300px; }
+.board-column.is-collapsed .lane-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 230px; }
+.board-column.is-collapsed h2 .count { margin: 0; flex: none; }
+.board-column.is-collapsed .board-lane-menu-trigger { order: -1; }
 .board-lane-cards[hidden] { display: none; }
 @media (max-width: 440px) {
-  .board { grid-template-columns: 1fr; }
-  .board-column.is-collapsed { min-height: 0; }
-  .board-column.is-collapsed .board-lane-heading { flex-wrap: nowrap; }
-  .board-column.is-collapsed h2 { flex-basis: auto; }
+  /* The compact rail stays 32px wide, even when the board scrolls on a phone. */
+  .board-column.is-collapsed { min-height: 330px; }
+  .project-issues .board-column.lane-drop-before { box-shadow: inset 3px 0 #7050d9; }
+  .project-issues .board-column.lane-drop-after { box-shadow: inset -3px 0 #7050d9; }
 }

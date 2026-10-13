@@ -24,7 +24,7 @@ import {
 } from "../shared/issue-content";
 import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { isLabel } from "../shared/hashtag-matches";
-import { moveLaneTo } from "../shared/board";
+import { moveLaneTo, orderedLanes } from "../shared/board";
 import { openDatabase, syncIssueTaggedUsers } from "./db";
 import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
@@ -231,14 +231,16 @@ export function createApp(options: AppOptions = {}) {
   };
   const board = (projectId: string): BoardSettings => {
     const row = db
-      .query("SELECT lanes,customLanes FROM project_boards WHERE projectId=?")
-      .get(projectId) as { lanes: string; customLanes: string } | null;
+      .query("SELECT lanes,customLanes,laneLabels FROM project_boards WHERE projectId=?")
+      .get(projectId) as { lanes: string; customLanes: string; laneLabels: string } | null;
     const cards = db
       .query(
         "SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY b.position,i.number",
       )
       .all(projectId) as BoardCard[];
+    const laneLabels: Record<string, string> = JSON.parse(row?.laneLabels ?? "{}");
     return {
+      ...(Object.keys(laneLabels).length ? { laneLabels } : {}),
       lanes: row ? JSON.parse(row.lanes) : LANES.map((s) => s.value),
       customLanes: row ? JSON.parse(row.customLanes) : [],
       cards,
@@ -596,21 +598,21 @@ export function createApp(options: AppOptions = {}) {
     const input = boardFields.parse(await json(c));
     db.transaction(() => {
       activeProject(p.slug, c.get("user"));
-      const customLanes = [...board(p.id).customLanes];
+      const state = board(p.id);
+      const customLanes = [...state.customLanes];
       const seenIds = new Set<string>();
-      const seenLabels = new Set<string>();
       for (const definition of input.customLanes ?? []) {
         const label = definition.label.toLowerCase();
-        if (seenIds.has(definition.value) || seenLabels.has(label))
+        if (seenIds.has(definition.value))
           fail(400, "Duplicate custom lane");
         seenIds.add(definition.value);
-        seenLabels.add(label);
         const existing = customLanes.find((lane) => lane.value === definition.value);
         if (existing) {
           if (existing.label !== definition.label) fail(400, "Custom lanes cannot be renamed");
           continue;
         }
-        if ([...LANES, ...customLanes].some((lane) => lane.label.trim().toLowerCase() === label))
+        if (orderedLanes([...LANES, ...customLanes].map((lane) => lane.value), customLanes, state.laneLabels)
+          .some((lane) => lane.label.toLowerCase() === label))
           fail(400, "Duplicate lane label");
         customLanes.push(definition);
       }
@@ -628,9 +630,10 @@ export function createApp(options: AppOptions = {}) {
   app.patch("/api/projects/:slug/board/lanes/:lane", async (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));
     const lane = c.req.param("lane");
-    const { index } = z
-      .object({ index: z.number().int().min(0) })
+    const { index, label } = z
+      .object({ index: z.number().int().min(0).optional(), label: text(60).optional() })
       .strict()
+      .refine((input) => input.index !== undefined || input.label !== undefined)
       .parse(await json(c));
     db.transaction(() => {
       activeProject(p.slug, c.get("user"));
@@ -640,13 +643,40 @@ export function createApp(options: AppOptions = {}) {
       if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
         fail(404, "Lane not found");
       if (!state.lanes.includes(lane)) fail(400, "Lane is hidden");
+      const laneLabels = { ...state.laneLabels };
+      if (label !== undefined) {
+        const definitions = [...LANES, ...state.customLanes];
+        if (orderedLanes(definitions.map((definition) => definition.value), state.customLanes, laneLabels)
+          .some((definition) => definition.value !== lane && definition.label.toLowerCase() === label.toLowerCase()))
+          fail(400, "Duplicate lane label");
+        if (definitions.find((definition) => definition.value === lane)!.label === label) delete laneLabels[lane];
+        else laneLabels[lane] = label;
+      }
       db.query(
-        `INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`,
+        `INSERT INTO project_boards (projectId,lanes,customLanes,laneLabels) VALUES (?,?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,laneLabels=excluded.laneLabels`,
       ).run(
         p.id,
-        JSON.stringify(moveLaneTo(state.lanes, lane, index)),
+        JSON.stringify(index === undefined ? state.lanes : moveLaneTo(state.lanes, lane, index)),
         JSON.stringify(state.customLanes),
+        JSON.stringify(laneLabels),
       );
+    }).immediate();
+    return c.json({ board: board(p.id) });
+  });
+  app.delete("/api/projects/:slug/board/lanes/:lane", (c) => {
+    const p = activeProject(c.req.param("slug"), c.get("user"));
+    const lane = c.req.param("lane");
+    db.transaction(() => {
+      activeProject(p.slug, c.get("user"));
+      const state = board(p.id);
+      if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
+        fail(404, "Lane not found");
+      // Repeated removal is a no-op; definitions, overrides and cards are retained.
+      if (!state.lanes.includes(lane)) return;
+      if (state.lanes.length === 1) fail(400, "Cannot remove the last lane");
+      db.query(`INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?)
+        ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`)
+        .run(p.id, JSON.stringify(state.lanes.filter((value) => value !== lane)), JSON.stringify(state.customLanes));
     }).immediate();
     return c.json({ board: board(p.id) });
   });

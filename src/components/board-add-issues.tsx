@@ -101,7 +101,7 @@ export function BoardAddIssuesDialog({
               value={lane}
               onChange={(event) => setLane(event.target.value as Lane)}
             >
-              {orderedLanes(settings.lanes, settings.customLanes).map(
+              {orderedLanes(settings.lanes, settings.customLanes, settings.laneLabels).map(
                 (item) => (
                   <option key={item.value} value={item.value}>
                     {item.label}

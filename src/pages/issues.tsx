@@ -16,8 +16,6 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  ChevronDown,
-  ChevronRight,
   Columns3,
   List,
   Plus,
@@ -34,6 +32,7 @@ import {
   type Project,
   type Lane,
   type BoardSettings,
+  type BoardLane,
 } from "../../shared/types";
 import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
@@ -50,6 +49,7 @@ import { useIssueTablePreferences } from "../lib/issue-table-preferences";
 import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { BoardActionsMenu } from "../components/board-actions-menu";
+import { BoardLaneMenu, BoardLaneDialog, HiddenLanesMenu } from "../components/board-lane-menu";
 import { BulkTagDialog } from "../components/bulk-tag-dialog";
 import { BulkLabelDialog } from "../components/bulk-label-dialog";
 import { IssueDetails } from "./detail";
@@ -134,7 +134,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     } else if (opener.current) {
       const currentLink = openerId.current ? collection.current?.querySelector<HTMLAnchorElement>(`a[data-issue-id="${CSS.escape(openerId.current)}"]`) : null;
       const visibleLink = currentLink && !currentLink.closest("[hidden]") ? currentLink : null;
-      const expandLane = currentLink?.closest(".board-column.is-collapsed")?.querySelector<HTMLButtonElement>(".board-lane-collapse");
+      const expandLane = currentLink?.closest(".board-column.is-collapsed")?.querySelector<HTMLButtonElement>(".board-lane-menu-trigger");
       const target = visibleLink || expandLane || (opener.current.isConnected && !opener.current.closest("[hidden]") ? opener.current : collection.current);
       target?.focus({ preventScroll: true });
       opener.current = null;
@@ -216,6 +216,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     else if (projectId === project?.id) setBoardSettings(settings);
   }
   const [configureBoard, setConfigureBoard] = useState(false);
+  const [laneDialog, setLaneDialog] = useState<{ lane: BoardLane; kind: "rename" | "remove" } | null>(null);
   const [addToBoard, setAddToBoard] = useState(false);
   const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,14 +224,14 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [error, setError] = useState("");
   const [listQuery, setListQuery] = useState("");
   const [boardPreferences, updateBoardPreferences] = useBoardPreferences(user.id, project?.id);
-  const { filters: boardFilters, collapsedLanes } = boardPreferences;
+  const { filters: boardFilters, collapsedLanes, hiddenLanes } = boardPreferences;
   // Project List and Board have always shared their search when switching views.
   const query = all ? listQuery : boardPreferences.search;
   const setQuery = (search: string) => all ? setListQuery(search) : updateBoardPreferences({ search });
   const setBoardFilters = (filters: typeof boardFilters) => updateBoardPreferences({ filters });
   const visibleBoardCards = boardSettings.cards.filter((card) => {
     const issue = issues.find((item) => item.id === card.issueId);
-    return issue && boardSettings.lanes.includes(card.lane) && !collapsedLanes.includes(card.lane)
+    return issue && boardSettings.lanes.includes(card.lane) && !collapsedLanes.includes(card.lane) && !hiddenLanes.includes(card.lane)
       && matchesBoardFilters(issue, card.lane, boardFilters, users)
       && `${issue.title} ${issue.number} ${issue.labels.join(" ")} ${users.filter((user) => issue.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`.toLowerCase().includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase());
   });
@@ -487,6 +488,31 @@ function ProjectIssues({ slug }: { slug: string }) {
     setBoardSettings(settings);
     void refresh().catch((e) => setError(message(e)));
   }
+  function focusLane(lane?: Lane) {
+    const target = lane ? collection.current?.querySelector<HTMLButtonElement>(`[data-lane="${CSS.escape(lane)}"] .board-lane-menu-trigger`) : null;
+    (target || collection.current?.querySelector<HTMLButtonElement>(".board-hidden-lanes-trigger") || collection.current)?.focus({ preventScroll: true });
+  }
+  function hideLane(lane: BoardLane) {
+    updateBoardPreferences({ hiddenLanes: [...hiddenLanes, lane.value] });
+    setBoardOutcome(`${lane.label} hidden from your view. Restore it from Hidden lanes.`);
+    requestAnimationFrame(() => focusLane());
+  }
+  async function saveLane(lane: Lane, label?: string) {
+    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt) throw new Error("The board is busy or read-only. Try again.");
+    boardBusy.current = true;
+    setSaving(`lane:${lane}`);
+    try {
+      const result = await api<{ board: BoardSettings }>(
+        `/api/projects/${encodeURIComponent(slug)}/board/lanes/${encodeURIComponent(lane)}`,
+        label === undefined ? { method: "DELETE" } : { method: "PATCH", body: JSON.stringify({ label }) },
+      );
+      setBoardSettings(result.board);
+      setBoardOutcome(label === undefined ? "Lane removed from the board. Its issues are kept." : `Lane renamed to ${label}.`);
+    } finally {
+      boardBusy.current = false;
+      setSaving(null);
+    }
+  }
   // Dropping a lane on another lane puts it in that lane's position.
   async function reorderLane(lane: Lane, target: Lane) {
     const previous = boardSettings;
@@ -531,10 +557,12 @@ function ProjectIssues({ slug }: { slug: string }) {
     );
   // Archived projects are read-only until restored.
   const readOnly = !!project?.archivedAt;
-  const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes);
-  const canReorderLanes = lanes.length > 1 && !saving && !closingIssues && !readOnly;
+  const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes, boardSettings.laneLabels);
+  const shownLanes = lanes.filter((lane) => !hiddenLanes.includes(lane.value));
+  const hiddenLaneDefinitions = lanes.filter((lane) => hiddenLanes.includes(lane.value));
+  const canReorderLanes = shownLanes.length > 1 && !saving && !closingIssues && !readOnly;
   const dragFrom = laneDrag
-    ? lanes.findIndex((lane) => lane.value === laneDrag.lane)
+    ? shownLanes.findIndex((lane) => lane.value === laneDrag.lane)
     : -1;
   const placements = new Map(
     boardSettings.cards.map((card) => [card.issueId, card.lane]),
@@ -542,17 +570,17 @@ function ProjectIssues({ slug }: { slug: string }) {
   const issueById = new Map(issues.map((issue) => [issue.id, issue]));
   const boardIssues = boardSettings.cards.flatMap((card) => issueById.get(card.issueId) ?? []);
   const hiddenCount = boardIssues.filter(
-    (issue) => !boardSettings.lanes.includes(placements.get(issue.id)!),
+    (issue) => !boardSettings.lanes.includes(placements.get(issue.id)!) || hiddenLanes.includes(placements.get(issue.id)!),
   ).length;
   const searched = (board ? boardIssues : issues).filter(
     (i) =>
-      (!board || boardSettings.lanes.includes(placements.get(i.id)!)) &&
+      (!board || boardSettings.lanes.includes(placements.get(i.id)!) && !hiddenLanes.includes(placements.get(i.id)!)) &&
       `${i.title} ${i.number} ${i.labels.join(" ")} ${users.filter((user) => i.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`
         .toLowerCase()
         .includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase()),
   );
   const filtered = board ? searched.filter((issue) => matchesBoardFilters(issue, placements.get(issue.id), boardFilters, users)) : issueTableRows(searched, users, tableState, projects, listBoardLanes);
-  const boardColumns = lanes.map((lane) => collapsedLanes.includes(lane.value) ? [] : filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
+  const boardColumns = shownLanes.map((lane) => collapsedLanes.includes(lane.value) ? [] : filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const boardOrder = boardColumns.flat();
   const boardOrderKey = JSON.stringify([query, boardFilters, boardSettings.lanes, boardColumns]);
   const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
@@ -768,6 +796,15 @@ function ProjectIssues({ slug }: { slug: string }) {
               >
                 <Plus size={15} /> Add issues
               </Button>
+              {hiddenLaneDefinitions.length > 0 && <HiddenLanesMenu lanes={hiddenLaneDefinitions} disabled={!!saving || !!laneDrag}
+                onShow={(lane) => {
+                  updateBoardPreferences({ hiddenLanes: hiddenLanes.filter((value) => value !== lane.value) });
+                  requestAnimationFrame(() => focusLane(lane.value));
+                }}
+                onShowAll={() => {
+                  updateBoardPreferences({ hiddenLanes: [] });
+                  requestAnimationFrame(() => focusLane(hiddenLaneDefinitions[0]?.value));
+                }} />}
               <Button
                 variant="secondary"
                 disabled={!!saving || readOnly}
@@ -811,23 +848,23 @@ function ProjectIssues({ slug }: { slug: string }) {
             )}
             {boardIssues.length > 0 && filtered.length === 0 && (
               <p className="board-empty-notice">
-                No visible issues. Clear filters, check your search or restore a lane using
-                Manage lanes.
+                No visible issues. Clear filters, check your search, or restore a lane using
+                Hidden lanes or Manage lanes.
               </p>
             )}
             <Snackbar message={boardOutcome} onDismiss={dismissBoardOutcome} />
             <p className="sr-only" id="board-keyboard-help">
               Use arrow keys to open adjacent issues; on desktop, details open in the sidebar while the card stays focused. Hold Shift to extend or shrink a selection; Cmd or Ctrl plus Shift and Up or Down selects to the start or end of the current lane. Left and Right extend across lanes. Lane checkboxes select only issues visible in the current search.
               Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
-              Drag a lane by its heading to reorder lanes, or use Manage lanes.
+              Drag a lane by its heading to reorder lanes, or use its lane actions menu. Collapse and hide affect only your view; restore hidden lanes using Hidden lanes.
             </p>
             <div
               className="board"
               onKeyDown={boardKeyboardNavigate}
               aria-describedby="board-keyboard-help"
-              style={{ "--board-lanes": lanes.length, "--board-template": lanes.map((lane) => collapsedLanes.includes(lane.value) ? "150px" : "minmax(240px, 1fr)").join(" ") } as CSSProperties}
+              style={{ "--board-lanes": shownLanes.length, "--board-template": shownLanes.map((lane) => collapsedLanes.includes(lane.value) ? "32px" : "minmax(240px, 1fr)").join(" ") || "none" } as CSSProperties}
             >
-              {lanes.map((s, index) => {
+              {shownLanes.map((s, index) => {
                 const collapsed = collapsedLanes.includes(s.value);
                 const contentId = `board-lane-${s.value}`;
                 const drop =
@@ -843,6 +880,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                   <section
                     className={`board-column${collapsed ? " is-collapsed" : ""}${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}${cardDrop?.lane === s.value && cardDrop.targetId === null ? " card-drop-end" : ""}`}
                     key={s.value}
+                    data-lane={s.value}
                     onDragOver={(e) => {
                       if (saving || readOnly || (!laneDrag && !cardDrag.current.length)) return;
                       e.preventDefault();
@@ -917,18 +955,22 @@ function ProjectIssues({ slug }: { slug: string }) {
                       <span className="lane-name">{s.label}</span>
                       <span className="count">{cards.length}</span>
                     </h2></Tooltip>
-                    <Button variant="ghost" className="board-lane-collapse" aria-label={`${collapsed ? "Expand" : "Collapse"} ${s.label} lane`}
-                      aria-expanded={!collapsed} aria-controls={contentId} disabled={!!saving || !!laneDrag}
-                      title={collapsed ? "Expand lane (only for you)" : "Collapse lane (only for you)"}
-                      onClick={() => updateBoardPreferences({ collapsedLanes: collapsed ? collapsedLanes.filter((lane) => lane !== s.value) : [...collapsedLanes, s.value] })}>
-                      {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                    </Button>
+                    <BoardLaneMenu lane={s} collapsed={collapsed} disabled={!!saving || !!laneDrag} readOnly={readOnly}
+                      canRemove={lanes.length > 1} canMoveLeft={index > 0} canMoveRight={index < shownLanes.length - 1}
+                      onCollapse={() => updateBoardPreferences({ collapsedLanes: collapsed ? collapsedLanes.filter((lane) => lane !== s.value) : [...collapsedLanes, s.value] })}
+                      onHide={() => hideLane(s)}
+                      onRename={() => setLaneDialog({ lane: s, kind: "rename" })}
+                      onRemove={() => setLaneDialog({ lane: s, kind: "remove" })}
+                      onMove={(direction) => {
+                        const target = shownLanes[index + (direction === "left" ? -1 : 1)];
+                        if (target) void reorderLane(s.value, target.value).then(() => requestAnimationFrame(() => focusLane(s.value)));
+                      }} />
                     </div>
                     <div id={contentId} hidden={collapsed} className="board-lane-cards">
                       {cards.map(issueCard)}
                       {!cards.length && <p className="column-empty">No issues here yet</p>}
                     </div>
-                    {collapsed && <p className="column-empty">{cards.length} matching issue{cards.length === 1 ? "" : "s"} · collapsed</p>}
+                    {collapsed && <span className="sr-only">{cards.length} matching issue{cards.length === 1 ? "" : "s"} · collapsed</span>}
                   </section>
                 );
               })}
@@ -1023,6 +1065,9 @@ function ProjectIssues({ slug }: { slug: string }) {
       {tagging?.kind === "labels" && <BulkLabelDialog slug={slug || undefined} issueIds={tagging.ids}
         existingLabels={existingTags}
         onSaved={tagsSaved} onClose={() => setTagging(null)} />}
+      {laneDialog && <BoardLaneDialog key={`${laneDialog.kind}:${laneDialog.lane.value}`} lane={laneDialog.lane} kind={laneDialog.kind}
+        onSave={(label) => saveLane(laneDialog.lane.value, label)} onClose={() => setLaneDialog(null)}
+        onClosed={() => focusLane(laneDialog.lane.value)} />}
       {configureBoard && (
         <BoardSettingsDialog
           slug={slug}

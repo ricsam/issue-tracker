@@ -110,7 +110,7 @@ export function SendToBoardDialog({ issues, onPlaced, onClose }: {
       {groups.map((group) => {
         const eligible = targets(group);
         const closed = group.issues.length - eligible.length;
-        const lanes = group.board ? orderedLanes(group.board.lanes, group.board.customLanes) : [];
+        const lanes = group.board ? orderedLanes(group.board.lanes, group.board.customLanes, group.board.laneLabels) : [];
         const placed = group.board?.cards.filter((card) => eligible.some((issue) => issue.id === card.issueId)).length || 0;
         return <section key={group.project.id} className="board-placement-group" aria-label={`${group.project.name} board`}>
           <h3>{group.project.name}</h3>

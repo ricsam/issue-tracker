@@ -38,6 +38,8 @@ export interface BoardCard {
 export interface BoardSettings {
   lanes: Lane[];
   customLanes: BoardLane[];
+  /** Display-only overrides for built-in and custom lanes; omitted when empty. */
+  laneLabels?: Record<string, string>;
   /** Array order defines the saved card order within each lane. */
   cards: BoardCard[];
 }

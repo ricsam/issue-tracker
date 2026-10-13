@@ -6,9 +6,10 @@ export interface BoardPreferences {
   filters: BoardFilterState;
   search: string;
   collapsedLanes: string[];
+  hiddenLanes: string[];
 }
 export function defaultBoardPreferences(): BoardPreferences {
-  return { filters: structuredClone(defaultIssueFilters), search: "", collapsedLanes: [] };
+  return { filters: structuredClone(defaultIssueFilters), search: "", collapsedLanes: [], hiddenLanes: [] };
 }
 export function boardPreferencesKey(userId: string, boardId: string) {
   return `threadline:board-preferences:v1:${encodeURIComponent(userId)}:${encodeURIComponent(boardId)}`;
@@ -41,6 +42,7 @@ export function parseBoardPreferences(raw: string | null): BoardPreferences {
       filters: value.version === filterPreferencesVersion ? filters : withDefaultStateFilter(filters),
       search: typeof value.search === "string" ? value.search : "",
       collapsedLanes: strings(value.collapsedLanes),
+      hiddenLanes: strings(value.hiddenLanes),
     };
   } catch { return fallback; }
 }

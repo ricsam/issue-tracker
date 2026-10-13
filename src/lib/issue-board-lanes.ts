@@ -20,7 +20,7 @@ export function issueBoardLanes(boards: Record<string, BoardSettings>) {
     const definitions = new Map([...LANES, ...board.customLanes].map((lane) => [lane.value, lane.label]));
     for (const card of board.cards) lanes.set(card.issueId, {
       value: boardLaneKey(projectId, card.lane),
-      label: definitions.get(card.lane) || card.lane,
+      label: board.laneLabels?.[card.lane] || definitions.get(card.lane) || card.lane,
       hidden: !board.lanes.includes(card.lane),
     });
   }
@@ -34,7 +34,7 @@ export function boardLaneOptions(boards: Record<string, BoardSettings>, projects
     const values = [...new Set([...board.lanes, ...board.cards.map((card) => card.lane)])];
     return values.map((lane) => ({
       value: boardLaneKey(projectId, lane),
-      label: `${includeProject ? `${names.get(projectId) || "Unknown project"} · ` : ""}${definitions.get(lane) || lane}${board.lanes.includes(lane) ? "" : " (hidden)"}`,
+      label: `${includeProject ? `${names.get(projectId) || "Unknown project"} · ` : ""}${board.laneLabels?.[lane] || definitions.get(lane) || lane}${board.lanes.includes(lane) ? "" : " (hidden)"}`,
     }));
   }).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }) || a.value.localeCompare(b.value));
 }

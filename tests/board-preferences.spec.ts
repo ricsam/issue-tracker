@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { laneAction } from "./board-lane-helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { addBoardFilter as addFilter, boardFilters, clearBoardFilters, filterEditor } from "./board-filter-helpers";
 
@@ -24,7 +25,7 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
   const writes: string[] = [];
   page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
   await page.getByRole("button", { name: "Select visible issues", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse In progress lane", exact: true }).click();
+  await laneAction(page, "In progress", "Collapse");
   await expect(page.locator(".issue-selection-count")).toHaveText("2 selected");
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
@@ -33,14 +34,14 @@ test("personal collapse persists without writes, prunes selection, skips keyboar
   await page.keyboard.press("ArrowRight");
   await expect(page.locator(".board-card:visible a.issue-link").last()).toBeFocused();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Expand In progress lane", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-lane="in_progress"]')).toHaveClass(/is-collapsed/);
   expect(writes).toEqual([]);
   expect((await (await page.request.get(endpoint)).json()).board).toEqual(original);
   const collapsed = page.locator(".board-column.is-collapsed");
   // Drop near the heading so the larger filter panel cannot push the target offscreen.
-  await page.locator(".board-card:visible .board-card-handle").first().dragTo(collapsed, { targetPosition: { x: 60, y: 90 } });
+  await page.locator(".board-card:visible .board-card-handle").first().dragTo(collapsed, { targetPosition: { x: 16, y: 90 } });
   await expect(collapsed).toContainText("2 matching issues");
-  await page.getByRole("button", { name: "Expand In progress lane", exact: true }).click();
+  await laneAction(page, "In progress", "Expand");
   await expect(collapsed).toHaveCount(0);
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
 });
@@ -129,17 +130,18 @@ test("filter chips and search survive reload and stay board-scoped", async ({ pa
   await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
 });
 
-test("mobile filters support negative AND and OR conditions with stacked collapsed lanes", async ({ page, baseURL }, testInfo) => {
+test("mobile filters support negative AND and OR conditions with compact collapsed lanes", async ({ page, baseURL }, testInfo) => {
   await fixture(page, baseURL!);
   await clearBoardFilters(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
+  await laneAction(page, "Todo", "Collapse");
   const columns = page.locator(".board-column");
   await columns.first().scrollIntoViewIfNeeded();
   const first = (await columns.first().boundingBox())!;
   const second = (await columns.nth(1).boundingBox())!;
-  expect(second.y).toBeGreaterThan(first.y + first.height);
-  expect(second.x).toBeCloseTo(first.x, 0);
+  expect(first.width).toBeLessThanOrEqual(32);
+  expect(second.x).toBeGreaterThan(first.x + first.width);
+  expect(second.y).toBeCloseTo(first.y, 0);
   await addFilter(page, "labels", "label:bug", "isNot");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
   await addFilter(page, "lane", "done");
@@ -198,7 +200,7 @@ test("desktop negative filters combine with AND or OR and ignore drafts", async 
 test("legacy board preferences migrate on reload and persist when edited", async ({ page, baseURL }) => {
   const { project } = await fixture(page, baseURL!);
   // Trigger a preference write to discover the exact current user/board scope.
-  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
+  await laneAction(page, "Todo", "Collapse");
   await page.evaluate((boardId) => {
     const key = Object.keys(localStorage).find((key) => key.startsWith("threadline:board-preferences:v1:") && key.endsWith(`:${encodeURIComponent(boardId)}`));
     if (!key) throw new Error("Board preference scope missing");
@@ -214,13 +216,13 @@ test("legacy board preferences migrate on reload and persist when edited", async
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
 });
 
-test("closing details restores focus to expand when its card's lane is collapsed", async ({ page, baseURL }) => {
+test("closing details restores focus to lane actions when its card's lane is collapsed", async ({ page, baseURL }) => {
   await fixture(page, baseURL!);
   await page.locator(".board-card a.issue-link").first().click();
   await expect(page.getByRole("complementary", { name: "Issue details", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
+  await laneAction(page, "Todo", "Collapse");
   await page.getByRole("button", { name: "Close issue details", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Expand Todo lane", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Todo lane actions", exact: true })).toBeFocused();
 });
 
 test("blocked board storage does not prevent personal controls", async ({ page, baseURL }) => {
@@ -229,7 +231,7 @@ test("blocked board storage does not prevent personal controls", async ({ page, 
     Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
   });
   await fixture(page, baseURL!);
-  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
+  await laneAction(page, "Todo", "Collapse");
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
   await addFilter(page, "labels", "label:feature");
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
@@ -240,8 +242,8 @@ test("archived boards allow personal collapse and filters but not shared edits",
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive project", exact: true }).click();
   await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "Collapse Todo lane", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Expand Todo lane", exact: true })).toBeEnabled();
+  await laneAction(page, "Todo", "Collapse");
+  await expect(page.getByRole("button", { name: "Todo lane actions", exact: true })).toBeEnabled();
   await clearBoardFilters(page);
   await addFilter(page, "state", "closed");
   await expect(page.locator(".board-card:visible")).toHaveCount(0);

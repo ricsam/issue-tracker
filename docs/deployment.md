@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.20.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.21.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.21.0
+
+Version 0.21.0 replaces lane collapse buttons with **⋮** menus offering collapse/expand, personal hide, shared rename/remove, and move left/right. Collapsed lanes use 32px rails with rotated titles; hidden lanes can be restored individually or together from **Hidden lanes**. Personal visibility is remembered per account and board in the browser. Removing a shared lane retains its issues and definition for restoration through **Manage lanes**. Issue details also gain reversible fullscreen expansion and a compact header without losing drafts.
+
+Migration v16 adds persisted lane-name overrides without changing lane IDs, card order, issue content or existing history. The lane PATCH endpoint accepts a display label and/or position; DELETE removes a lane from the shared board while keeping its issues. Existing deployment values remain valid.
+
+Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration:** recover with a pre-upgrade backup and matching image/chart, preserving newer writes separately. Select the published SHA image matching this chart's release commit after CI succeeds. Publishing the chart does not upgrade running deployments.
 
 ### Upgrading to 0.20.0
 
