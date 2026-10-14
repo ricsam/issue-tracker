@@ -652,11 +652,14 @@ fieldset > small {
 }
 .search-field > svg {
   position: absolute;
-  top: 12px;
+  top: 50%;
   left: 11px;
+  transform: translateY(-50%);
+  pointer-events: none;
   color: #b6a7c7;
 }
-.search-field input {
+/* Keep the icon inset more specific than the default text-input padding. */
+.search-field input:not([type="checkbox"]):not([type="radio"]) {
   padding-left: 34px;
   font-size: 12px;
 }

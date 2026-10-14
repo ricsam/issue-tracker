@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.21.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.21.1**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,9 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.21.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.21.0 adds lane **⋮** menus for collapse/expand, personal hide, shared rename/remove, and left/right moves. Collapsed lanes become 32px rails with rotated titles; **Hidden lanes** restores personal visibility. Removing a lane preserves its issues. This release also includes reversible fullscreen issue details and a compact header without losing drafts.
+Verify `0.21.1` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.21.1 fixes search-icon spacing and vertical alignment, makes icon clicks focus the search input, and includes a resizable navigation sidebar with remembered width. It adds no database migration, API change or deployment-value change.
+
+When upgrading from before 0.21.0, that version adds lane **⋮** menus for collapse/expand, personal hide, shared rename/remove, and left/right moves. Collapsed lanes become 32px rails with rotated titles; **Hidden lanes** restores personal visibility. Removing a lane preserves its issues. This release also includes reversible fullscreen issue details and a compact header without losing drafts.
 
 Migration v16 persists lane-name overrides without changing lane IDs, card order, content or historical entries. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration;** recovery requires restoring a pre-upgrade backup with its matching application, preserving newer writes separately. Existing deployment values remain valid. Publishing this chart does not upgrade running deployments.
 
@@ -61,7 +63,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.0 --namespace issue-tracker \
+  --version 0.21.1 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -101,9 +103,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.21.1 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.21.1 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources
