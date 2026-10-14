@@ -99,6 +99,26 @@ Threadline stores canonical Markdown, not HTML. Rich **Write** mode round-trips 
 
 See [the API contract](docs/api-contract.md) for the HTTP surface.
 
+## CLI and third-party integrations
+
+The `gh`-inspired **Threadline CLI** supports project list/view and issue list/view/create/edit/comment/close/reopen, JSON output for agents, and Markdown input from files or stdin.
+
+```sh
+npm install --global @ricsam/threadline  # Node.js 22.14+, Linux/macOS
+export THREADLINE_HOST=https://your-threadline.example.com
+threadline auth login                   # opens the browser for explicit approval
+threadline project list
+threadline issue list --state open --json
+threadline issue view 12
+threadline issue edit 12 --body-file issue.md
+```
+
+Use `npx @ricsam/threadline --help` without a global installation, `bun run cli --help` from source, or `bun run build:cli` for a standalone executable at `.local/bin/threadline`. The npm package is independently versioned in `cli/package.json`; see [publishing](docs/development/npm-publishing.md). Browser login also supports `--no-browser` for remote terminals. Tokens expire after 90 days; revoke CLI access from the web **API access** page or with `auth logout`.
+
+For third-party backends or AI agents, create a read-only or read-and-write personal key in **API access** (expiry 1–365 days), then use `Authorization: Bearer TOKEN`. `THREADLINE_TOKEN` lets the CLI use a secret-manager-injected key without saving it. Keys inherit current project/draft permissions and cannot administer users/SSO or mint other credentials. Manual tokens are revealed once. CLI saved credentials are plaintext in a host-bound 0600 file, not an OS keychain.
+
+See the [CLI guide](docs/guides/cli.mdx) and [API access protocol](docs/development/api-access.mdx) for installation, examples, scopes, storage and revocation. Migration v18 additively creates credential tables; back up `DATA_DIR` before upgrading.
+
 ## macOS menu-bar app
 
 The native Swift companion in [`macos/`](macos/README.md) opens a persistent, up-to-640×800 issue composer beneath the menu bar. Its native Settings window configures the server URL, Open at Login, and a global keyboard shortcut (default **⇧⌘N**). Requires macOS 13+.

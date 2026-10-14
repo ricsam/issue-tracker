@@ -22,6 +22,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up Node for npm runtime tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -33,8 +38,15 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Run API tests
+      - name: Run API, CLI and unit tests
         run: bun run test
+
+      - name: Build and smoke-test CLI
+        run: |
+          bun run build:cli
+          .local/bin/threadline --help
+          bun run build:cli:npm
+          bun run test:cli:package
 
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium

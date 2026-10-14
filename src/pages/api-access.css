@@ -1,0 +1,16 @@
+.api-access-page { max-width: 760px; margin: 0 auto; display: grid; gap: 24px; }
+.api-access-page h1 { margin-bottom: 8px; }
+.api-access-page h2 { font-size: 18px; margin: 0 0 16px; }
+.access-panel { padding: 22px; border: 1px solid var(--border, #ddd); border-radius: 12px; }
+.access-key-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.access-key-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.access-key-heading h3 { margin: 0 0 12px; overflow-wrap: anywhere; }
+.access-metadata { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr); gap: 8px 16px; margin: 18px 0; }
+.access-metadata dt { color: var(--muted, #666); }
+.access-metadata dd { margin: 0; overflow-wrap: anywhere; }
+.access-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.access-token { width: 100%; min-height: 100px; font-family: monospace; overflow-wrap: anywhere; }
+.access-warning { padding: 18px 22px; border: 1px solid #b58532; border-radius: 12px; background: #b5853210; }
+.access-warning p { margin-bottom: 0; }
+.access-device-code { font-family: monospace; font-size: 22px; white-space: nowrap; }
+@media (max-width: 480px) { .access-panel { padding: 16px; } .access-metadata { grid-template-columns: 1fr; gap: 4px; } .access-metadata dd { margin-bottom: 10px; } }

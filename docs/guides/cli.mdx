@@ -1,0 +1,103 @@
+---
+title: Threadline CLI
+description: Use Threadline from a terminal or an AI agent with scoped, revocable API tokens.
+---
+
+## Install from npm
+
+The package is `@ricsam/threadline` and the executable is `threadline`. Requires Node.js 22.14+ on Linux or macOS; Bun is not required to run the npm package.
+
+```sh
+npm install --global @ricsam/threadline
+threadline --help
+# Or run without a global installation:
+npx @ricsam/threadline --help
+```
+
+## Install from source or build a binary
+
+Clone this repository and install dependencies with Bun (the version in `package.json`):
+
+```sh
+bun install --frozen-lockfile
+bun cli/index.ts --help
+bun run build:cli
+./.local/bin/threadline --help
+```
+
+The build script uses `bun build --compile ./cli/index.ts --outfile .local/bin/threadline`. Keep CLI binaries out of `dist`, which is the public web-asset directory and is cleared by Vite. Copy the compiled binary to a directory on your PATH, for example `~/.local/bin/threadline`. Build on the target platform, or use Bun's supported cross-compilation targets. Source invocations below can also use `bun cli/index.ts` instead of `threadline`.
+
+## Select a host and sign in
+
+Always select an explicit origin, including its scheme. There is no inferred/default host:
+
+```sh
+export THREADLINE_HOST=https://issue-tracker.r5d.app
+threadline auth login
+threadline auth status
+```
+
+Use your own installation's URL. HTTPS is required except for `http://localhost`, `http://127.0.0.1` and `http://[::1]` development origins (ports are allowed). Host paths, credentials, query strings and fragments are rejected.
+
+`auth login` requests a device code, displays a verification URL/code on stderr, and opens the system browser on Linux/macOS without invoking a shell. The opener is limited to three seconds; if it hangs or fails, the CLI prints a fallback notice and continues polling. Sign in there and approve the displayed request. The CLI polls without a bearer token until approval, denial or expiry. `--no-browser` only prints the fallback URL; it is useful on remote machines. The code expires in ten minutes; the issued token expires in 90 days. `--name 'Work laptop'` changes the token's display name. Verify the host, requested scopes and device code before approving.
+
+For a manually created API key from the web UI's **API access** page:
+
+```sh
+# Obtain the value from a secret manager, not a command-line argument.
+secret-manager read threadline-token | threadline auth login --with-token
+```
+
+`--with-token` reads a single token from stdin and validates it using `GET /api/me` before saving. It never prompts. Login does not print the token. Replacing a saved token does not revoke the old token; revoke unused keys in the web UI.
+
+## Automation and scopes
+
+For CI or AI agents, inject `THREADLINE_TOKEN` using your runner's secret store. It overrides any saved token for the selected `THREADLINE_HOST` and is never saved by ordinary commands. Do not put tokens in command arguments, URLs, source files, or logs. An explicitly selected host is a trust decision: automation must not let untrusted input choose `THREADLINE_HOST`.
+
+Keys have `read`, or `read` plus `write`. Read permits viewing/listing data; write also permits mutations allowed by the user's project access. Browser CLI login requests both scopes. Use a manually created read-only key for read-only agents. Tokens do not grant access to other users' personal drafts or bypass archived projects/access rules. Token authentication cannot manage accounts, SSO, or mint other keys. Cookie-only authentication endpoints are intentionally not exposed by this CLI.
+
+```sh
+threadline project list --json
+threadline issue list --project website --state open --label bug --limit 20 --json
+printf '# Investigate login failure\n\nReproduction steps…\n' |
+  threadline issue create --project website --body-file - --json
+threadline issue comment 12 --body 'Verified the fix in staging.' --json
+threadline issue close 12 --json
+```
+
+## Commands
+
+`threadline --help`, `threadline auth --help`, `threadline project --help`, and `threadline issue --help` show the command reference without requiring authentication.
+
+All commands accept `--json` for one JSON result on stdout (not a gh-style field selector). Diagnostics, device instructions and errors go to stderr. Human output uses tables for lists and plain text for details. No agent operation opens an editor or asks an interactive question. Only browser device authorization requires human approval.
+
+| Command | Options and behavior |
+| --- | --- |
+| `auth login` | `--no-browser`, `--name NAME`; alternatively `--with-token` reads stdin |
+| `auth status` | Validates current token; shows user, source, scopes and expiry, never the token |
+| `auth logout` | Revokes the current token on the server, then removes a matching saved token |
+| `project list` | Lists accessible projects, including archived projects |
+| `project view SLUG` | Shows an accessible project |
+| `issue list` | `--project SLUG`, `--state open\|closed\|draft\|all`, repeated `--label LABEL`, `--search TEXT`, `--limit N` |
+| `issue view TARGET` | Shows issue Markdown and comments |
+| `issue create` | `--project SLUG`, `--body TEXT` or `--body-file PATH\|-`, `--title TITLE`, `--state open\|draft` |
+| `issue edit TARGET` | `--body TEXT` or `--body-file PATH\|-`, `--title TITLE`, `--project SLUG` (moves the issue) |
+| `issue comment TARGET` | Requires `--body TEXT` or `--body-file PATH\|-` |
+| `issue close TARGET` | Closes a published issue |
+| `issue reopen TARGET` | Reopens a closed issue; publishes a personal draft |
+
+`TARGET` is a positive global issue number (`12`), quoted `!` number (`'!12'`), or same-origin URL (`https://issue-tracker.r5d.app/issues/12`). Cross-host URLs are rejected before any request. Query strings and fragments are not accepted. Numeric IDs are not scoped to a project.
+
+List defaults are `--state open --limit 30`, newest issue number first. Labels match exactly, with repeated labels requiring all matches. Search is case-insensitive text search over title and body. Current list APIs return all accessible issues; these filters and the limit are applied locally, so `--limit` does not bound the API response size. `--state all` includes accessible drafts and closed issues. There is no pagination cursor.
+
+Creation without `--project` creates an unlinked issue. Bodies are Markdown; `--body-file -` consumes stdin verbatim. `--body` and `--body-file` are mutually exclusive. `--title` is a compatibility input for the server's heading conversion, not a separate stored title: creation prepends a heading; title-only editing replaces the leading heading or prepends one if absent. Body plus title editing replaces the body and applies the supplied title. Prefer editing the Markdown heading directly. Create requires a body or title; edit requires at least one field. Labels are derived from `#tags` in issue Markdown; no assignee, milestone, repository selection, or arbitrary gh flags are supported. Unknown flags and extra arguments are errors, not silently ignored.
+
+## Logout and storage security
+
+`auth logout` calls `DELETE /api/me/token` first. This revokes the current credential everywhere it is used, not just on this machine. A failed revoke leaves saved credentials intact. After success, a matching saved credential is removed. If an environment token differs from the saved token, only the environment token is revoked and the unrelated saved token is retained. The CLI cannot unset your parent shell's environment: unset `THREADLINE_TOKEN` yourself. A local file error after server revocation may leave an already-revoked credential on disk; revoke/manage keys in the web UI when recovery is needed.
+
+Saved tokens are **plaintext**, host-bound entries in `~/.config/threadline/hosts.json`, not an OS keychain. `XDG_CONFIG_HOME` changes the config base; `THREADLINE_CONFIG_DIR` selects the exact directory. The CLI enforces directory mode `0700`, file mode `0600`, current-user ownership, and rejects symlinked directories/files and hard-linked credential files. Use a private directory on a trusted filesystem. Permissions do not protect against your own user's processes, root, backups, malware, or a compromised host; prefer secret-store-injected environment tokens for automation. Concurrent logins/logout writing the same config are not supported.
+
+Requests time out after 15 seconds and never follow redirects, including same-origin redirects. Tokens cannot be forwarded to a redirect destination. There is no automatic retry of data mutations; a timeout may mean the server committed the change before the response was lost. Check the issue/server state before retrying. Device polling retries only the protocol's pending/slow-down responses.
+
+Exit codes: `0` success, `1` request/storage/server failure, `2` invalid usage/input, `4` missing authentication or HTTP 401/403. JSON output is emitted only on success. There are no interactive confirmation prompts.

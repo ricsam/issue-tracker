@@ -55,5 +55,6 @@ Back up this state consistently. Do not copy only `app.sqlite` from a running WA
 - Upload files are limited to **10 MiB** each. Total incoming bodies are limited to **11 MiB** to allow multipart overhead.
 - Authentication entry routes are rate limited by the direct peer address; forwarded headers are not trusted for that decision. Clients behind one proxy can share a rate-limit bucket.
 - Sessions last seven days by default. Session cookie values are stored as hashes, not plaintext tokens.
+- [API keys](/development/api-access) expire after 1–365 days (CLI browser authorization: 90 days). API keys and device codes are hashed at rest. Device authorization expires after ten minutes; valid polls use per-code pacing, invalid polls have a separate peer abuse budget, and approval/review is rate limited per account.
 
 Resource requests and limits are adjustable in Helm. Storage and backup capacity must account for uploads retained even after their references are removed.

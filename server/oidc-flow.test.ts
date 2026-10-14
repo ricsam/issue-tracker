@@ -89,12 +89,12 @@ test("OIDC cookie binding, replay prevention, proxy URL, immutable identity and 
         )
       ).status,
     ).toBe(400);
-    for (const destination of ["/new", "//evil.example", "https://evil.example", "/new/", "/new?next=https://evil.example", "/\\evil.example", "%2Fnew"]) {
+    for (const destination of ["/new", "/cli/authorize", "/cli/authorize?user_code=ABCD-EFGH", "/cli/authorize?user_code=ABCD-EFGH&next=https://evil.example", "//evil.example", "https://evil.example", "/new/", "/new?next=https://evil.example", "/\\evil.example", "%2Fnew"]) {
       const start = await req(`/api/auth/oidc/login?returnTo=${encodeURIComponent(destination)}`);
       const cookies = start.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
       const result = await req("/api/auth/oidc/callback?code=x&state=state", "GET", undefined, cookies);
       expect(result.status).toBe(302);
-      expect(result.headers.get("location")).toBe(destination === "/new" ? "/new" : "/");
+      expect(result.headers.get("location")).toBe(["/new", "/cli/authorize", "/cli/authorize?user_code=ABCD-EFGH"].includes(destination) ? destination : "/");
       expect(result.headers.getSetCookie().some((value) => value.startsWith("oidc_return=;") && value.includes("Max-Age=0"))).toBe(true);
     }
     // Even a forged return cookie cannot create an open redirect.

@@ -30,6 +30,7 @@ import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
+import { apiAccess, apiKeyAllows, authReturnTo, publicDevicePaths, type AppEnv } from "./api-access";
 import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams, issueAccessParams } from "./project-access";
 import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./attachments";
 
@@ -41,7 +42,7 @@ export interface AppOptions {
   allowInsecureOidc?: boolean;
   sessionTtlMs?: number;
 }
-type Env = { Variables: { user: User }; Bindings: { remoteAddress?: string } };
+type Env = AppEnv;
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const issueIdField = z.string().regex(/^[1-9][0-9]*$/).max(16)
@@ -143,6 +144,7 @@ export function createApp(options: AppOptions = {}) {
   }
   const db = openDatabase(resolve(dataDir, "app.sqlite"));
   const access = projectAccess(db);
+  const tokens = apiAccess(db);
   const oidc = new OidcService(db, {
     baseUrl,
     key,
@@ -306,21 +308,42 @@ export function createApp(options: AppOptions = {}) {
       c.header(name, value);
     await next();
   });
+  app.use("/api/auth/device/*", bodyLimit({ maxSize: 4096, onError: (c) => c.json({ error: "Request too large" }, 413) }));
   app.use("/api/*", async (c, next) => {
     c.header("Cache-Control", "no-store");
     c.header("X-Content-Type-Options", "nosniff");
+    const path = c.req.path;
+    const authorization = c.req.header("Authorization");
+    const bearer = authorization !== undefined ? tokens.authenticate(authorization) : null;
+    // An explicit invalid credential never falls back to a browser session.
+    if (authorization !== undefined && !bearer)
+      return c.json({ error: "Invalid or expired API key" }, 401);
+    const publicDevice = publicDevicePaths.has(path) && c.req.method === "POST";
+    const origin = c.req.header("Origin");
     if (
       !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
-      c.req.header("Origin") !== baseUrl
-    )
-      return c.json({ error: "Invalid origin" }, 403);
-    const path = c.req.path;
+      (origin !== undefined ? origin !== baseUrl : !bearer && !publicDevice)
+    ) return c.json({ error: "Invalid origin" }, 403);
+    if (publicDevice && c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json")
+      return c.json({ error: "Content-Type must be application/json" }, 400);
+    const token = getCookie(c, "session");
+    const row = token && (db.query("SELECT userId FROM sessions WHERE hash=? AND expires>?")
+      .get(hash(token), Date.now()) as { userId: string } | undefined);
+    const user = bearer ? publicUser(bearer.userId) : row ? publicUser(row.userId) : null;
+    if (user) c.set("user", user);
     if (
       path.startsWith("/api/auth/") &&
       path !== "/api/auth/status" &&
-      path !== "/api/auth/logout"
+      path !== "/api/auth/logout" &&
+      path !== "/api/auth/device/token"
     ) {
-      const ip = c.env?.remoteAddress ?? "unknown"; // Never trust client-controlled forwarding headers.
+      // Starts cannot consume login's budget. Reviews are account-scoped;
+      // valid polling is paced by the device credential inside its handler.
+      // Never infer a client IP from untrusted forwarding headers.
+      const peer = c.env?.remoteAddress ?? "unknown";
+      const ip = path === "/api/auth/device/code" ? `device-start:${peer}`
+        : path.startsWith("/api/auth/device/") ? `device-review:${user ? `user:${user.id}` : `peer:${peer}`}`
+        : `auth:${peer}`;
       const time = Date.now();
       for (const [k, v] of limits) if (v.expires <= time) limits.delete(k);
       if (!limits.has(ip)) {
@@ -331,14 +354,13 @@ export function createApp(options: AppOptions = {}) {
       if (++limits.get(ip)!.count > 20)
         return c.json({ error: "Too many requests" }, 429);
     }
-    const token = getCookie(c, "session");
-    const row =
-      token &&
-      (db
-        .query("SELECT userId FROM sessions WHERE hash=? AND expires>?")
-        .get(hash(token), Date.now()) as { userId: string } | undefined);
-    const user = row ? publicUser(row.userId) : null;
-    if (user) c.set("user", user);
+    if (bearer) {
+      if (!user) return c.json({ error: "Invalid or expired API key" }, 401);
+      if (!apiKeyAllows(bearer.key, path, c.req.method))
+        return c.json({ error: "API key does not allow this operation" }, 403);
+      c.set("apiKey", bearer.key);
+      tokens.touch(bearer.key);
+    }
     const isPublic = [
       "/api/auth/status",
       "/api/auth/setup",
@@ -346,7 +368,7 @@ export function createApp(options: AppOptions = {}) {
       "/api/auth/oidc/login",
       "/api/auth/oidc/callback",
     ].includes(path);
-    if (!isPublic && !user)
+    if (!isPublic && !publicDevice && !user)
       return c.json({ error: "Authentication required" }, 401);
     await next();
   });
@@ -357,6 +379,7 @@ export function createApp(options: AppOptions = {}) {
       onError: (c) => c.json({ error: "Request too large" }, 413),
     }),
   );
+  tokens.register(app, baseUrl);
   app.get("/healthz", (c) => c.json({ ok: true }));
   app.get("/readyz", (c) => {
     db.query("SELECT 1").get();
@@ -429,7 +452,7 @@ export function createApp(options: AppOptions = {}) {
       );
       setCookie(c, "oidc_flow", token, { ...cookieOptions, maxAge: 600 });
       // An exact allowlist, never a user-controlled URL. Reset on every new flow.
-      setCookie(c, "oidc_return", c.req.query("returnTo") === "/new" ? "/new" : "/", { ...cookieOptions, maxAge: 600 });
+      setCookie(c, "oidc_return", authReturnTo(c.req.query("returnTo")), { ...cookieOptions, maxAge: 600 });
       return c.redirect(flow.url);
     } catch {
       return c.json({ error: "Unable to start OIDC login" }, 400);
@@ -437,7 +460,7 @@ export function createApp(options: AppOptions = {}) {
   });
   app.get("/api/auth/oidc/callback", async (c) => {
     const token = getCookie(c, "oidc_flow");
-    const returnTo = getCookie(c, "oidc_return") === "/new" ? "/new" : "/";
+    const returnTo = authReturnTo(getCookie(c, "oidc_return"));
     deleteCookie(c, "oidc_flow", cookieOptions);
     deleteCookie(c, "oidc_return", cookieOptions);
     const flow =

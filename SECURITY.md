@@ -22,6 +22,16 @@ Do not run a pre-draft application version against a database containing drafts:
 
 These controls cannot retract information already downloaded or copied. Administrators and operators with database, filesystem, or backup access remain trusted. Project access is not encryption or tenant isolation.
 
+## API credentials and CLI authorization
+
+Personal API keys and browser-authorized CLI tokens inherit the owner's current data permissions and drafts, with read-only or read-and-write scopes. They are not project-scoped. Even an administrator's token cannot administer users/SSO, mint credentials, or approve a device flow; it retains the administrator's existing data access. Keys can revoke themselves. Create and revoke other keys through a same-origin browser session. Invalid explicit bearer credentials never fall back to cookies; bearer writes may omit Origin but reject an explicitly foreign Origin.
+
+Manual keys expire after 1–365 days; CLI keys after 90 days. Revocation and project-access changes take effect on subsequent requests. Web logout does not revoke keys. Offline administrator recovery invalidates that administrator's browser sessions, keys and approved pending device grants. Tokens and both device codes are SHA-256 hashed at rest. Tokens are revealed once; do not log them or place them in URLs. Use HTTPS and inject third-party credentials from backend secret stores; no cross-origin browser CORS allowance is added.
+
+Device approval requires an explicit authenticated, same-origin browser action, matching the code in the user's own terminal. Codes expire after ten minutes and token exchange is single-use. Request names are unverified: never approve a code sent by another person or a sign-in you did not start. Threadline's JSON device flow is not a general OAuth provider. Device starts and login have separate direct-peer rate limits; authenticated code review/approval is account-scoped. Valid polls are paced per credential, while invalid/expired polls use a separate direct-peer abuse limit. Clients behind the same proxy still share unauthenticated budgets.
+
+CLI credentials are plaintext in a host-bound configuration file protected by 0600/0700 permissions, not an OS keychain. The CLI rejects symlinked credential paths and credential-bearing redirects. Filesystem permissions do not protect against the same OS user, root, malware or backups. See [API access](docs/development/api-access.mdx) and [CLI](docs/guides/cli.mdx) for details.
+
 ## Deployment responsibilities
 
 Operators should keep the application private until the first administrator has been claimed, use a unique encryption key, terminate TLS at the ingress or proxy, protect and back up `/data`, and promptly apply updated images. OIDC client secrets belong only in the encrypted application settings; the settings encryption key belongs in the deployment platform's Secret facility.

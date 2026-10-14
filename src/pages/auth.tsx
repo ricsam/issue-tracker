@@ -12,6 +12,13 @@ export function AuthPage({
   reload: () => Promise<void>;
 }) {
   const location = useLocation();
+  // Only preserve explicitly supported destinations, never arbitrary query parameters.
+  let returnTo = location.pathname === "/new" ? "/new" : "";
+  if (location.pathname === "/cli/authorize") {
+    const code = (new URLSearchParams(location.search).get("user_code") || "").toUpperCase().replace(/[\s-]/g, "");
+    returnTo = "/cli/authorize" + (/^[A-HJ-NP-Z2-9]{8}$/.test(code) ? `?user_code=${code.slice(0, 4)}-${code.slice(4)}` : "");
+  }
+  const oidcHref = "/api/auth/oidc/login" + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -131,7 +138,7 @@ export function AuthPage({
               <div className="divider">or continue with</div>
               <a
                 className="btn btn-secondary full-width"
-                href={location.pathname === "/new" ? "/api/auth/oidc/login?returnTo=%2Fnew" : "/api/auth/oidc/login"}
+                href={oidcHref}
               >
                 Sign in with {status.oidc.name || "single sign-on"}
               </a>

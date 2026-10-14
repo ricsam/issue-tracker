@@ -1,0 +1,72 @@
+---
+title: API keys and browser authorization
+description: Integrate third-party apps and authorize the Threadline CLI without sharing your browser session.
+---
+
+## Personal API keys
+
+Sign in to Threadline and open **API access** in the sidebar. Any member can create a named key with **Read only** or **Read and write** permissions and an expiry of 1–365 days. Copy the token when it is first displayed; it cannot be retrieved later. Revoke lost or unused keys from the same page. Browser-authorized CLI sessions also appear here.
+
+Send the token as `Authorization: Bearer TOKEN` to the existing `/api` data routes. Do not put it in a query string, issue content, a client-side bundle, or source control. Use HTTPS and store third-party app keys on your backend. There is no cross-origin browser CORS allowance.
+
+For example, with a secret manager supplying `THREADLINE_TOKEN` and your deployment origin in `THREADLINE_HOST`:
+
+```js
+const response = await fetch(`${process.env.THREADLINE_HOST}/api/issues/12`, {
+  headers: { Authorization: `Bearer ${process.env.THREADLINE_TOKEN}` },
+  redirect: 'error',
+});
+if (!response.ok) throw new Error(`Threadline returned ${response.status}`);
+const { issue, comments } = await response.json();
+```
+
+Use `PATCH /api/issues/12` with JSON `{ "body": "# Updated issue\n\nDetails" }` to edit, or `{ "state": "closed" }` to close. Include `Content-Type: application/json`. The [API contract](https://github.com/ricsam/issue-tracker/blob/main/docs/api-contract.md) documents all data routes and existing permissions. Lists currently return all accessible results; filtering/pagination of these lists is client-side.
+
+### Permissions and lifecycle
+
+- `read` permits reading projects, issues, comments, boards, history, attachments, the workspace user directory, and personal pins.
+- `read` plus `write` also permits data mutations, but never more than the owning user's current permissions. These scopes are workspace-wide, **not restricted to particular projects**. An administrator's key retains the administrator's access to data; use a less-privileged account where appropriate.
+- Keys cannot administer accounts/SSO, create/list/revoke other keys, use browser login endpoints, or approve device requests. They may revoke themselves.
+- Private-project access, draft privacy, archived-project restrictions, and comment authorship checks apply on every request. Removing project sharing immediately restricts existing tokens too.
+- Revocation and expiry cause `401`. Insufficient scope causes `403`. Inaccessible resources remain `404`. An invalid explicit Authorization header never falls back to a session cookie.
+- Bearer requests may omit `Origin`. If an unsafe request supplies `Origin`, it must match `BASE_URL`. Cookie-authenticated writes still require the matching header; don't use browser cookies for integrations.
+- There is no refresh token. Reauthorize or create a replacement key before expiry. Web sign-out does not revoke API keys. Offline administrator password recovery revokes that administrator's keys and approved, unredeemed device requests as well as browser sessions.
+- The server keeps only SHA-256 token hashes, a non-secret display prefix, name/scopes/expiry/source and usage metadata. `lastUsedAt` updates at most once a minute. At most 100 unexpired, unrevoked keys are allowed per user.
+
+## Key management endpoints
+
+These routes require a **browser session**, not a bearer token, and writes require the same-origin header.
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/me/api-keys` | `{keys: ApiKeyInfo[]}` for the current user, including expired/revoked entries |
+| POST | `/api/me/api-keys` | `{name,scopes,expiresInDays}` → `{key: ApiKeyInfo,token}`; token returned once |
+| DELETE | `/api/me/api-keys/:id` | `{ok:true}`; owner only, repeated revocation succeeds |
+
+The credential's name is 1–100 characters. `scopes` is exactly `["read"]` or the unique pair `["read","write"]`. Expiry is an integer number of days from creation.
+
+`ApiKeyInfo` contains `id`, `name`, `prefix`, `scopes`, `source` (`manual` or `cli`), ISO timestamps `createdAt` and `expiresAt`, and nullable `lastUsedAt` and `revokedAt`. It never includes a token or hash. Shapes are in `shared/api-access.ts`.
+
+For bearer clients:
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/me` | `{user,key: ApiKeyInfo}` (a browser session gets `key:null`) |
+| DELETE | `/api/me/token` | `{ok:true}`; revokes only the credential authenticating this request, even for read-only keys |
+
+## Login with Threadline
+
+`threadline auth login` uses a device-authorization flow so it works on laptops, remote terminals, and AI-agent hosts without a localhost callback listener. The browser uses Threadline's existing local or OIDC login and an explicit consent screen. No browser cookie or upstream identity-provider token reaches the CLI.
+
+This is Threadline's JSON device protocol, not a general OAuth provider or third-party OAuth client registry. Third-party backends can use personal API keys; device request display names are **unverified**, not trusted application identities.
+
+1. **Start:** POST `/api/auth/device/code` with JSON `{name,scopes}`. No authentication is required. The response is `{deviceCode,userCode,verificationUri,verificationUriComplete,expiresIn:600,interval:5}`. Keep `deviceCode` private; show only the verification URL and `userCode` to the user. URLs use the configured `BASE_URL`, not the request Host header.
+2. **Review:** Open `verificationUriComplete`, or open `verificationUri` and enter the code. Sign in if necessary. The browser GETs `/api/auth/device/request?user_code=ABCD-EFGH` using its session; response is `{userCode,name,scopes,expiresAt,tokenExpiresInDays:90}`. Looking up a request does not approve it.
+3. **Consent:** Browser POST `/api/auth/device/approve` with `{userCode,approve:true}` or `{userCode,approve:false}`. A same-origin authenticated session is mandatory. Requests are single-decision and expire after ten minutes. Compare the code to your own terminal and approve only sign-ins you initiated. Never approve an unsolicited code.
+4. **Poll:** POST `/api/auth/device/token` with JSON `{deviceCode}`, without authentication. Wait at least `interval` seconds between polls. HTTP 400 `{error:"authorization_pending"}` means keep waiting; `slow_down` means add five seconds to every subsequent poll interval. `access_denied` and `expired_token` are terminal errors. A successful response is `{accessToken,tokenType:"Bearer",key,user}`. Save the token securely and stop polling. Token issuance and code consumption are atomic; replay never retrieves a token.
+
+Public device POSTs require `application/json`. They may omit `Origin` for CLI use, but reject an explicitly foreign origin. Approval never accepts bearer credentials. No arbitrary redirect URL or callback is accepted. Both codes are hashed at rest. The request expires in ten minutes; issued keys expire after 90 days. A lost successful token response cannot be replayed: revoke the orphaned CLI key in **API access** and start again.
+
+Login and device starts have separate 20/minute direct-peer budgets; forwarded client headers are not trusted. Reviews/approvals are limited to 20/minute per signed-in account (anonymous requests use the peer). Valid polls are paced per device code, not a shared proxy budget. Malformed/unknown/expired polls have a separate 120/minute peer abuse budget without blocking valid polling. Clients behind a reverse proxy still share unauthenticated start/login/invalid-poll limits. Device requests have a 4 KiB body limit and a global cap of 10,000 unexpired requests. All normal API responses use `Cache-Control: no-store`.
+
+Migration 18 additively introduces credential and device-request tables without changing existing content or sessions. Back up the complete data directory before upgrading. See the [CLI guide](/guides/cli) for installation, scripting and local credential storage limitations.

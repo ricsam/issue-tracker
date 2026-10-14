@@ -1,6 +1,28 @@
-# Internal API contract
+# Threadline API contract
 
-All API responses are JSON; errors `{ error: string }`. Objects use `shared/types.ts` exactly. All `/api` routes except auth status/setup/login/OIDC require cookie authentication. Unsafe methods require a same-origin `Origin` header. Auth cookies are HttpOnly, SameSite=Lax, and Secure in HTTPS. Runtime OIDC configuration requires admin. Body content is canonical Markdown, not HTML.
+API responses are JSON except redirects/file downloads; errors `{ error: string }`. Data objects use `shared/types.ts`; credentials use `shared/api-access.ts`. Data routes accept session cookies or `Authorization: Bearer TOKEN`. Cookie-authenticated unsafe methods require a same-origin `Origin` header; valid bearer writes may omit it but reject a foreign supplied Origin. Auth cookies are HttpOnly, SameSite=Lax, and Secure in HTTPS. Administration and key management require browser sessions; runtime OIDC configuration also requires admin. Body content is canonical Markdown, not HTML.
+
+## API keys and CLI authorization
+
+See [API access](development/api-access.mdx) for the complete protocol and [CLI](guides/cli.mdx) for commands. Personal keys have `read` or `read` + `write`, inherit current user permissions (including private projects/drafts), expire after 1–365 days, and are revocable. Only a SHA-256 hash is stored. Browser-issued CLI keys last 90 days. Invalid bearer headers never fall back to cookies. All responses are no-store. Keys cannot use administration/auth/key-management endpoints; their sole credential mutation is self-revocation.
+
+| Method | Route | Request and response |
+| --- | --- | --- |
+| GET | `/api/me` | `{user,key}`; key metadata for bearer auth, null for session |
+| DELETE | `/api/me/token` | Bearer only, including read-only keys → `{ok:true}`; revokes the current token |
+| GET | `/api/me/api-keys` | Session only → `{keys:ApiKeyInfo[]}`; only the current user's metadata |
+| POST | `/api/me/api-keys` | Session + Origin; `{name,scopes,expiresInDays}` → `{key,token}`; token revealed once |
+| DELETE | `/api/me/api-keys/:id` | Session + Origin → `{ok:true}`; own key only, idempotent |
+| POST | `/api/auth/device/code` | Public JSON `{name,scopes}` → `{deviceCode,userCode,verificationUri,verificationUriComplete,expiresIn:600,interval:5}` |
+| GET | `/api/auth/device/request?user_code=ABCD-EFGH` | Session only → `{userCode,name,scopes,expiresAt,tokenExpiresInDays:90}`; pending requests only |
+| POST | `/api/auth/device/approve` | Session + Origin; `{userCode,approve:boolean}` → `{ok:true}`; explicit single decision |
+| POST | `/api/auth/device/token` | Public JSON `{deviceCode}` → `{accessToken,tokenType:"Bearer",key,user}`; single-use exchange |
+
+Device POSTs may omit Origin, but require JSON and reject foreign supplied Origin. Pending/denied/expired/too-frequent polls return HTTP 400 with `error` equal to `authorization_pending`, `access_denied`, `expired_token`, or `slow_down`. Increase the poll interval by five seconds on slow_down. Both codes are hashed at rest. Names are unverified and approval must compare the code from the user's own terminal. No GET approves and no bearer token may approve. Login and device starts have separate 20/minute direct-peer budgets; reviews/approvals use 20/minute per account (anonymous requests: peer). Valid polls use per-code pacing; invalid/expired polls use a separate 120/minute peer budget. Forwarded headers are not trusted. Device bodies are capped at 4 KiB. Migration 18 adds these tables without changing existing sessions/content. Offline admin recovery revokes that admin's keys and approved pending grants; web logout does not revoke keys.
+
+OIDC login accepts only `/new`, `/cli/authorize`, or `/cli/authorize?user_code=ABCD-EFGH` as allowlisted `returnTo` values; everything else returns to `/`.
+
+## Data and browser authentication routes
 
 | Method | Route | Request and response |
 | --- | --- | --- |

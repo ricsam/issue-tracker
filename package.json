@@ -9,9 +9,13 @@
     "dev": "bun --watch server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
     "build": "vite build",
+    "cli": "bun cli/index.ts",
+    "build:cli": "bun build --compile ./cli/index.ts --outfile .local/bin/threadline",
+    "build:cli:npm": "bun scripts/build-cli-package.ts",
+    "test:cli:package": "bun scripts/test-cli-package.ts",
     "start": "bun server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test server tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/issue-filters.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts tests/copy-tooltip.test.tsx tests/board-preferences.test.ts tests/creation-preferences.test.ts tests/issue-pagination.test.ts tests/project-navigation.test.ts",
+    "test": "bun test server cli tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/issue-filters.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts tests/copy-tooltip.test.tsx tests/board-preferences.test.ts tests/creation-preferences.test.ts tests/issue-pagination.test.ts tests/project-navigation.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

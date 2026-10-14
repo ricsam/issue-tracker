@@ -28,6 +28,11 @@ export async function recoverAdmin(
         user.id,
       );
       db.query("DELETE FROM sessions WHERE userId=?").run(user.id);
+      // Recovery must also evict delegated access; tolerate pre-v18 databases.
+      if (db.query("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='api_keys'").get()) {
+        db.query("UPDATE api_keys SET revokedAt=COALESCE(revokedAt,?) WHERE userId=?").run(new Date().toISOString(), user.id);
+        db.query("DELETE FROM device_authorizations WHERE userId=?").run(user.id);
+      }
     }).immediate();
   } finally {
     db.close();
@@ -43,7 +48,7 @@ if (import.meta.main) {
       email,
       password,
     );
-    console.log("Administrator password reset; existing sessions invalidated.");
+    console.log("Administrator password reset; existing sessions and API credentials invalidated.");
   } catch {
     console.error(
       "Recovery failed. Stop the server, supply an existing admin email as the sole argument and a 12–1024 character password on stdin.",

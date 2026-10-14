@@ -1,0 +1,24 @@
+{
+  "name": "@ricsam/threadline",
+  "version": "0.1.0",
+  "description": "Threadline CLI for humans and AI agents: projects, issues, and browser-based authentication.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ricsam/issue-tracker.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/ricsam/issue-tracker#cli-and-third-party-integrations",
+  "bugs": { "url": "https://github.com/ricsam/issue-tracker/issues" },
+  "keywords": ["threadline", "cli", "issues", "projects", "ai-agents"],
+  "engines": { "node": ">=22.14.0" },
+  "os": ["darwin", "linux"],
+  "bin": { "threadline": "dist/threadline.js" },
+  "files": ["dist/threadline.js", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "provenance": true
+  }
+}

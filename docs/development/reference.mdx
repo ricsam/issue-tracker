@@ -1,9 +1,9 @@
 ---
 title: Development and API reference
-description: Contribute to Threadline and integrate with its cookie-authenticated HTTP API.
+description: Contribute to Threadline and integrate with its authenticated HTTP API and CLI.
 ---
 
-Threadline is an MIT-licensed Bun/TypeScript application. The public repository is [ricsam/issue-tracker](https://github.com/ricsam/issue-tracker). The web UI is the primary API client; the JSON API is useful for same-origin automation but is not a versioned public SDK.
+Threadline is an MIT-licensed Bun/TypeScript application. The public repository is [ricsam/issue-tracker](https://github.com/ricsam/issue-tracker). The web UI and [Threadline CLI](/guides/cli) share the JSON API. Third-party backends can authenticate with scoped [personal API keys](/development/api-access). The API is not a versioned public SDK.
 
 ## Development workflow
 
@@ -39,9 +39,9 @@ Add tests for behavior changes and avoid committing dependencies, build output, 
 ## API conventions
 
 - Every response is JSON except redirects and authenticated file downloads. Errors have shape `{ "error": "message" }`.
-- Authentication uses an HTTP-only, SameSite=Lax session cookie. It is `Secure` when the configured origin is HTTPS.
-- Unsafe methods (`POST`, `PUT`, `PATCH`, and `DELETE`) require an `Origin` header exactly matching `BASE_URL`.
-- All `/api` routes require authentication except auth status, first setup, local login, and the OIDC redirect/callback flow.
+- Browser authentication uses an HTTP-only, SameSite=Lax session cookie (`Secure` over HTTPS). CLI/integrations use `Authorization: Bearer TOKEN` with scoped API keys.
+- Cookie-authenticated unsafe methods require an `Origin` header exactly matching `BASE_URL`. Valid bearer requests may omit Origin; an explicitly foreign Origin is rejected on unsafe methods.
+- All `/api` routes require authentication except auth status, first setup, local login, the OIDC redirect/callback flow, and the JSON-only device start/poll endpoints. Credential management and administration require browser sessions. See [API access](/development/api-access).
 - Canonical issue and comment bodies are Markdown, not HTML.
 - API objects and enums are declared in `shared/types.ts`.
 
@@ -96,7 +96,7 @@ Legacy clients may still send a nonempty `title` of up to 300 characters: POST a
 
 Board membership uses `POST /api/projects/:slug/board/issues` with `{issueIds,lane}` (atomic add), `PATCH /api/projects/:slug/board/issues/:id` with `{lane}` (move), and `DELETE` on that same issue route (remove). Each returns `{board}`. Bulk moves/removals in the UI use individual requests, retaining failed selections for retry; they are not atomic batches.
 
-Bulk tagging accepts 1–1000 unique canonical decimal strings in `issueIds` and 1–1000 unique UUIDs in `userIds`. All issues must belong to the project and users must exist. The whole batch rolls back on error, including body-limit errors. Missing body mentions are inserted without rewriting original content or comments; stored titles are preserved, and repeat requests do not duplicate mentions or change timestamps. Comment-only mentions still receive a body mention. Archived projects reject tagging. This endpoint requires the same cookie authentication and Origin protection as other writes.
+Bulk tagging accepts 1–1000 unique canonical decimal strings in `issueIds` and 1–1000 unique UUIDs in `userIds`. All issues must belong to the project and users must exist. The whole batch rolls back on error, including body-limit errors. Missing body mentions are inserted without rewriting original content or comments; stored titles are preserved, and repeat requests do not duplicate mentions or change timestamps. Comment-only mentions still receive a body mention. Archived projects reject tagging. This endpoint requires the same session/Origin protection or a read-and-write API key as other data writes.
 
 Bulk hashtags accept 1–1000 unique decimal-string issue IDs and 1–30 trimmed, nonempty label names of at most 50 characters, without the `#` prefix. Missing hashtags are appended to the latest body (or inserted before an unclosed Markdown block), preserving original content, titles, mentions, comments and lifecycle/board data. Existing hashtags are not duplicated and no-op retries keep timestamps unchanged. All issues must belong to the project; archived projects reject changes. Authentication, Origin checks, body/combined-label limits and atomic rollback apply to the whole batch.
 

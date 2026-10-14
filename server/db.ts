@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 = 17) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 = 18) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -372,6 +372,40 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
     db.exec(`ALTER TABLE issues ADD COLUMN isDraft INTEGER NOT NULL DEFAULT 0
       CHECK(isDraft IN (0,1) AND (isDraft=0 OR closedAt IS NULL));
       INSERT INTO migrations VALUES (17);`);
+  }).immediate();
+  if (targetVersion < 18) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=18").get()) return;
+    // Store only hashes of credentials. Existing sessions/content are untouched.
+    db.exec(`
+      CREATE TABLE api_keys (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        hash TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        prefix TEXT NOT NULL,
+        scopes TEXT NOT NULL,
+        source TEXT NOT NULL CHECK(source IN ('manual','cli')),
+        createdAt TEXT NOT NULL,
+        expiresAt TEXT NOT NULL,
+        lastUsedAt TEXT,
+        revokedAt TEXT
+      );
+      CREATE INDEX api_keys_user ON api_keys(userId,createdAt);
+      CREATE TABLE device_authorizations (
+        hash TEXT PRIMARY KEY,
+        userCodeHash TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        scopes TEXT NOT NULL,
+        expires INTEGER NOT NULL,
+        interval INTEGER NOT NULL DEFAULT 5,
+        nextPollAt INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','denied')),
+        userId TEXT REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX device_authorizations_expiry ON device_authorizations(expires);
+      INSERT INTO migrations VALUES (18);
+    `);
   }).immediate();
   return db;
 }

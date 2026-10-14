@@ -11,7 +11,7 @@
     "tabs": [
       { "tab": "Product", "groups": [
         { "group": "Start here", "pages": ["introduction", "quickstart"] },
-        { "group": "Work together", "pages": ["guides/projects", "guides/issues", "guides/board", "guides/rich-text", "guides/uploads"] },
+        { "group": "Work together", "pages": ["guides/projects", "guides/issues", "guides/board", "guides/rich-text", "guides/uploads", "guides/cli"] },
         { "group": "Administration", "pages": ["admin/setup", "admin/local-users", "admin/oidc", "admin/limitations"] }
       ] },
       { "tab": "Self-host", "groups": [
@@ -19,7 +19,7 @@
         { "group": "Operate", "pages": ["deployment/operations"] }
       ] },
       { "tab": "Develop", "groups": [
-        { "group": "Build and integrate", "pages": ["development/reference"] }
+        { "group": "Build and integrate", "pages": ["development/reference", "development/api-access"] }
       ] }
     ]
   },

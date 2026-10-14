@@ -18,6 +18,7 @@ import {
 } from "react-router-dom";
 import {
   Layers3,
+  KeyRound,
   LayoutGrid,
   List,
   Plus,
@@ -50,6 +51,8 @@ const DetailPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./pages/admin").then((module) => ({ default: module.AdminPage })),
 );
+const ApiAccessPage = lazy(() => import("./pages/api-access").then(module => ({ default: module.ApiAccessPage })));
+const DeviceAuthorizationPage = lazy(() => import("./pages/device-authorization").then(module => ({ default: module.DeviceAuthorizationPage })));
 const StandaloneCreateIssue = lazy(() => import("./components/create-issue-dialog").then((module) => ({ default: module.CreateIssueDialog })));
 
 function SidebarCreateIssue() {
@@ -238,6 +241,7 @@ function AppContent() {
             <SidebarProjects projects={projects} />
           </nav>
           <div className="sidebar-bottom">
+            <NavLink to="/settings/api-access" className="nav-item"><KeyRound size={18} />API access</NavLink>
             {auth.user.role === "admin" && (
               <NavLink to="/admin" className="nav-item">
                 <Settings size={18} />
@@ -283,7 +287,7 @@ function AppContent() {
                   <ChevronRight size={14} aria-hidden="true" />
                 </>}
                 <strong aria-current="page">{currentIssue ? `Issue !${currentIssue.number}` : "Issue details"}</strong>
-              </> : <strong aria-current="page">{location.pathname === "/admin" ? "Administration" : location.pathname === "/issues" ? "All issues" : "Projects"}</strong>}
+              </> : <strong aria-current="page">{location.pathname === "/settings/api-access" ? "API access" : location.pathname === "/cli/authorize" ? "Authorize CLI access" : location.pathname === "/admin" ? "Administration" : location.pathname === "/issues" ? "All issues" : "Projects"}</strong>}
             </nav>
             <span className="topbar-right">
               <span className="online-dot" />
@@ -300,6 +304,8 @@ function AppContent() {
                 <Route path="/projects/:slug/board" element={<IssuesPage />} />
                 <Route path="/issues/:id" element={<DetailPage />} />
                 <Route path="/admin" element={<AdminPage />} />
+                <Route path="/settings/api-access" element={<ApiAccessPage />} />
+                <Route path="/cli/authorize" element={<DeviceAuthorizationPage />} />
                 <Route path="/" element={<Navigate to="/projects" replace />} />
                 <Route
                   path="*"

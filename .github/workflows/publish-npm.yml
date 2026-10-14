@@ -1,0 +1,80 @@
+name: Publish Threadline CLI to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cli/**'
+      - 'scripts/build-cli-package.ts'
+      - 'scripts/test-cli-package.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'LICENSE'
+      - '.github/workflows/publish-npm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-threadline-npm
+  # Do not interrupt an admitted npm publish; newer runs recheck the registry.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'ricsam/issue-tracker' && github.ref == 'refs/heads/main'
+    # npm trusted publishing requires GitHub-hosted runners, not hetzner-ci.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install a trusted-publishing-capable npm
+        # Do not rely on setup-node's bundled npm: OIDC requires npm >=11.5.1.
+        run: |
+          npm install --global npm@11.13.0
+          node --version
+          npm --version
+          node -e 'const v=require("node:child_process").execFileSync("npm",["--version"],{encoding:"utf8"}).trim().split(".").map(Number);if(v[0]<11||(v[0]===11&&(v[1]<5||(v[1]===5&&v[2]<1))))throw new Error("npm >=11.5.1 is required for trusted publishing")'
+      - name: Check whether this CLI version is already published
+        id: version
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const { name, version } = JSON.parse(readFileSync('cli/package.json', 'utf8'));
+          if (name !== '@ricsam/threadline' || !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Expected a stable @ricsam/threadline version');
+          const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15000), redirect: 'error' });
+          if (!response.ok && response.status !== 404) throw new Error(`Registry check failed: HTTP ${response.status}`);
+          const metadata = response.ok ? await response.json() : {};
+          const exists = Object.hasOwn(metadata.versions || {}, version);
+          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!exists}\nversion=${version}\n`);
+          console.log(exists ? `${name}@${version} already published; skipping.` : `Preparing ${name}@${version}`);
+          NODE
+      - name: Install dependencies
+        if: steps.version.outputs.publish == 'true'
+        run: bun install --frozen-lockfile
+      - name: Typecheck and test CLI with the real API
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          bun run typecheck
+          bun test cli server/api-access.test.ts
+      - name: Build, inspect and install the npm tarball
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          bun run build:cli:npm
+          bun run test:cli:package
+      - name: Publish using npm trusted publishing
+        if: steps.version.outputs.publish == 'true'
+        working-directory: cli
+        # No NODE_AUTH_TOKEN/NPM_TOKEN secret: npm exchanges GitHub's OIDC identity.
+        run: npm publish --access public --provenance --ignore-scripts
