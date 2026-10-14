@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.21.2**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.23.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,7 +15,11 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.21.2` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.21.2 moves personal hidden-lane restoration into **Manage lanes → Hidden lanes**, available even on archived boards while shared edits stay disabled. Restoring lanes takes effect immediately without saving shared settings. It also includes 0.21.1's search-icon spacing fix and resizable navigation sidebar with remembered width. No database migration, API change or deployment-value change is added.
+Verify `0.23.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.23.0 adds creator-only personal draft issues, including protection against other administrators. Choose **Personal draft** on creation, use **State is Draft** in tables, and **Publish issue** to share the saved issue, comments, history, and attachments. Drafts remain off shared boards and still require project access.
+
+Migration v17 defaults existing issues to published without changing their content, lifecycle, history, or timestamps. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration or run older images against draft data:** older applications cannot enforce draft privacy. Recovery requires a pre-upgrade backup and matching application, preserving newer writes separately. No deployment-value changes are required; publishing this chart does not upgrade running deployments.
+
+Version 0.22.0 also adds the standalone `/new` composer and compatible macOS menu-bar companion. Version 0.21.2 moves personal hidden-lane restoration into **Manage lanes → Hidden lanes**, available even on archived boards while shared edits stay disabled.
 
 When upgrading from before 0.21.0, that version adds lane **⋮** menus for collapse/expand, personal hide, shared rename/remove, and left/right moves. Collapsed lanes become 32px rails with rotated titles; **Hidden lanes** restores personal visibility. Removing a lane preserves its issues. This release also includes reversible fullscreen issue details and a compact header without losing drafts.
 
@@ -63,7 +67,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.2 --namespace issue-tracker \
+  --version 0.23.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -103,9 +107,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.2 --namespace issue-tracker -f production-values.yaml
+  --version 0.23.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.21.2 --namespace issue-tracker -f production-values.yaml
+  --version 0.23.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

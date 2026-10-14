@@ -3,23 +3,31 @@ title: Issues
 description: Create actionable issues, organize them with tags, and discuss work with your team.
 ---
 
-An issue holds one Markdown body, tags, tagged users, and an open or closed state. There is no assignee or assignment role.
+An issue holds one Markdown body, tags, tagged users, and an open, closed, or personal draft state. There is no assignee or assignment role.
 Its display title is derived from that body rather than entered in a separate field.
 Its discussion keeps comments alongside the work.
-All authenticated users can read and update issues across the workspace. Issues can belong to a project or be unlinked.
+Published issues are collaborative within their project's access rules; published unlinked issues are workspace-wide. Personal drafts are visible only to their creator, including in public projects. Issues can belong to a project or be unlinked.
 
 ## Create an issue
 
 1. Select **Create issue** in the sidebar or press **Alt+N**. You can also create from a project's **List** or **Board**.
 2. Choose an active **Project** or **No project**. On project pages the current project is preselected; elsewhere your last global project choice is restored, or **No project** if it is unavailable.
-3. Leave **Board lane** at **Not on board**, or choose a visible lane in the selected project, including custom lanes. Your last lane choice is remembered separately for each project. Hidden or unavailable lanes fall back to **Not on board**; **No project** has no board. These preferences are personal to your account in this browser and survive closing the dialog and reloading.
+3. Choose **Published issue** (default) or **Personal draft** under **Visibility**. For published issues, leave **Board lane** at **Not on board**, or choose a visible lane in the selected project, including custom lanes. Your last lane choice is remembered separately for each project. Hidden or unavailable lanes fall back to **Not on board**; **No project** has no board. These preferences are personal to your account in this browser and survive closing the dialog and reloading.
 4. Start typing in the single issue editor, which receives focus when the creation dialog opens. Use a heading for the desired outcome, followed by context, reproduction steps, or a checklist.
 5. Optionally add tags such as `#bug` or `#needs-review` to the body.
-6. Select **Create issue** to save. The dialog clears and refocuses for another issue, keeping the selected project and lane; select **View issue** in the temporary snackbar to open it, or **Done** to close the dialog. The snackbar has no copy button, pauses while hovered or focused, and remains available briefly after **Done**.
+6. Select **Create issue** (or **Save draft**) to save. The dialog clears and refocuses for another issue, keeping the selected project and lane; select **View issue** in the temporary snackbar to open it, or **Done** to close the dialog. The snackbar has no copy button, pauses while hovered or focused, and remains available briefly after **Done**.
 
-New issues are open. **Not on board** is the initial default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
+New published issues are open; personal drafts have the Draft state and stay off-board. **Not on board** is the initial default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
 Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Moving an issue between projects keeps its number and URL; unlinked issues cannot join project boards.
+
+## Personal drafts
+
+Choose **Personal draft** when creating an issue to keep it private. Other users, including administrators and project owners, cannot discover or open it through the application. Its comments, history, and attachments follow the same access. Mentions do not share a draft. Linked drafts also require continued project access, and archived projects are read-only.
+
+Find saved drafts by choosing **Draft** in the **State** filter in a project table or **All issues**. The default **Open** filter hides them; removing the State filter includes all visible states. Your filter choice persists across reloads.
+
+Edit and save the draft, then select **Publish issue** when ready. Publishing shares the saved content, comments, and history with everyone who can access the project (or all signed-in users for **No project**). Save or discard body edits before publishing. Publishing cannot be undone by returning to draft. Moving a draft does not publish it, and drafts must be published before closing or adding to a board.
 
 ## Tags, mentions and issue references
 
@@ -27,7 +35,7 @@ Numbers are allocated from one global sequence across all projects and unlinked 
 | --- | --- |
 | Issue body | Required Markdown; up to 101,000 characters |
 | Display title | Derived from the body; up to 300 characters |
-| State | Open or Closed |
+| State | Open, Closed, or Draft |
 | Tagged users | Deduplicated users mentioned in the saved issue or its comments |
 | Tags | Up to 30 entries, each up to 50 characters |
 
@@ -77,7 +85,7 @@ Open **All issues** in the sidebar to see issues from every project and issues w
 
 Within either a project or **All issues**, **Search issues** matches title text, issue numbers, tagged users, and tags without case sensitivity.
 It does not search the full issue body or comments.
-The list starts with a **State is Open** filter. Edit that chip to show closed issues, or remove it to show open and closed issues together; the **State** column shows each issue's state.
+The list starts with a **State is Open** filter. Edit that chip to show closed issues or personal drafts, or remove it to show all visible states together; the **State** column shows each issue's state.
 Search applies within the active filters, so check them if an expected issue is missing.
 
 The **Board lane** column shows each issue's actual board placement, including custom lanes. Hidden lanes are marked **(hidden)**; unplaced and unlinked issues show **Not on board**. Add a **Board lane** filter to see a specific lane or issues not on a board. In **All issues**, each lane option includes its project name so same-named lanes from different projects remain distinct. Closed issues retain their board lane, and placement changes from **Send to board** update the column immediately.
@@ -102,7 +110,7 @@ Tags are appended to each selected issue’s latest saved body without replacing
 
 Use **Move issue** in full-page details or the desktop detail panel. Choose an active project or **No project**, then confirm. The source project must also be active; restore an archived project before moving its issues.
 
-Moving preserves the issue's global number, URL, saved body, comments, tags, tagged users and open/closed history. Unsaved issue and comment drafts stay in the editor: moving neither saves nor discards them. A changed project removes the old board placement without adding the issue to the destination board; use **Send to board** afterward if needed. Choosing the same project keeps the existing lane and card order. Failed moves leave the issue and board unchanged.
+Moving preserves the issue's global number, URL, saved body, comments, tags, tagged users and draft/open/closed history. Unsaved issue and comment drafts stay in the editor: moving neither saves nor discards them. A changed project removes the old board placement without adding the issue to the destination board; use **Send to board** afterward if needed. Choosing the same project keeps the existing lane and card order. Failed moves leave the issue and board unchanged.
 
 ## Send issues to a board lane
 
@@ -111,6 +119,7 @@ Select one or more issues in a project list or **All issues**, then choose **Sen
 Choose a visible lane for each project's selected issues. The choices include that board's custom lanes. Issues not yet on the board are added; existing cards move to the chosen lane, including cards currently in hidden lanes. A single issue already on the board defaults to its current lane when visible.
 
 - Unlinked issues have no board and are skipped with an explanation. Archived projects are read-only.
+- Personal drafts are skipped; publish them first.
 - Closed issues already on a board can move. Reopen closed off-board issues before adding them.
 - Each project's changes are atomic, with a maximum of 1,000 issues per project. If one project fails, other successful projects stay saved. Retry only the remaining projects, or reload their lanes if the board changed.
 - Successfully sent issues are deselected; failed or skipped issues remain selected. Select **Done** to return to the list or issue.

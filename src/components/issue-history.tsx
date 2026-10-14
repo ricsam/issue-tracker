@@ -16,7 +16,7 @@ const actions: Record<IssueHistoryEntry["action"], string> = {
 const fields = { body: "Body", state: "State", project: "Project", boardLane: "Board lane", comment: "Comment" };
 function displayValue(field: IssueHistoryEntry["changes"][number]["field"], value: string | null) {
   if (value === null) return field === "project" ? "No project" : field === "boardLane" ? "Not on board" : "None";
-  if (field === "state") return value === "closed" ? "Closed" : "Open";
+  if (field === "state") return value === "draft" ? "Draft" : value === "closed" ? "Closed" : "Open";
   return value || "(empty)";
 }
 

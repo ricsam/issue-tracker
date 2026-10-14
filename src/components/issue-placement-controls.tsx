@@ -94,7 +94,7 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
   async function change(kind: "project" | "lane", value: string) {
     if (submitting.current || locked) return;
     if (kind === "project" && (value === (issue.projectId || "") || (value && !projects.some((item) => item.id === value && !item.archivedAt)))) return;
-    if (kind === "lane" && (!project || !board || loading || closedOffBoard || value === (card?.lane || "") || (value && !board.lanes.includes(value)))) return;
+    if (kind === "lane" && (issue.state === "draft" || !project || !board || loading || closedOffBoard || value === (card?.lane || "") || (value && !board.lanes.includes(value)))) return;
     submitting.current = true;
     setBusy(true);
     busyCallback.current?.(true);
@@ -173,7 +173,7 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
           <p>Choosing a project immediately removes placement on the previous project’s board. It does not add the issue to the new board. Unsaved drafts are preserved.</p>
         </Popover.Content></Popover.Portal>
       </Popover.Root>
-      <Popover.Root open={laneOpen} onOpenChange={(open) => !submitting.current && setLaneOpen(open)}>
+      {issue.state === "draft" ? <span className="muted">Publish before adding to a board.</span> : <Popover.Root open={laneOpen} onOpenChange={(open) => !submitting.current && setLaneOpen(open)}>
         <Popover.Trigger asChild>
           <button type="button" className="issue-placement-trigger" aria-label="Change board lane" disabled={locked || !project} title={!project ? "Choose a project first" : readOnly ? "This project is read-only" : laneLabel}>
             <span>{loading ? "Loading board lane…" : loadError ? "Board lane unavailable" : laneLabel}</span><ChevronDown size={12} aria-hidden="true" />
@@ -193,7 +193,7 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
           </>}
           {(loadError || error || (board && !lanes.length)) && <Button type="button" variant="secondary" disabled={locked || loading} onClick={() => { forceReload.current = true; setRetry((value) => value + 1); }}>Retry loading board lanes</Button>}
         </Popover.Content></Popover.Portal>
-      </Popover.Root>
+      </Popover.Root>}
     </div>
     <ErrorNotice error={error} />
     {warning && <p className="issue-placement-warning" role="status">{warning}</p>}

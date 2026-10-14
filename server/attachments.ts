@@ -3,7 +3,7 @@ import type { User } from "../shared/types";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
-import { accessParams, visibleIssueSql } from "./project-access";
+import { issueAccessParams, visibleIssueSql } from "./project-access";
 
 const parser = unified().use(remarkParse).use(remarkGfm);
 // URLs visible even in source/code/history can be copied, so retain their access
@@ -38,11 +38,11 @@ export function retainAttachmentReferences(db: Database, issueId: string | numbe
 
 export function canReadAttachment(db: Database, attachmentId: string, user: User): boolean {
   return !!db.query(`SELECT 1 FROM attachments a WHERE a.id=? AND (
-    ?='admin' OR EXISTS (
+    EXISTS (
       SELECT 1 FROM issue_attachments ia JOIN issues i ON i.id=ia.issueId
       WHERE ia.attachmentId=a.id AND ${visibleIssueSql}
-    ) OR (a.uploaderId=? AND NOT EXISTS (
+    ) OR ((a.uploaderId=? OR ?='admin') AND NOT EXISTS (
       SELECT 1 FROM issue_attachments ia WHERE ia.attachmentId=a.id
     ))
-  )`).get(attachmentId, user.role, ...accessParams(user), user.id);
+  )`).get(attachmentId, ...issueAccessParams(user), user.id, user.role);
 }

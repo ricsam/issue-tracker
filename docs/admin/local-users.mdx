@@ -56,7 +56,7 @@ New local users always receive the **member** role; the form has no role selecto
 ## Explain member access
 
 Members can create projects and issues, update issues, post comments, and upload files.
-They can access public projects and private projects they own or are explicitly shared on. Unlinked issues are workspace-wide. Uploads follow saved issue access; drafts remain uploader-only, with administrator access to all uploads. Tagging does not grant project access.
+They can access public projects and private projects they own or are explicitly shared on. Published unlinked issues are workspace-wide. Personal draft issues are visible only to their creator; administrators and project owners have no application-level bypass. Uploads follow saved issue access, including personal draft privacy. Unreferenced uploads remain uploader-only with administrator recovery access. Tagging does not grant project access or share drafts.
 All authenticated users can see the workspace user directory, including names and email addresses.
 
 Only administrators can manage OIDC settings and create local users.

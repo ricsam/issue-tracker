@@ -1333,6 +1333,11 @@ fieldset > small {
   background: #e8f5ef;
   border: 1px solid #cfe9dd;
 }
+.state-badge.draft {
+  color: #5e596b;
+  background: #f1eff5;
+  border-color: #ddd9e5;
+}
 .state-badge.closed {
   color: #6447c4;
   background: #f0ebfc;

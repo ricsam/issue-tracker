@@ -34,7 +34,7 @@ export function SendToBoardDialog({ issues, onPlaced, onClose }: {
   const submitting = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const patch = (projectId: string, change: Partial<ProjectGroup>) => setGroups((current) => current.map((group) => group.project.id === projectId ? { ...group, ...change } : group));
-  const targets = (group: ProjectGroup) => group.issues.filter((issue) => issue.state === "open" || group.board?.cards.some((card) => card.issueId === issue.id));
+  const targets = (group: ProjectGroup) => group.issues.filter((issue) => issue.state !== "draft" && (issue.state === "open" || group.board?.cards.some((card) => card.issueId === issue.id)));
 
   async function load(group: ProjectGroup, signal: AbortSignal) {
     patch(group.project.id, { loading: true, error: "" });
@@ -106,10 +106,11 @@ export function SendToBoardDialog({ issues, onPlaced, onClose }: {
     open onOpenChange={(open) => !open && !submitting.current && onClose()} className="send-to-board-dialog">
     <form className="form-stack" onSubmit={send} aria-busy={busy}>
       <p className="muted">This only changes board placement. Issue content, state, and unsaved drafts are left unchanged.</p>
+      {issues.some((issue) => issue.state === "draft") && <p className="board-placement-note">Personal drafts will not be sent. Publish them before adding to a board.</p>}
       {skipped.length > 0 && <p className="board-placement-note" role="status">{skipped.length} issue{skipped.length === 1 ? "" : "s"} will not be sent: issues without a project have no board, and archived projects are read-only.</p>}
       {groups.map((group) => {
         const eligible = targets(group);
-        const closed = group.issues.length - eligible.length;
+        const closed = group.issues.filter((issue) => issue.state === "closed" && !eligible.includes(issue)).length;
         const lanes = group.board ? orderedLanes(group.board.lanes, group.board.customLanes, group.board.laneLabels) : [];
         const placed = group.board?.cards.filter((card) => eligible.some((issue) => issue.id === card.issueId)).length || 0;
         return <section key={group.project.id} className="board-placement-group" aria-label={`${group.project.name} board`}>

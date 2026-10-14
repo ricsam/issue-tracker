@@ -15,6 +15,19 @@ const matches = (conditions: IssueFilter[], conjunction: IssueFilterGroup["conju
 const normalize = (conditions: unknown[], conjunction: unknown = "and") => normalizeIssueFilters({ conjunction, conditions });
 
 describe("issue filter matching", () => {
+  test("personal drafts support scalar, negated and persisted multi-state filters", () => {
+    const draft: Issue = { ...issue, state: "draft" };
+    expect(matchesIssueFilters(draft, defaultIssueFilters, context)).toBe(false);
+    expect(matches([filter("state", "draft")], "and", draft)).toBe(true);
+    expect(matches([filter("state", "draft")])).toBe(false);
+    expect(matches([filter("state", "draft", "isNot")], "and", draft)).toBe(false);
+    for (const condition of [filter("state", "draft"), filter("state", "", "isOneOf", ["draft", "open"])]) {
+      const restored = normalizeIssueFilters(JSON.parse(JSON.stringify({ conjunction: "and", conditions: [condition] })));
+      expect(restored.conditions).toEqual([condition]);
+      expect(matchesIssueFilters(draft, restored, context)).toBe(true);
+    }
+    expect(normalize([filter("state", "private")]).conditions).toEqual([]);
+  });
   test("default open filter is separate from empty filters", () => {
     expect(defaultIssueFilters).toEqual({ conjunction: "and", conditions: [{ id: "default-state", field: "state", operator: "is", value: "open" }] });
     expect(emptyIssueFilters).toEqual({ conjunction: "and", conditions: [] });

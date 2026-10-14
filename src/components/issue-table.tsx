@@ -166,7 +166,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   };
   const cellClasses: Partial<Record<IssueColumn, string>> = { number: "issue-number", project: "issue-project", lane: "issue-board-lane", creator: "issue-creator" };
   const fields: FilterFieldDefinition[] = [
-    { key: "state", label: "State", options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }] },
+    { key: "state", label: "State", options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }, { value: "draft", label: "Draft" }] },
     { key: "lane", label: "Board lane", valueLabel: "Filter by board lane", options: [{ value: "none", label: "Not on board" }, ...laneOptions] },
     { key: "title", label: "Issue", kind: "text", valueLabel: "Filter by issue" },
     { key: "number", label: "Number", kind: "number", valueLabel: "Filter by number" },

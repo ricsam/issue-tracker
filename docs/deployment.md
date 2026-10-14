@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.22.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.23.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.23.0
+
+Version 0.23.0 adds personal draft issues. Choose **Personal draft** during creation, find saved drafts with **State is Draft** in project or All issues tables, and use **Publish issue** when ready. Drafts are creator-only, including against other administrators, and remain off shared boards until published. Publication shares the saved content, comments, history, and attachments with the issue's normal audience and cannot be reversed by returning to draft. Existing project access and archive rules still apply.
+
+Migration v17 adds an internal draft flag defaulting to published, preserving existing issues, lifecycle, history, and timestamps. No deployment-value changes are required. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Do not use automatic Helm rollback (`--atomic`) across this migration or run an older image against draft data:** older versions do not enforce draft privacy. Recovery requires a pre-upgrade backup with its matching image/chart, preserving newer writes separately. Select the published SHA image matching this chart's release commit after CI succeeds. Publishing the chart does not upgrade running deployments.
 
 ### Upgrading to 0.22.0
 

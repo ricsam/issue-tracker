@@ -218,7 +218,7 @@ function IssueDetailForm({
   }
   // Close/reopen immediately without saving or discarding other unsaved edits.
   async function changeState(state: IssueState) {
-    if (busy || changingState || moving || archived) return;
+    if (busy || changingState || moving || archived || (issue.state === "draft" && dirty)) return;
     setChangingState(true);
     setError("");
     try {
@@ -232,7 +232,7 @@ function IssueDetailForm({
       setPersisted((v) => (v ? { ...v, ...lifecycle } : v));
       refreshHistory();
       onSaved?.(result.issue);
-      notify(state === "closed" ? "Issue closed" : "Issue reopened");
+      notify(issue.state === "draft" ? "Issue published" : state === "closed" ? "Issue closed" : "Issue reopened");
       await refresh();
     } catch (e) {
       setError(message(e));
@@ -267,6 +267,7 @@ function IssueDetailForm({
       setPosting(false);
     }
   }
+  const draft = issue.state === "draft";
   const closed = issue.state === "closed";
   const closer = users.find((u) => u.id === issue.closedById)?.name;
   return (
@@ -305,8 +306,9 @@ function IssueDetailForm({
               }}
               onBoardChanged={(projectId, board) => { refreshHistory(); onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />
           </div>
-          <div className="issue-window-actions"><ShareIssue id={id} />{panelActions}</div>
+          <div className="issue-window-actions">{!draft && <ShareIssue id={id} />}{panelActions}</div>
         </header>
+        {draft && <p className="read-only-note">Only you can see this draft, while you have access to its project. Publishing shares the saved issue, comments and history with everyone who has access and cannot be undone. Save any changes before publishing.</p>}
         <fieldset
           disabled={busy || changingState}
           inert={busy || changingState}
@@ -326,11 +328,11 @@ function IssueDetailForm({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={busy || changingState || moving}
-                  onClick={() => void changeState(closed ? "open" : "closed")}
+                  disabled={busy || changingState || moving || (draft && dirty)}
+                  onClick={() => void changeState(draft || closed ? "open" : "closed")}
                 >
                   {closed ? <RotateCcw size={15} /> : <CircleCheck size={15} />}
-                  {changingState
+                  {draft ? (changingState ? "Publishing…" : "Publish issue") : changingState
                     ? closed
                       ? "Reopening…"
                       : "Closing…"

@@ -165,7 +165,7 @@ export function IssueReferenceAutocomplete({ mode, source, onChange }: {
     <div role="listbox" aria-label="Issue suggestions" id={id} aria-busy={loading}>
       {options.map((issue, index) => <div role="option" aria-selected={index === Math.min(active, options.length - 1)} id={`${id}-${index}`} key={issue.id}
         className="issue-reference-option" onPointerDown={event => event.preventDefault()} onClick={() => choose(issue)}>
-        <strong>!{issue.number} {issue.title}</strong><span>{issue.state === "closed" ? "Closed" : "Open"}</span>
+        <strong>!{issue.number} {issue.title}</strong><span>{issue.state === "draft" ? "Draft (only you)" : issue.state === "closed" ? "Closed" : "Open"}</span>
       </div>)}
     </div>
     {!options.length && <div role="status" className="issue-reference-empty">{loading ? "Finding issues…" : result?.error || "No matching issues"}</div>}

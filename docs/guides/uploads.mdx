@@ -9,7 +9,7 @@ Each file must be **10 MiB or smaller**.
 
 <Warning>
   Unsaved upload drafts are readable only by their uploader and administrators.
-  Saved attachment references inherit the current access of their issue, comment, or retained history.
+  Saved attachment references inherit the current access of their issue, comment, or retained history, including creator-only personal drafts with no administrator bypass.
   A known URL does not grant access. Anonymous users cannot download files.
 </Warning>
 
@@ -55,9 +55,9 @@ The returned link includes the stored filename; keep the generated URL intact.
 ## Share an attachment
 
 Keep the inserted reference in an issue or comment so teammates can find it later.
-A teammate opening the upload URL must be signed in and able to read an issue that references the file (including its comments or history). Administrators can read all uploads.
+A teammate opening the upload URL must be signed in and able to read an issue that references the file (including its comments or history). Administrators cannot read files referenced only by another user's personal drafts.
 Copying the URL does not grant access. Moving an issue, changing project visibility, or revoking sharing changes download access immediately on subsequent requests.
-Saving a reference in a public project or **No project** issue makes it available to all signed-in users. If a file has multiple saved references, access through any readable issue is sufficient.
+Saving a reference in a published public-project or **No project** issue makes it available to all signed-in users. References in personal draft issues stay private until published. If a file has multiple saved references, access through any readable issue is sufficient.
 
 ## Handle upload failures
 

@@ -30,7 +30,7 @@ import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
-import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams } from "./project-access";
+import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams, issueAccessParams } from "./project-access";
 import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./attachments";
 
 export interface AppOptions {
@@ -74,7 +74,7 @@ const issueFields = z
   .strict();
 const issueUpdateFields = issueFields
   .extend({
-    state: z.enum(["open", "closed"]),
+    state: z.enum(["open", "closed", "draft"]),
     projectId: text(100).nullable(),
   })
   .partial();
@@ -106,7 +106,7 @@ const boardFields = z
     customLanes: z.array(customLaneField).max(30).optional(),
   })
   .strict();
-const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id`;
+const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL AND bi.isDraft=0) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id AND (i.isDraft=0 OR i.authorId=?)`;
 
 export function createApp(options: AppOptions = {}) {
   const production =
@@ -190,24 +190,25 @@ export function createApp(options: AppOptions = {}) {
   const issue = (issueId: string | number, user: User): Issue => {
     const row = db
       .query(
-        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,createdAt,updatedAt FROM issues WHERE id=?",
+        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,isDraft,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
-    if (!row) return fail(404, "Issue not found");
+    if (!row || (row.isDraft && row.authorId !== user.id)) return fail(404, "Issue not found");
     access.requireRead(row.projectId, user, "Issue");
+    const { isDraft, ...fields } = row;
     return {
-      ...row,
+      ...fields,
       id: String(row.id),
       number: Number(row.id),
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
-      state: row.closedAt ? "closed" : "open",
+      state: isDraft ? "draft" : row.closedAt ? "closed" : "open",
     };
   };
   const project = (slug: string, user: User) => {
     const row = db
       .query(`${projectSql} WHERE p.slug=? GROUP BY p.id`)
-      .get(slug) as Project | null;
+      .get(user.id, slug) as Project | null;
     if (!row) return fail(404, "Project not found");
     access.requireRead(row.id, user);
     return access.serialize(row);
@@ -235,7 +236,7 @@ export function createApp(options: AppOptions = {}) {
       .get(projectId) as { lanes: string; customLanes: string; laneLabels: string } | null;
     const cards = db
       .query(
-        "SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? ORDER BY b.position,i.number",
+        "SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? AND i.isDraft=0 ORDER BY b.position,i.number",
       )
       .all(projectId) as BoardCard[];
     const laneLabels: Record<string, string> = JSON.parse(row?.laneLabels ?? "{}");
@@ -245,6 +246,17 @@ export function createApp(options: AppOptions = {}) {
       customLanes: row ? JSON.parse(row.customLanes) : [],
       cards,
     };
+  };
+  const requireBoardIssue = (issueId: string, projectId: string, user: User) => {
+    const row = db.query("SELECT authorId,isDraft,closedAt FROM issues WHERE id=? AND projectId=?")
+      .get(issueId, projectId) as { authorId: string; isDraft: number; closedAt: string | null } | null;
+    if (!row) return fail(400, "Unknown project issue");
+    if (row.isDraft) {
+      // Match nonexistent/foreign IDs so board probes cannot identify a draft.
+      if (row.authorId !== user.id) return fail(400, "Unknown project issue");
+      return fail(409, "Publish draft issue before adding it to the board");
+    }
+    return row;
   };
   const nextBoardPosition = (projectId: string, lane: string) =>
     (db.query("SELECT COALESCE(MAX(position),0)+1 AS position FROM board_issues WHERE projectId=? AND lane=?")
@@ -517,7 +529,7 @@ export function createApp(options: AppOptions = {}) {
     c.json({
       projects: db
         .query(`${projectSql} WHERE ${visibleProjectSql} GROUP BY p.id ORDER BY p.createdAt,p.id`)
-        .all(...accessParams(c.get("user"))).map((row) => access.serialize(row as Project)),
+        .all(c.get("user").id, ...accessParams(c.get("user"))).map((row) => access.serialize(row as Project)),
     }),
   );
   app.post("/api/projects", async (c) => {
@@ -565,7 +577,7 @@ export function createApp(options: AppOptions = {}) {
       if (input.sharedUserIds !== undefined) saveSharedUsers(p.id, input.sharedUserIds);
       // A transfer may revoke the caller's access, but still return the committed
       // settings for this authorized operation. Subsequent reads use the new ACL.
-      const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(p.id) as Project;
+      const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(c.get("user").id, p.id) as Project;
       return access.serialize(row);
     }).immediate();
     return c.json({ project: updated });
@@ -790,14 +802,8 @@ export function createApp(options: AppOptions = {}) {
     historyTransaction(c, input.issueIds, () => {
       activeProject(p.slug, c.get("user"));
       requireVisibleLane(p.id, input.lane);
-      for (const issueId of input.issueIds) {
-        if (
-          !db
-            .query("SELECT id FROM issues WHERE id=? AND projectId=?")
-            .get(issueId, p.id)
-        )
-          fail(400, "Unknown project issue");
-      }
+      for (const issueId of input.issueIds)
+        requireBoardIssue(issueId, p.id, c.get("user"));
       for (const issueId of input.issueIds) {
         if (
           db
@@ -858,9 +864,7 @@ export function createApp(options: AppOptions = {}) {
       activeProject(p.slug, c.get("user"));
       requireVisibleLane(p.id, input.lane);
       for (const issueId of input.issueIds) {
-        const current = db.query("SELECT closedAt FROM issues WHERE id=? AND projectId=?")
-          .get(issueId, p.id) as { closedAt: string | null } | null;
-        if (!current) return fail(400, "Unknown project issue");
+        const current = requireBoardIssue(issueId, p.id, c.get("user"));
         const member = db.query("SELECT issueId FROM board_issues WHERE projectId=? AND issueId=?")
           .get(p.id, issueId);
         if (current.closedAt && !member)
@@ -882,6 +886,7 @@ export function createApp(options: AppOptions = {}) {
       .parse(await json(c));
     historyTransaction(c, [c.req.param("id")], () => {
       activeProject(p.slug, c.get("user"));
+      issue(c.req.param("id"), c.get("user"));
       if (
         !db
           .query(
@@ -901,6 +906,7 @@ export function createApp(options: AppOptions = {}) {
     issueIdField.parse(c.req.param("id"));
     const p = activeProject(c.req.param("slug"), c.get("user"));
     historyTransaction(c, [c.req.param("id")], () => {
+      issue(c.req.param("id"), c.get("user"));
       const result = db.query("DELETE FROM board_issues WHERE projectId=? AND issueId=?").run(p.id, c.req.param("id"));
       if (!result.changes) fail(404, "Board member not found");
     }).immediate();
@@ -909,20 +915,20 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/projects/:slug/issues", (c) => {
     const p = project(c.req.param("slug"), c.get("user"));
     const rows = db
-      .query("SELECT id FROM issues WHERE projectId=? ORDER BY number")
-      .all(p.id) as { id: string }[];
+      .query(`SELECT i.id FROM issues i WHERE i.projectId=? AND ${visibleIssueSql} ORDER BY i.number`)
+      .all(p.id, ...issueAccessParams(c.get("user"))) as { id: string }[];
     return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))) });
   });
   app.get("/api/issues", (c) => {
     // Return board metadata with the list so clients need no request per project.
     const rows = db.query(`SELECT i.id,i.projectId FROM issues i WHERE ${visibleIssueSql} ORDER BY i.createdAt,i.id`)
-      .all(...accessParams(c.get("user"))) as { id: string; projectId: string | null }[];
+      .all(...issueAccessParams(c.get("user"))) as { id: string; projectId: string | null }[];
     const projectIds = [...new Set(rows.flatMap((row) => row.projectId ? [row.projectId] : []))];
     return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))), boards: Object.fromEntries(projectIds.map((id) => [id, board(id)])) });
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");
-    const fields = issueFields.extend({ lane: laneField.nullable().optional() });
+    const fields = issueFields.extend({ lane: laneField.nullable().optional(), state: z.enum(["open", "draft"]).default("open") });
     const input = (slug ? fields : fields.extend({ projectId: text(100).nullable().optional() }))
       .parse(await json(c)) as z.infer<typeof fields> & { projectId?: string | null };
     const originalBody = input.title === undefined ? input.body : prependLegacyTitle(input.title, input.body);
@@ -934,13 +940,14 @@ export function createApp(options: AppOptions = {}) {
       const projectId = slug ? activeProject(slug, c.get("user")).id : input.projectId ?? null;
       if (projectId !== null) requireActiveProjectId(projectId, c.get("user"));
       if (input.lane != null) {
+        if (input.state === "draft") return fail(400, "Draft issues cannot be placed on a board");
         if (projectId === null) return fail(400, "Lane requires a project");
         requireVisibleLane(projectId, input.lane);
       }
       validateMentions(body);
       validateAttachments(body, c.get("user"));
       const inserted = db.query(
-        "INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt) VALUES (0,?,?,?,?,?,?,?,?,?) RETURNING id",
+        "INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt,isDraft) VALUES (0,?,?,?,?,?,?,?,?,?,?) RETURNING id",
       ).get(
         projectId,
         deriveIssueTitle(originalBody),
@@ -951,6 +958,7 @@ export function createApp(options: AppOptions = {}) {
         c.get("user").id,
         time,
         time,
+        input.state === "draft" ? 1 : 0,
       ) as { id: number };
       const uid = String(inserted.id);
       db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
@@ -974,12 +982,12 @@ export function createApp(options: AppOptions = {}) {
     const numeric = query.replace(/^!/, "");
     const exactId = issueIdField.safeParse(numeric);
     const rows = exactId.success
-      ? db.query(`SELECT i.id,i.title,i.closedAt FROM issues i WHERE i.id=? AND ${visibleIssueSql} LIMIT 20`)
-        .all(exactId.data, ...accessParams(c.get("user")))
-      : db.query(`SELECT i.id,i.title,i.closedAt FROM issues i WHERE instr(lower(i.title),lower(?))>0 AND ${visibleIssueSql} ORDER BY i.id DESC LIMIT 20`)
-        .all(query, ...accessParams(c.get("user")));
-    return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null }[]).map((row) => ({
-      id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const,
+      ? db.query(`SELECT i.id,i.title,i.closedAt,i.isDraft FROM issues i WHERE i.id=? AND ${visibleIssueSql} LIMIT 20`)
+        .all(exactId.data, ...issueAccessParams(c.get("user")))
+      : db.query(`SELECT i.id,i.title,i.closedAt,i.isDraft FROM issues i WHERE instr(lower(i.title),lower(?))>0 AND ${visibleIssueSql} ORDER BY i.id DESC LIMIT 20`)
+        .all(query, ...issueAccessParams(c.get("user")));
+    return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null; isDraft: number }[]).map((row) => ({
+      id: String(row.id), number: row.id, title: row.title, state: row.isDraft ? "draft" as const : row.closedAt ? "closed" as const : "open" as const,
     })) });
   });
   app.get("/api/issues/:id/history", (c) => {
@@ -1034,7 +1042,9 @@ export function createApp(options: AppOptions = {}) {
       updatedAt: now(),
     };
     historyTransaction(c, [current.id], () => {
-      activeIssue(current.id, c.get("user"));
+      const latest = activeIssue(current.id, c.get("user"));
+      if (input.state === "draft" && latest.state !== "draft") fail(409, "Published issues cannot become drafts");
+      if (input.state === "closed" && latest.state === "draft") fail(409, "Publish draft issue before closing it");
       if (input.projectId != null) requireActiveProjectId(input.projectId, c.get("user"));
       if (body !== current.body) validateAttachments(body, c.get("user"));
       if (input.projectId !== undefined && input.projectId !== current.projectId) {
@@ -1059,7 +1069,7 @@ export function createApp(options: AppOptions = {}) {
         ).run(merged.updatedAt, c.get("user").id, current.id);
       else if (input.state === "open")
         db.query(
-          "UPDATE issues SET closedAt=NULL,closedById=NULL WHERE id=?",
+          "UPDATE issues SET isDraft=0,closedAt=NULL,closedById=NULL WHERE id=?",
         ).run(current.id);
       if (body !== current.body)
         syncIssueTaggedUsers(db, current.id);

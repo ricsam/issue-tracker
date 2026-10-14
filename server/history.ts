@@ -4,14 +4,14 @@ import { orderedLanes } from "../shared/board";
 
 type Snapshot = { body: string; state: string; project: string | null; boardLane: string | null; projectId: string | null; lane: string | null };
 export function issueSnapshot(db: Database, issueId: string): Snapshot | null {
-  const row = db.query(`SELECT i.body,i.closedAt,i.projectId,p.name AS project,b.lane,pb.customLanes,pb.laneLabels
+  const row = db.query(`SELECT i.body,i.closedAt,i.isDraft,i.projectId,p.name AS project,b.lane,pb.customLanes,pb.laneLabels
     FROM issues i LEFT JOIN projects p ON p.id=i.projectId
     LEFT JOIN board_issues b ON b.issueId=i.id
     LEFT JOIN project_boards pb ON pb.projectId=i.projectId WHERE i.id=?`).get(issueId) as
-    { body: string; closedAt: string | null; projectId: string | null; project: string | null; lane: string | null; customLanes: string | null; laneLabels: string | null } | null;
+    { body: string; closedAt: string | null; isDraft: number; projectId: string | null; project: string | null; lane: string | null; customLanes: string | null; laneLabels: string | null } | null;
   if (!row) return null;
   const definitions = orderedLanes(row.lane === null ? [] : [row.lane], JSON.parse(row.customLanes ?? "[]"), JSON.parse(row.laneLabels ?? "{}"));
-  return { body: row.body, state: row.closedAt ? "closed" : "open", project: row.project,
+  return { body: row.body, state: row.isDraft ? "draft" : row.closedAt ? "closed" : "open", project: row.project,
     projectId: row.projectId, lane: row.lane,
     boardLane: row.lane === null ? null : definitions.find((lane) => lane.value === row.lane)?.label ?? row.lane };
 }

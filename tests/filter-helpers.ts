@@ -16,7 +16,7 @@ export async function openTableFilter(page: Page, field: string) {
   return filterEditor(page);
 }
 
-export async function setTableState(page: Page, state: "open" | "closed") {
+export async function setTableState(page: Page, state: "open" | "closed" | "draft") {
   const editor = await openTableFilter(page, "state");
   await editor.getByLabel("Value", { exact: true }).selectOption(state);
   await editor.getByRole("button", { name: "Done", exact: true }).click();

@@ -42,8 +42,10 @@ export function CreateIssueDialog({
   const [boardRetry, setBoardRetry] = useState(0);
   const board = boardResult?.projectId === projectId ? boardResult.board : undefined;
   const boardError = boardResult?.projectId === projectId ? boardResult.error : undefined;
-  const lane = creationLane(board, requestedLane);
-  const awaitingRememberedLane = !!selectedProject && !!requestedLane && !board;
+  const [state, setState] = useState<"open" | "draft">("open");
+  const draft = state === "draft";
+  const lane = draft ? "" : creationLane(board, requestedLane);
+  const awaitingRememberedLane = !draft && !!selectedProject && !!requestedLane && !board;
   useEffect(() => {
     if (projectId && !selectedProject) { setProjectId(""); setLane(""); }
   }, [projectId, selectedProject]);
@@ -106,7 +108,7 @@ export function CreateIssueDialog({
         selectedProject ? `/api/projects/${encodeURIComponent(selectedProject.slug)}/issues` : "/api/issues",
         {
           method: "POST",
-          body: JSON.stringify({ body, ...(selectedProject && lane ? { lane } : {}) }),
+          body: JSON.stringify({ body, state, ...(selectedProject && lane ? { lane } : {}) }),
         },
       );
       setCreated(issue);
@@ -185,7 +187,14 @@ export function CreateIssueDialog({
                 {projects.filter((candidate) => !candidate.archivedAt).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
               </select>
             </label>
-            {selectedProject && <div>
+            <label>Visibility
+              <select aria-label="Visibility" value={state} onChange={(event) => setState(event.target.value as "open" | "draft")}>
+                <option value="open">Published issue</option>
+                <option value="draft">Personal draft</option>
+              </select>
+            </label>
+            {draft && <p className="muted">Only you can see this draft, while you have access to its project. Publish it to share with others or add it to a board.</p>}
+            {selectedProject && !draft && <div>
               <label>Board lane
                 <select aria-label="Board lane" value={lane} disabled={!board}
                   onChange={(event) => {
@@ -244,7 +253,7 @@ export function CreateIssueDialog({
               {created ? "Done" : "Cancel"}
             </Button>}
             <Button disabled={busy || awaitingRememberedLane || !body.trim()} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
-              {busy ? "Creating…" : "Create issue"}
+              {busy ? "Creating…" : draft ? "Save draft" : "Create issue"}
             </Button>
           </div>
         </div>

@@ -241,7 +241,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   // Older links to the closed list now initialize the visible State chip.
   useEffect(() => {
     const state = searchParams.get("state");
-    if (board || (!all && !project) || (state !== "open" && state !== "closed")) return;
+    if (board || (!all && !project) || (state !== "open" && state !== "closed" && state !== "draft")) return;
     setTableState({ ...tableState, filters: { ...tableState.filters, conditions: [
       { id: "linked-state", field: "state", operator: "is", value: state },
       ...tableState.filters.conditions.filter((filter) => filter.field !== "state" && filter.id !== "linked-state"),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Archive, ArchiveRestore, CircleCheck, CircleDot } from "lucide-react";
+import { Archive, ArchiveRestore, CircleCheck, CircleDot, LockKeyhole } from "lucide-react";
 import type { IssueState, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
@@ -8,8 +8,8 @@ import { Button, ErrorNotice, Modal } from "./ui/primitives";
 export function IssueStateBadge({ state }: { state: IssueState }) {
   return (
     <span className={`state-badge ${state}`}>
-      {state === "closed" ? <CircleCheck size={14} /> : <CircleDot size={14} />}
-      {state === "closed" ? "Closed" : "Open"}
+      {state === "draft" ? <LockKeyhole size={14} /> : state === "closed" ? <CircleCheck size={14} /> : <CircleDot size={14} />}
+      {state === "draft" ? "Draft" : state === "closed" ? "Closed" : "Open"}
     </span>
   );
 }

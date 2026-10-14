@@ -93,7 +93,7 @@ function dateValue(value: unknown): string {
 
 function validOptionValue(field: IssueFilterField, value: string): boolean {
   if (!value.trim()) return true;
-  if (field === "state") return value === "open" || value === "closed";
+  if (field === "state") return value === "open" || value === "closed" || value === "draft";
   if (field === "labels") return value === "none" || (value.startsWith("label:") && !!value.slice(6).trim());
   if (field === "creator") return value === "unknown" || (value.startsWith("user:") && !!value.slice(5).trim());
   return true;

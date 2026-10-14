@@ -6,10 +6,12 @@ import type { Project, User } from "../shared/types";
 export const visibleProjectSql = `(?='admin' OR p.visibility='public' OR p.ownerId=? OR EXISTS (
   SELECT 1 FROM project_members pm WHERE pm.projectId=p.id AND pm.userId=?
 ))`;
-export const visibleIssueSql = `(i.projectId IS NULL OR EXISTS (
+// Draft privacy has no administrator or project-owner exception.
+export const visibleIssueSql = `((i.isDraft=0 OR i.authorId=?) AND (i.projectId IS NULL OR EXISTS (
   SELECT 1 FROM projects p WHERE p.id=i.projectId AND ${visibleProjectSql}
-))`;
+)))`;
 export const accessParams = (user: User) => [user.role, user.id, user.id] as const;
+export const issueAccessParams = (user: User) => [user.id, ...accessParams(user)] as const;
 
 export function projectAccess(db: Database) {
   const canRead = (projectId: string | null, user: User) => projectId === null || !!db.query(

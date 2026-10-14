@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 = 16) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 = 17) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -364,6 +364,14 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
     if (db.query("SELECT version FROM migrations WHERE version=16").get()) return;
     db.exec(`ALTER TABLE project_boards ADD COLUMN laneLabels TEXT NOT NULL DEFAULT '{}';
       INSERT INTO migrations VALUES (16);`);
+  }).immediate();
+  if (targetVersion < 17) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=17").get()) return;
+    // Existing issues remain published, with their lifecycle and content intact.
+    db.exec(`ALTER TABLE issues ADD COLUMN isDraft INTEGER NOT NULL DEFAULT 0
+      CHECK(isDraft IN (0,1) AND (isDraft=0 OR closedAt IS NULL));
+      INSERT INTO migrations VALUES (17);`);
   }).immediate();
   return db;
 }

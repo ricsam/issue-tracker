@@ -1,6 +1,6 @@
 export type Role = "admin" | "member";
 export type Lane = string;
-export type IssueState = "open" | "closed";
+export type IssueState = "open" | "closed" | "draft";
 export interface BoardLane {
   value: Lane;
   label: string;
@@ -26,7 +26,7 @@ export interface Project {
   /** Archived projects are hidden from navigation and read-only until restored. */
   archivedAt: string | null;
   archivedById: string | null;
-  /** Latest updatedAt among issues currently belonging to this project. */
+  /** Latest updatedAt among issues in this project visible to the current user. */
   lastIssueUpdatedAt: string | null;
   issueCount: number;
   openCount: number;
@@ -55,7 +55,7 @@ export interface Issue {
   labels: string[];
   taggedUserIds: string[];
   authorId: string;
-  /** Derived from closedAt; closing never changes board membership or lanes. */
+  /** Personal drafts are creator-only; published state derives from closedAt. */
   state: IssueState;
   closedAt: string | null;
   closedById: string | null;
