@@ -49,7 +49,7 @@ import { useIssueTablePreferences } from "../lib/issue-table-preferences";
 import { BoardSettingsDialog } from "../components/board-settings";
 import { BoardAddIssuesDialog } from "../components/board-add-issues";
 import { BoardActionsMenu } from "../components/board-actions-menu";
-import { BoardLaneMenu, BoardLaneDialog, HiddenLanesMenu } from "../components/board-lane-menu";
+import { BoardLaneMenu, BoardLaneDialog } from "../components/board-lane-menu";
 import { BulkTagDialog } from "../components/bulk-tag-dialog";
 import { BulkLabelDialog } from "../components/bulk-label-dialog";
 import { IssueDetails } from "./detail";
@@ -216,6 +216,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     else if (projectId === project?.id) setBoardSettings(settings);
   }
   const [configureBoard, setConfigureBoard] = useState(false);
+  const manageLanesTrigger = useRef<HTMLButtonElement>(null);
   const [laneDialog, setLaneDialog] = useState<{ lane: BoardLane; kind: "rename" | "remove" } | null>(null);
   const [addToBoard, setAddToBoard] = useState(false);
   const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
@@ -490,11 +491,11 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   function focusLane(lane?: Lane) {
     const target = lane ? collection.current?.querySelector<HTMLButtonElement>(`[data-lane="${CSS.escape(lane)}"] .board-lane-menu-trigger`) : null;
-    (target || collection.current?.querySelector<HTMLButtonElement>(".board-hidden-lanes-trigger") || collection.current)?.focus({ preventScroll: true });
+    (target || manageLanesTrigger.current || collection.current)?.focus({ preventScroll: true });
   }
   function hideLane(lane: BoardLane) {
     updateBoardPreferences({ hiddenLanes: [...hiddenLanes, lane.value] });
-    setBoardOutcome(`${lane.label} hidden from your view. Restore it from Hidden lanes.`);
+    setBoardOutcome(`${lane.label} hidden from your view. Restore it from Manage lanes.`);
     requestAnimationFrame(() => focusLane());
   }
   async function saveLane(lane: Lane, label?: string) {
@@ -559,7 +560,6 @@ function ProjectIssues({ slug }: { slug: string }) {
   const readOnly = !!project?.archivedAt;
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes, boardSettings.laneLabels);
   const shownLanes = lanes.filter((lane) => !hiddenLanes.includes(lane.value));
-  const hiddenLaneDefinitions = lanes.filter((lane) => hiddenLanes.includes(lane.value));
   const canReorderLanes = shownLanes.length > 1 && !saving && !closingIssues && !readOnly;
   const dragFrom = laneDrag
     ? shownLanes.findIndex((lane) => lane.value === laneDrag.lane)
@@ -796,18 +796,10 @@ function ProjectIssues({ slug }: { slug: string }) {
               >
                 <Plus size={15} /> Add issues
               </Button>
-              {hiddenLaneDefinitions.length > 0 && <HiddenLanesMenu lanes={hiddenLaneDefinitions} disabled={!!saving || !!laneDrag}
-                onShow={(lane) => {
-                  updateBoardPreferences({ hiddenLanes: hiddenLanes.filter((value) => value !== lane.value) });
-                  requestAnimationFrame(() => focusLane(lane.value));
-                }}
-                onShowAll={() => {
-                  updateBoardPreferences({ hiddenLanes: [] });
-                  requestAnimationFrame(() => focusLane(hiddenLaneDefinitions[0]?.value));
-                }} />}
               <Button
+                ref={manageLanesTrigger}
                 variant="secondary"
-                disabled={!!saving || readOnly}
+                disabled={!!saving || !!laneDrag}
                 onClick={() => setConfigureBoard(true)}
               >
                 <SlidersHorizontal size={15} /> Manage lanes
@@ -849,14 +841,14 @@ function ProjectIssues({ slug }: { slug: string }) {
             {boardIssues.length > 0 && filtered.length === 0 && (
               <p className="board-empty-notice">
                 No visible issues. Clear filters, check your search, or restore a lane using
-                Hidden lanes or Manage lanes.
+                Manage lanes.
               </p>
             )}
             <Snackbar message={boardOutcome} onDismiss={dismissBoardOutcome} />
             <p className="sr-only" id="board-keyboard-help">
               Use arrow keys to open adjacent issues; on desktop, details open in the sidebar while the card stays focused. Hold Shift to extend or shrink a selection; Cmd or Ctrl plus Shift and Up or Down selects to the start or end of the current lane. Left and Right extend across lanes. Lane checkboxes select only issues visible in the current search.
               Drag issues by their handle before or after another issue, or to the end of a lane. Use each issue’s board actions menu to move up, down, to the top or bottom. Drag a selected issue’s handle to move the selection.
-              Drag a lane by its heading to reorder lanes, or use its lane actions menu. Collapse and hide affect only your view; restore hidden lanes using Hidden lanes.
+              Drag a lane by its heading to reorder lanes, or use its lane actions menu. Collapse and hide affect only your view; restore hidden lanes using Manage lanes.
             </p>
             <div
               className="board"
@@ -1072,8 +1064,12 @@ function ProjectIssues({ slug }: { slug: string }) {
         <BoardSettingsDialog
           slug={slug}
           settings={boardSettings}
+          hiddenLanes={hiddenLanes}
+          onHiddenLanesChange={(lanes) => updateBoardPreferences({ hiddenLanes: lanes })}
+          readOnly={readOnly}
           onSaved={boardSaved}
           onClose={() => setConfigureBoard(false)}
+          onClosed={() => focusLane()}
         />
       )}
       {addToBoard && (

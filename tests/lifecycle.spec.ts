@@ -176,7 +176,11 @@ test("archived projects leave navigation, become read-only and can be restored",
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(page.locator(".board-card")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Add issues", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Manage lanes" })).toBeDisabled();
+  await page.getByRole("button", { name: "Manage lanes", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes", exact: true });
+  await expect(settings.getByLabel("Create a new lane", { exact: true })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Save board", exact: true })).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true })).toBeDisabled();
   await expect(page.getByRole("checkbox", { name: `Select issue !${issues[0].number}`, exact: true })).toBeDisabled();
   await expect(page.locator(".board-card").first()).not.toHaveAttribute("draggable", "true");

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ChevronsLeftRight, ChevronsRightLeft, EllipsisVertical, Eye, EyeOff, Pencil, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronsLeftRight, ChevronsRightLeft, EllipsisVertical, EyeOff, Pencil, X } from "lucide-react";
 import type { BoardLane } from "../../shared/types";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import { Tooltip } from "./ui/tooltip";
@@ -90,18 +90,6 @@ export function BoardLaneMenu({ lane, collapsed, disabled, readOnly, canRemove, 
     { label: "Move to right", icon: <ArrowRight size={15} />, disabled: readOnly || !canMoveRight, onSelect: () => onMove("right") },
     { help: readOnly ? "Archived boards are read-only." : "Rename, remove and reorder are shared with your team. Removing keeps the issues." },
   ]} />;
-}
-
-export function HiddenLanesMenu({ lanes, disabled, onShow, onShowAll }: {
-  lanes: BoardLane[]; disabled: boolean; onShow: (lane: BoardLane) => void; onShowAll: () => void;
-}) {
-  return <LaneMenu label={`Hidden lanes (${lanes.length})`} text={`Hidden lanes (${lanes.length})`} icon={<EyeOff size={15} />}
-    className="board-hidden-lanes-trigger" disabled={disabled} entries={[
-      { help: "Hidden only for you. Issues and lane order are unchanged." },
-      ...lanes.map((lane) => ({ label: `Show ${lane.label}`, icon: <Eye size={15} />, onSelect: () => onShow(lane) })),
-      { separator: true },
-      { label: "Show all lanes", onSelect: onShowAll },
-    ]} />;
 }
 
 export function BoardLaneDialog({ lane, kind, onSave, onClose, onClosed }: {

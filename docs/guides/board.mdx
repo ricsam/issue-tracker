@@ -21,18 +21,19 @@ Use the card's kebab menu beside its drag handle to remove only its board placem
 
 Select **Manage lanes** to:
 
+- Restore personally hidden lanes under **Hidden lanes**, individually or with **Show all lanes**. This takes effect immediately, only for you, without saving the shared board.
 - Change a lane's position with its **Move up** and **Move down** buttons. The list order is the board's left-to-right order.
 - Remove a visible lane using its remove button.
 - Restore a removed lane under **Add an existing lane**.
 - Enter a name under **Create a new lane**, then select **Create lane** (or press Enter).
 
-Select **Save board** to apply your changes, or **Cancel** to discard them. Keep at least one visible lane. Custom names must be unique, contain 1–60 characters, and differ from the built-in names; each project supports up to 30 custom lanes.
+Select **Save board** to apply shared lane changes, or **Cancel** to discard them. Restoring personally hidden lanes is immediate and is not undone by Cancel. Keep at least one visible lane. Custom names must be unique, contain 1–60 characters, and differ from the built-in names; each project supports up to 30 custom lanes.
 
 <Note>
   Removing a lane hides it without deleting its issues or placements. Add it back to see those cards again. The board summary shows how many cards are in hidden lanes.
 </Note>
 
-For a personal alternative to shared hiding, use the collapse button in a lane heading. Collapsed lanes keep their heading, count, and drop target, but their cards leave selection and keyboard navigation until expanded. Collapse preferences are saved per account and board in this browser, including on archived boards; they do not change team visibility or card membership.
+For a personal alternative to removing a shared lane, choose **Collapse** or **Hide** from its heading's **⋮** menu. Collapsed lanes keep their heading, count, and drop target, but their cards leave selection and keyboard navigation until expanded. Hidden lanes leave your board entirely; restore them from **Manage lanes → Hidden lanes**. Collapse and hide preferences are saved per account and board in this browser, including on archived boards; they do not change team visibility or card membership.
 
 Wide boards scroll horizontally on desktop rather than squeezing the cards. Lane drop areas share the same height, including empty lanes, so the space below cards remains a consistent drag target.
 
@@ -60,7 +61,7 @@ New cards and cards moved from another lane using **Send to board** are appended
 
 Closing an issue does not move its card. A closed card keeps its lane and position, shows a **Closed** tag, and no longer counts as unfinished work. **Close selected issues** skips already-closed cards. If only some closes succeed, those remain saved and failures remain selected for retry; the batch is not all-or-nothing. Move cards to **Done** or remove them from the board when you no longer want to see them.
 
-The board of an [archived project](/guides/projects#archive-a-project) is read-only: cards, lanes, and **Manage lanes** cannot be changed until the project is restored.
+The board of an [archived project](/guides/projects#archive-a-project) is read-only: shared cards and lanes cannot be changed until the project is restored. You can still collapse or hide lanes personally, and use **Manage lanes** to restore hidden lanes; its shared editing controls are disabled.
 
 ## Read and edit an issue
 

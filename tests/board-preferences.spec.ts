@@ -241,7 +241,11 @@ test("archived boards allow personal collapse and filters but not shared edits",
   await fixture(page, baseURL!);
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive project", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Manage lanes", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes", exact: true });
+  await expect(settings.getByLabel("Create a new lane", { exact: true })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Save board", exact: true })).toHaveCount(0);
+  await settings.getByRole("button", { name: "Close", exact: true }).click();
   await laneAction(page, "Todo", "Collapse");
   await expect(page.getByRole("button", { name: "Todo lane actions", exact: true })).toBeEnabled();
   await clearBoardFilters(page);

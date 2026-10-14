@@ -1,0 +1,30 @@
+# Operator values for the personal demo. Install chart version 0.21.2 explicitly.
+# On a fresh database, override ingress.enabled=false until admin setup succeeds.
+image:
+  repository: ghcr.io/ricsam/issue-tracker
+  # Supply the published SHA tag/digest matching the chart release commit.
+  tag: ""
+imagePullSecrets:
+  - name: ghcr-registry
+baseUrl: https://issue-tracker.r5d.app
+existingSecret: issue-tracker-settings
+persistence:
+  storageClass: rook-ceph-block
+  size: 2Gi
+nodeSelector:
+  kubernetes.io/hostname: hetzner-kata-2
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: issue-tracker.r5d.app
+      paths:
+        - path: /
+          pathType: Prefix

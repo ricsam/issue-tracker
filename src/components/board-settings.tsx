@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, Plus, X } from "lucide-react";
 import {
   LANES,
   type BoardLane,
@@ -22,13 +22,21 @@ type Direction = "up" | "down";
 export function BoardSettingsDialog({
   slug,
   settings,
+  hiddenLanes,
+  onHiddenLanesChange,
+  readOnly,
   onSaved,
   onClose,
+  onClosed,
 }: {
   slug: string;
   settings: BoardSettings;
+  hiddenLanes: Lane[];
+  onHiddenLanesChange: (lanes: Lane[]) => void;
+  readOnly: boolean;
   onSaved: (settings: BoardSettings) => void;
   onClose: () => void;
+  onClosed: () => void;
 }) {
   const [lanes, setLanes] = useState(settings.lanes);
   const [customLanes, setCustomLanes] = useState(settings.customLanes);
@@ -37,6 +45,9 @@ export function BoardSettingsDialog({
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const idPrefix = useId();
+  const hiddenHeading = useRef<HTMLHeadingElement>(null);
+  const hidden = orderedLanes(settings.lanes, settings.customLanes, settings.laneLabels)
+    .filter((lane) => hiddenLanes.includes(lane.value));
   const refocus = useRef<{ lane: Lane; direction: Direction } | null>(null);
   const definitions = orderedLanes([...LANES, ...customLanes].map((lane) => lane.value), customLanes, settings.laneLabels);
   const visible = orderedLanes(lanes, customLanes, settings.laneLabels);
@@ -66,8 +77,14 @@ export function BoardSettingsDialog({
     );
   }
 
+  function showLane(lane?: BoardLane) {
+    onHiddenLanesChange(lane ? hiddenLanes.filter((value) => value !== lane.value) : []);
+    hiddenHeading.current?.focus();
+    setAnnouncement(lane ? `${lane.label} is no longer hidden from your view.` : "All lanes are no longer hidden from your view.");
+  }
+
   function createLane() {
-    if (!name.trim() || duplicate || customLanes.length >= 30 || busy) return;
+    if (!name.trim() || duplicate || customLanes.length >= 30 || busy || readOnly) return;
     const lane = { value: `custom_${crypto.randomUUID()}`, label: name.trim() };
     setCustomLanes((current) => [...current, lane]);
     setLanes((current) => [...current, lane.value]);
@@ -77,7 +94,7 @@ export function BoardSettingsDialog({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!lanes.length || busy) return;
+    if (!lanes.length || busy || readOnly) return;
     setBusy(true);
     setError("");
     try {
@@ -97,13 +114,32 @@ export function BoardSettingsDialog({
   return (
     <Modal
       title="Manage lanes"
-      description="Reorder, add, remove, or create lanes for this board. Changes are shared with your team."
+      description={readOnly
+        ? "Shared lanes are read-only on archived boards. You can still restore lanes hidden from your view."
+        : "Manage shared board lanes and restore lanes hidden only for you."}
       open
       onOpenChange={(open) => !open && !busy && onClose()}
+      onCloseAutoFocus={(event) => { event.preventDefault(); onClosed(); }}
       className="board-settings-dialog"
     >
       <form className="form-stack" onSubmit={save}>
-        <fieldset disabled={busy} className="board-settings-fields">
+        <section aria-labelledby={`${idPrefix}-hidden-lanes`}>
+          <h3 id={`${idPrefix}-hidden-lanes`} ref={hiddenHeading} tabIndex={-1} className="field-label">
+            Hidden lanes ({hidden.length})
+          </h3>
+          <p className="settings-help muted">
+            Hidden only for you. Showing a lane takes effect immediately without changing its issues or order.
+          </p>
+          {hidden.length > 0 ? <div className="available-lane-buttons">
+            {hidden.map((lane) => <Button key={lane.value} type="button" variant="secondary" disabled={busy}
+              onClick={() => showLane(lane)}>
+              <Eye size={14} /> Show {lane.label}
+            </Button>)}
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => showLane()}>Show all lanes</Button>
+          </div> : <p className="settings-help muted">No lanes are hidden from your view.</p>}
+        </section>
+        <p className="sr-only" role="status">{announcement}</p>
+        <fieldset disabled={busy || readOnly} className="board-settings-fields">
           <legend className="field-label">Board lanes</legend>
           <ol className="lane-management-list">
             {visible.map((lane, index) => (
@@ -147,13 +183,10 @@ export function BoardSettingsDialog({
               </li>
             ))}
           </ol>
-          <p className="sr-only" role="status">
-            {announcement}
-          </p>
           <p className="settings-help muted">
             The board shows lanes left to right in this order. Removed lanes
             keep their issues and can be added back below. Keep at least one
-            lane.
+            lane. These changes are shared with your team and apply when you save.
           </p>
           {definitions.some((lane) => !lanes.includes(lane.value)) && (
             <section className="available-lanes" aria-label="Available lanes">
@@ -208,11 +241,11 @@ export function BoardSettingsDialog({
         <ErrorNotice error={error} />
         <div className="form-actions">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </Button>
-          <Button disabled={busy || !lanes.length}>
+          {!readOnly && <Button disabled={busy || !lanes.length}>
             {busy ? "Saving…" : "Save board"}
-          </Button>
+          </Button>}
         </div>
       </form>
     </Modal>

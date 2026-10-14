@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.21.1` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.21.2` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.21.2
+
+Version 0.21.2 moves personal hidden-lane restoration into **Manage lanes → Hidden lanes**. Show individual lanes or all lanes immediately without saving shared board settings; Cancel does not undo personal visibility changes. Archived boards keep these personal controls available while shared editing remains disabled. The release also includes the search-icon spacing fix and remembered navigation-sidebar width from 0.21.1.
+
+No database migration, API change, or deployment-value change is added by this release. Preserve `/data`, the encryption-key Secret and existing values, and select the published SHA image matching the chart release commit after CI succeeds. Upgrades from before 0.21.0 still run migration v16 (and earlier migrations as applicable); the backup and rollback restrictions below apply.
 
 ### Upgrading to 0.21.1
 

@@ -60,7 +60,7 @@ test("hide is personal, persistent, prunes selection and keyboard targets, and c
   await laneAction(page, "In progress", "Hide");
   await expect(headings(page)).toHaveText(["Todo", "Done"]);
   await expect(page.locator(".issue-selection-count")).toHaveText("2 selected");
-  await expect(page.getByRole("button", { name: "Hidden lanes (1)", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
   await page.locator(".board-card a.issue-link").first().focus();
   await page.keyboard.press("ArrowRight");
@@ -84,16 +84,61 @@ test("hide is personal, persistent, prunes selection and keyboard targets, and c
   await laneAction(page, "Todo", "Hide");
   await laneAction(page, "Done", "Hide");
   await expect(page.locator(".board-column")).toHaveCount(0);
-  await page.getByRole("button", { name: "Hidden lanes (3)", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Show Todo", exact: true }).click();
-  await expect(page.locator('[data-lane="todo"]')).toHaveClass(/is-collapsed/);
-  await expect(page.getByRole("button", { name: "Todo lane actions", exact: true })).toBeFocused();
-  await page.getByRole("button", { name: "Hidden lanes (2)", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Show all lanes", exact: true }).click();
-  await expect(headings(page)).toHaveText(["Todo", "In progress", "Done"]);
   await expect(page.getByRole("button", { name: /^Hidden lanes/ })).toHaveCount(0);
+  await expect(page.locator(".board-empty-notice")).toContainText("restore a lane using Manage lanes");
+  await page.getByRole("button", { name: "Manage lanes", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes" });
+  await expect(settings.getByRole("heading", { name: "Hidden lanes (3)", exact: true })).toBeVisible();
+  await settings.getByRole("button", { name: "Show Todo", exact: true }).click();
+  await expect(page.locator('[data-lane="todo"]')).toHaveClass(/is-collapsed/);
+  await expect(settings.getByRole("heading", { name: "Hidden lanes (2)", exact: true })).toBeFocused();
+  await settings.getByRole("button", { name: "Show all lanes", exact: true }).click();
+  await expect(settings.getByText("No lanes are hidden from your view.", { exact: true })).toBeVisible();
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Manage lanes", exact: true })).toBeFocused();
+  await expect(headings(page)).toHaveText(["Todo", "In progress", "Done"]);
+  await page.reload();
+  await expect(headings(page)).toHaveText(["Todo", "In progress", "Done"]);
+  expect(writes).toEqual([]);
   expect(await getBoard()).toEqual(before);
 });
+
+for (const width of [1440, 390]) {
+  test(`Manage lanes separates personal hidden lanes from shared drafts at ${width}px`, async ({ page, baseURL }, testInfo) => {
+    const { endpoint, headers, getBoard } = await fixture(page, baseURL!);
+    const custom = `custom_${randomUUID()}`;
+    const label = "Quality review with a long lane name";
+    expect((await page.request.patch(endpoint, { headers, data: {
+      lanes: [custom, "todo", "in_progress"], customLanes: [{ value: custom, label }],
+    } })).ok()).toBeTruthy();
+    await page.reload();
+    await page.setViewportSize({ width, height: 900 });
+    await laneAction(page, label, "Hide");
+    const before = await getBoard();
+    const writes: string[] = [];
+    page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
+    await page.getByRole("button", { name: "Manage lanes", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Manage lanes" });
+    const hidden = settings.getByRole("region", { name: "Hidden lanes (1)", exact: true });
+    await expect(hidden.getByRole("button", { name: `Show ${label}`, exact: true })).toBeVisible();
+    await expect(hidden.getByRole("button", { name: "Show Done", exact: true })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: "Add Done lane", exact: true })).toBeVisible();
+    await settings.getByRole("button", { name: "Move Todo lane down", exact: true }).click();
+    await settings.getByRole("button", { name: "Remove In progress lane", exact: true }).click();
+    await page.screenshot({ path: testInfo.outputPath(`manage-hidden-lanes-${width}.png`) });
+    expect(await settings.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await hidden.getByRole("button", { name: `Show ${label}`, exact: true }).click();
+    await expect(settings.locator(".lane-management-row .lane-name")).toHaveText([label, "Todo"]);
+    await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(headings(page)).toHaveText([label, "Todo", "In progress"]);
+    await page.reload();
+    await expect(headings(page)).toHaveText([label, "Todo", "In progress"]);
+    expect(writes).toEqual([]);
+    expect(await getBoard()).toEqual(before);
+  });
+}
 
 test("rename, move and remove update the shared board without losing cards; errors preserve state", async ({ page, baseURL }) => {
   const { endpoint, headers, getBoard } = await fixture(page, baseURL!);
@@ -142,15 +187,26 @@ test("rename, move and remove update the shared board without losing cards; erro
   for (const action of ["Remove", "Move to left", "Move to right"]) await expect(menu(page, "Quality review").getByRole("menuitem", { name: action, exact: true })).toHaveAttribute("aria-disabled", "true");
 });
 
-test("archived boards allow hiding but disable shared lane menu actions", async ({ page, baseURL }) => {
-  await fixture(page, baseURL!);
+test("archived boards allow restoring hidden lanes in Manage lanes but disable shared changes", async ({ page, baseURL }) => {
+  const { getBoard } = await fixture(page, baseURL!);
+  const before = await getBoard();
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive project", exact: true }).click();
   await page.getByRole("button", { name: "Todo lane actions", exact: true }).click();
   for (const action of ["Rename", "Remove", "Move to left", "Move to right"]) await expect(menu(page, "Todo").getByRole("menuitem", { name: action, exact: true })).toHaveAttribute("aria-disabled", "true");
   await menu(page, "Todo").getByRole("menuitem", { name: "Hide", exact: true }).click();
   await expect(headings(page)).toHaveText(["In progress", "Done"]);
-  await page.getByRole("button", { name: "Hidden lanes (1)", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Show Todo", exact: true }).click();
+  const writes: string[] = [];
+  page.on("request", (request) => { if (request.method() !== "GET" && request.url().includes("/api/")) writes.push(request.url()); });
+  await page.getByRole("button", { name: "Manage lanes", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Manage lanes" });
+  await expect(settings.getByRole("button", { name: "Move Todo lane down", exact: true })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Remove Todo lane", exact: true })).toBeDisabled();
+  await expect(settings.getByLabel("Create a new lane", { exact: true })).toBeDisabled();
+  await expect(settings.getByRole("button", { name: "Save board", exact: true })).toHaveCount(0);
+  await settings.getByRole("button", { name: "Show Todo", exact: true }).click();
+  await settings.getByRole("button", { name: "Close", exact: true }).click();
   await expect(headings(page)).toHaveText(["Todo", "In progress", "Done"]);
+  expect(writes).toEqual([]);
+  expect(await getBoard()).toEqual(before);
 });
