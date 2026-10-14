@@ -29,13 +29,15 @@ The build script uses `bun build --compile ./cli/index.ts --outfile .local/bin/t
 
 ## Select a host and sign in
 
-Always select an explicit origin, including its scheme. There is no inferred/default host:
+Save your server once, including its scheme. There is no inferred host or current-directory config discovery:
 
 ```sh
-export THREADLINE_HOST=https://issue-tracker.r5d.app
+threadline auth config --host https://issue-tracker.r5d.app
 threadline auth login
 threadline auth status
 ```
+
+The host is saved in `~/.config/threadline/config.json` (0600), separately from `hosts.json` credentials. `XDG_CONFIG_HOME` or `THREADLINE_CONFIG_DIR` relocates both files. `threadline auth config` displays the saved/effective host and file path without revealing tokens; `auth config --clear` clears only the saved host. These commands are local-only. `THREADLINE_HOST` overrides the saved setting without changing it. Changing the host never forwards another host's saved token. Unset the environment variable to use your saved setting.
 
 Use your own installation's URL. HTTPS is required except for `http://localhost`, `http://127.0.0.1` and `http://[::1]` development origins (ports are allowed). Host paths, credentials, query strings and fragments are rejected.
 
@@ -50,9 +52,15 @@ secret-manager read threadline-token | threadline auth login --with-token
 
 `--with-token` reads a single token from stdin and validates it using `GET /api/me` before saving. It never prompts. Login does not print the token. Replacing a saved token does not revoke the old token; revoke unused keys in the web UI.
 
+## Server compatibility and Invalid origin
+
+Device login requires a server containing the CLI/API-key changes (commit `109af31` or newer, for example `ghcr.io/ricsam/issue-tracker:sha-109af31`). Updating the npm CLI alone does not upgrade the server. Older deployments apply cookie CSRF checks before routing, so a device-code POST can return `403 Invalid origin` even though the real problem is missing device-auth support. Back up the complete data directory before upgrading the server.
+
+On supported servers, JSON requests to `/api/auth/device/code` and `/api/auth/device/token` may omit Origin. Keep `BASE_URL` equal to the browser-visible origin and route both endpoints unchanged through the proxy. Browser-only authentication gateways may need operator configuration too. The CLI reports upgrade/proxy guidance for this rejection; it never disables TLS/CSRF, fabricates a browser session, or retries a mutation with weaker security.
+
 ## Automation and scopes
 
-For CI or AI agents, inject `THREADLINE_TOKEN` using your runner's secret store. It overrides any saved token for the selected `THREADLINE_HOST` and is never saved by ordinary commands. Do not put tokens in command arguments, URLs, source files, or logs. An explicitly selected host is a trust decision: automation must not let untrusted input choose `THREADLINE_HOST`.
+For CI or AI agents, inject `THREADLINE_TOKEN` using your runner's secret store. It overrides any saved token for the selected host and is never saved by ordinary commands. Do not put tokens in command arguments, URLs, source files, or logs. An explicitly selected host is a trust decision: automation must not let untrusted input choose `THREADLINE_HOST`.
 
 Keys have `read`, or `read` plus `write`. Read permits viewing/listing data; write also permits mutations allowed by the user's project access. Browser CLI login requests both scopes. Use a manually created read-only key for read-only agents. Tokens do not grant access to other users' personal drafts or bypass archived projects/access rules. Token authentication cannot manage accounts, SSO, or mint other keys. Cookie-only authentication endpoints are intentionally not exposed by this CLI.
 
@@ -73,6 +81,7 @@ All commands accept `--json` for one JSON result on stdout (not a gh-style field
 
 | Command | Options and behavior |
 | --- | --- |
+| `auth config` | `--host URL` saves the default, `--clear` clears it, no flags shows config; no network requests |
 | `auth login` | `--no-browser`, `--name NAME`; alternatively `--with-token` reads stdin |
 | `auth status` | Validates current token; shows user, source, scopes and expiry, never the token |
 | `auth logout` | Revokes the current token on the server, then removes a matching saved token |

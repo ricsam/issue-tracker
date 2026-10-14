@@ -1,6 +1,6 @@
 {
   "name": "@ricsam/threadline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Threadline CLI for humans and AI agents: projects, issues, and browser-based authentication.",
   "type": "module",
   "license": "MIT",

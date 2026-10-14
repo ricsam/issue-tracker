@@ -40,7 +40,7 @@ test("Node bundle supports help, stdin credentials/bodies, API lifecycle and pub
   async function cli(args: string[], input = "", extraEnv: Record<string, string> = {}) {
     return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
       const child = spawn(node!, [join(directory, "threadline.mjs"), ...args], {
-        env: { ...process.env, THREADLINE_HOST: server.url.origin, THREADLINE_TOKEN: "", THREADLINE_CONFIG_DIR: config, ...extraEnv }, stdio: "pipe",
+        env: { ...process.env, THREADLINE_HOST: "", THREADLINE_TOKEN: "", THREADLINE_CONFIG_DIR: config, ...extraEnv }, stdio: "pipe",
       });
       let stdout = "", stderr = "";
       child.stdout.setEncoding("utf8").on("data", data => stdout += data);
@@ -58,6 +58,10 @@ test("Node bundle supports help, stdin credentials/bodies, API lifecycle and pub
     for (const group of ["auth", "project", "issue"]) {
       const help = await cli([group, "--help"]); expect(help.code).toBe(0); expect(help.stdout).toContain("threadline —"); expect(help.stderr).toBe("");
     }
+    const configured = await cli(["auth", "config", "--host", server.url.origin, "--json"]);
+    expect(configured.code).toBe(0);
+    expect(JSON.parse(configured.stdout)).toMatchObject({ host: server.url.origin, source: "config" });
+    expect((await stat(join(config, "config.json"))).mode & 0o777).toBe(0o600);
     expect(seen.length).toBe(0);
     const bad = await cli(["issue", "list", "--assignee", "me"]); expect(bad.code).toBe(2); expect(bad.stdout).toBe("");
     const login = await cli(["auth", "login", "--with-token", "--json"], "node-manual-token\n");
@@ -87,6 +91,9 @@ test("Node bundle supports help, stdin credentials/bodies, API lifecycle and pub
     expect(device.code).toBe(0); expect(device.stderr).toContain("Could not open a browser");
     expect(JSON.parse(await readFile(marker, "utf8"))).toEqual([server.url.origin + "/cli/authorize?user_code=ABCD-EFGH"]);
     expect(polls).toBe(2); expect(device.stdout).not.toContain("node-device-token");
+    expect(JSON.parse(await readFile(join(config, "hosts.json"), "utf8"))[server.url.origin].token).toBe("node-device-token");
+    expect((await cli(["auth", "config", "--clear"])).code).toBe(0);
+    expect(JSON.parse(await readFile(join(config, "config.json"), "utf8"))).toEqual({});
     expect(JSON.parse(await readFile(join(config, "hosts.json"), "utf8"))[server.url.origin].token).toBe("node-device-token");
   } finally { server.stop(true); await rm(directory, { recursive: true, force: true }); }
 }, 30000);

@@ -7,9 +7,9 @@ export class CliError extends Error {
   constructor(message: string, public code = 1) { super(message); }
 }
 export function hostUrl(raw?: string): string {
-  if (!raw) throw new CliError("Set THREADLINE_HOST to an explicit HTTPS origin (for example https://issues.example.com).", 2);
+  if (!raw) throw new CliError("Set a server with threadline auth config --host https://issues.example.com, or set THREADLINE_HOST.", 2);
   let url: URL;
-  try { url = new URL(raw); } catch { throw new CliError("Invalid THREADLINE_HOST URL.", 2); }
+  try { url = new URL(raw); } catch { throw new CliError("Invalid host URL.", 2); }
   if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
       !(url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))))
     throw new CliError("Host must be an HTTPS origin without credentials, path, query or fragment; HTTP is allowed only on loopback.", 2);
@@ -45,7 +45,8 @@ export class Api {
     } catch { throw new CliError("Request failed or timed out. Mutations are never retried; check server state before retrying."); }
     if (response.status >= 300 && response.status < 400) throw new CliError("Server redirect refused; credentials were not forwarded.");
     let data: any;
-    try { data = response.status === 204 ? {} : await response.json(); } catch { throw new CliError(`Server returned non-JSON (HTTP ${response.status}).`); }
+    try { data = response.status === 204 ? {} : await response.json(); }
+    catch { throw Object.assign(new CliError(`Server returned non-JSON (HTTP ${response.status}).`), { status: response.status }); }
     if (!response.ok) {
       const error = new CliError(`HTTP ${response.status}: ${typeof data?.error === "string" ? (this.token ? data.error.replaceAll(this.token, "[redacted]") : data.error) : "request failed"}`, response.status === 401 || response.status === 403 ? 4 : 1);
       Object.assign(error, { apiError: data?.error, status: response.status });
@@ -59,9 +60,11 @@ type Hosts = Record<string, { token: string }>;
 export class Store {
   readonly directory: string;
   readonly file: string;
+  readonly configFile: string;
   constructor(env: NodeJS.ProcessEnv = process.env) {
     this.directory = resolve(env.THREADLINE_CONFIG_DIR || join(env.XDG_CONFIG_HOME || join(homedir(), ".config"), "threadline"));
     this.file = join(this.directory, "hosts.json");
+    this.configFile = join(this.directory, "config.json");
   }
   private async secureDirectory(create: boolean) {
     // Reject symlinks in every existing component, not just hosts.json.
@@ -83,31 +86,55 @@ export class Store {
     await chmod(this.directory, 0o700);
     return true;
   }
-  async read(): Promise<Hosts> {
+  private async readJson(path: string, label: string): Promise<unknown> {
     if (!await this.secureDirectory(false)) return {};
     let file;
-    try { file = await open(this.file, constants.O_RDONLY | constants.O_NOFOLLOW); }
-    catch (e: any) { if (e.code === "ENOENT") return {}; throw new CliError("Cannot safely open credential file."); }
+    try { file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+    catch (e: any) { if (e.code === "ENOENT") return {}; throw new CliError(`Cannot safely open ${label} file.`); }
     try {
       const stat = await file.stat();
-      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.()) throw new CliError("Unsafe credential file ownership or type.");
+      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.()) throw new CliError(`Unsafe ${label} file ownership or type.`);
       await file.chmod(0o600);
-      const data = JSON.parse(await file.readFile("utf8"));
-      if (!data || typeof data !== "object" || Array.isArray(data) || Object.entries(data).some(([host, entry]: [string, any]) => hostUrl(host) !== host || typeof entry?.token !== "string")) throw new Error();
-      return data;
-    } catch (e) { if (e instanceof CliError) throw e; throw new CliError("Invalid credential file; refusing to overwrite it."); }
+      return JSON.parse(await file.readFile("utf8"));
+    } catch (e) { if (e instanceof CliError) throw e; throw new CliError(`Invalid ${label} file; refusing to overwrite it.`); }
     finally { await file.close(); }
+  }
+  async read(): Promise<Hosts> {
+    const data = await this.readJson(this.file, "credential");
+    try {
+      if (!data || typeof data !== "object" || Array.isArray(data) || Object.entries(data).some(([host, entry]: [string, any]) => hostUrl(host) !== host || typeof entry?.token !== "string")) throw new Error();
+      return data as Hosts;
+    } catch { throw new CliError("Invalid credential file; refusing to overwrite it."); }
+  }
+  async readConfig(): Promise<{ host?: string }> {
+    const data = await this.readJson(this.configFile, "configuration");
+    try {
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
+      const entries = Object.entries(data);
+      if (entries.some(([key, value]) => key !== "host" || typeof value !== "string" || hostUrl(value) !== value)) throw new Error();
+      return data as { host?: string };
+    } catch { throw new CliError("Invalid configuration file; refusing to overwrite it."); }
+  }
+  async saveConfig(host: string | undefined): Promise<void> {
+    // Explicit user configuration only: never discover settings in the current directory.
+    const config = host === undefined ? {} : { host: hostUrl(host) };
+    await this.secureDirectory(true);
+    await this.readConfig(); // Refuse malformed or unsafe existing files, even on clear.
+    await this.writeJson(this.configFile, config);
   }
   async save(host: string, token?: string) {
     await this.secureDirectory(true);
     const hosts = await this.read();
     if (token) hosts[host] = { token }; else delete hosts[host];
-    const temporary = join(dirname(this.file), `.hosts-${crypto.randomUUID()}.tmp`);
+    await this.writeJson(this.file, hosts);
+  }
+  private async writeJson(path: string, data: unknown): Promise<void> {
+    const temporary = join(dirname(path), `.threadline-${crypto.randomUUID()}.tmp`);
     const file = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
     try {
-      try { await file.writeFile(JSON.stringify(hosts, null, 2) + "\n"); await file.sync(); }
+      try { await file.writeFile(JSON.stringify(data, null, 2) + "\n"); await file.sync(); }
       finally { await file.close(); }
-      await rename(temporary, this.file);
+      await rename(temporary, path);
     } finally { await unlink(temporary).catch(() => {}); }
   }
 }

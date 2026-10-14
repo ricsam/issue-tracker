@@ -14,19 +14,25 @@ npx @ricsam/threadline --help
 
 ## Sign in
 
-Select your Threadline deployment's origin explicitly:
+Save your Threadline deployment's origin once:
 
 ```sh
-export THREADLINE_HOST=https://your-threadline.example.com
+threadline auth config --host https://your-threadline.example.com
 threadline auth login
 threadline auth status
 ```
+
+`auth config` shows the saved/effective host and config path; `auth config --clear` removes only the default host, not your saved tokens. Settings live in `~/.config/threadline/config.json` (0600), separately from `hosts.json` credentials. `THREADLINE_HOST` overrides the saved host for one command without changing it. Credentials remain bound to their own host. Config commands are local-only; no server request or login is needed.
 
 Login opens your browser. Compare its code with your terminal, sign in to Threadline, and explicitly approve the request. Only approve a sign-in you started. Remote terminal? Use `threadline auth login --no-browser` and open the printed URL on another device. Your server must include Threadline's API-key/device-auth support.
 
 For AI agents or third-party automation, inject `THREADLINE_TOKEN` from a secret manager. Create a read-only or read-and-write key in the web **API access** page. The environment token overrides saved credentials. Never let untrusted input choose `THREADLINE_HOST`, and never place tokens in arguments, logs, or source control.
 
 You can also save a key read from stdin: `secret-manager read threadline-token | threadline auth login --with-token` (replace `secret-manager` with your actual tool).
+
+### Server compatibility
+
+If login returns `403 Invalid origin` or rejects the device-auth endpoint, the deployment may still run a pre-CLI Threadline version. Upgrade the **server image**, not just the npm package: CLI/API-key support starts at commit `109af31` (`ghcr.io/ricsam/issue-tracker:sha-109af31`) or newer. Back up the data directory before upgrading. `BASE_URL` must match your browser-visible origin, and reverse proxies must route `/api/auth/device/code` and `/api/auth/device/token` unchanged. Supported servers accept these JSON requests without an Origin header; do not disable CSRF/TLS checks or paste browser cookies into the CLI. A browser-only proxy authentication layer may also block device login and needs operator configuration.
 
 ## Work with issues
 

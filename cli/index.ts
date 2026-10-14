@@ -10,9 +10,10 @@ import { Api, CliError, Store, clean, hostUrl, issueId, table } from "./core";
 
 const HELP = `threadline — non-interactive issue tracking
 
-Set THREADLINE_HOST to an explicit HTTPS origin. Authenticate with auth login
-or THREADLINE_TOKEN. All commands support --json (otherwise human-readable).
+Save your server with auth config --host URL (THREADLINE_HOST overrides it).
+Authenticate with auth login or THREADLINE_TOKEN. All commands support --json (otherwise human-readable).
 
+  auth config [--host URL | --clear]     Show, set or clear the saved server
   auth login [--no-browser | --with-token] [--name NAME]
   auth status
   auth logout
@@ -36,6 +37,7 @@ Repeat --label to require every label. --help shows this help.
 Exit codes: 0 success; 1 request/storage failure; 2 usage; 4 authentication/access.
 `;
 const specs: Record<string, { values?: string[]; booleans?: string[]; args: number }> = {
+  "auth config": { values: ["host"], booleans: ["clear"], args: 0 },
   "auth login": { values: ["name"], booleans: ["no-browser", "with-token"], args: 0 },
   "auth status": { args: 0 }, "auth logout": { args: 0 },
   "project list": { args: 0 }, "project view": { args: 1 },
@@ -76,6 +78,8 @@ export function parse(argv: string[]) {
   }
   if (flags.help) return { command: "help", args: [], flags };
   if (args.length !== spec.args) throw new CliError(`${command} expects ${spec.args} positional argument(s).`, 2);
+  if (flags.host && flags.clear) throw new CliError("Use only one of --host and --clear.", 2);
+  if (flags.host) hostUrl(flags.host[0]);
   if (flags.body && flags["body-file"]) throw new CliError("Use only one of --body and --body-file.", 2);
   if (flags["with-token"] && (flags["no-browser"] || flags.name)) throw new CliError("--with-token cannot be combined with --no-browser or --name.", 2);
   if (flags.project && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flags.project[0]!)) throw new CliError("--project requires a project slug.", 2);
@@ -113,6 +117,13 @@ function verificationUrl(raw: string, host: string): string {
   if (url.origin !== host || url.username || url.password) throw new CliError("Server returned a cross-origin verification URL; refusing to open it.");
   return url.href;
 }
+function deviceLoginError(error: unknown): unknown {
+  const result = error as { status?: number; apiError?: unknown };
+  if ((result?.status === 403 && result.apiError === "Invalid origin") || result?.status === 401 || result?.status === 404) {
+    return new CliError("This server rejected CLI device authorization. It may be running a Threadline version without CLI/API-key support, or a proxy may be enforcing browser-only authentication. Upgrade the server to a CLI-capable image (commit 109af31 or newer), check BASE_URL matches this endpoint, and ensure /api/auth/device/code and /api/auth/device/token reach the server unchanged. Do not disable CSRF or TLS checks.", 4);
+  }
+  return error;
+}
 type Identity = { user: User; key: ApiKeyInfo };
 async function login(host: string, store: Store, flags: Record<string, string[]>) {
   // Verify storage before issuing a new token. Never log the token or device code.
@@ -125,7 +136,12 @@ async function login(host: string, store: Store, flags: Record<string, string[]>
     identity = await new Api(host, token).request<Identity>("/api/me");
   } else {
     const api = new Api(host);
-    const device = await api.request<DeviceAuthorization>("/api/auth/device/code", "POST", { name: flags.name?.[0] || `threadline on ${hostname()}`.slice(0, 100), scopes: ["read", "write"] }, true);
+    let device: DeviceAuthorization;
+    try {
+      device = await api.request<DeviceAuthorization>("/api/auth/device/code", "POST", { name: flags.name?.[0] || `threadline on ${hostname()}`.slice(0, 100), scopes: ["read", "write"] }, true);
+    } catch (error) {
+      throw deviceLoginError(error);
+    }
     if (!device.deviceCode || !device.userCode || !Number.isFinite(device.expiresIn) || device.expiresIn <= 0 || !Number.isFinite(device.interval) || device.interval <= 0) throw new CliError("Invalid device authorization response.");
     const deadline = Date.now() + device.expiresIn * 1000;
     const url = verificationUrl(device.verificationUriComplete, host);
@@ -147,7 +163,9 @@ async function login(host: string, store: Store, flags: Record<string, string[]>
         if (e.status === 400 && e.apiError === "slow_down") { interval += 5000; continue; }
         if (e.status === 400 && e.apiError === "access_denied") throw new CliError("Device authorization denied.", 4);
         if (e.status === 400 && e.apiError === "expired_token") throw new CliError("Device authorization expired. Run auth login again.", 4);
-        // Proxies may echo the posted device code; never surface arbitrary polling errors.
+        // Proxies may echo the posted device code; only known diagnostics are safe.
+        const diagnostic = deviceLoginError(e);
+        if (diagnostic !== e) throw diagnostic;
         throw new CliError("Device token request failed. Run auth login again; check API keys for any issued token.");
       }
     }
@@ -158,9 +176,23 @@ async function login(host: string, store: Store, flags: Record<string, string[]>
 export async function run(argv = process.argv.slice(2)) {
   const { command, args, flags } = parse(argv);
   if (command === "help") { console.log(HELP); return; }
-  const host = hostUrl(process.env.THREADLINE_HOST);
   const store = new Store();
   const out = (data: unknown, human: string) => console.log(flags.json ? JSON.stringify(data, null, 2) : human);
+  if (command === "auth config") {
+    // Validate any override before changing disk state; config never performs a request.
+    const environment = process.env.THREADLINE_HOST;
+    const environmentHost = environment ? hostUrl(environment) : undefined;
+    if (flags.host) await store.saveConfig(hostUrl(flags.host[0]));
+    else if (flags.clear) await store.saveConfig(undefined);
+    const config = await store.readConfig();
+    const effectiveHost = environmentHost ?? config.host ?? null;
+    const source = environment ? "environment" : config.host ? "config" : null;
+    out({ host: config.host ?? null, effectiveHost, source, configFile: store.configFile },
+      `Saved host: ${config.host ?? "not set"}\nEffective host: ${effectiveHost ?? "not set"}${source ? ` (${source})` : ""}\nConfig: ${store.configFile}${environment ? "\nTHREADLINE_HOST overrides the saved setting; unset it to use the configured host." : ""}`);
+    return;
+  }
+  // Explicit environment override never changes the persisted default.
+  const host = hostUrl(process.env.THREADLINE_HOST || (await store.readConfig()).host);
   if (command === "auth login") {
     const data = await login(host, store, flags);
     out(data, `Logged in to ${host} as ${clean(data.user.email)}.`);
