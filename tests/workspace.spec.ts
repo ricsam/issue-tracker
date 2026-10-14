@@ -78,7 +78,8 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     modal.getByRole("img", { name: "design (v1).png" }),
   ).toBeVisible();
-  await expect(modal.getByRole("combobox")).toHaveCount(2);
+  await expect(modal.getByRole("combobox")).toHaveCount(3);
+  await expect(modal.getByRole("combobox", { name: "Visibility", exact: true })).toHaveValue("open");
   await expect(modal.getByRole("combobox", { name: "Board lane", exact: true })).toHaveValue("");
   await expect(modal.getByRole("combobox", { name: "Project", exact: true })).toBeVisible();
   await expect(editor).toContainText("#design #enhancement");
