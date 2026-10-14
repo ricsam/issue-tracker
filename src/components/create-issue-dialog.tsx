@@ -20,7 +20,11 @@ export function CreateIssueDialog({
   onViewIssue,
   existingTags,
   onBoardChanged,
+  standalone = false,
+  onSignOut,
 }: {
+  standalone?: boolean;
+  onSignOut?: () => void;
   project?: Project | null;
   existingTags?: string[];
   onCreated: (issue: Issue) => void;
@@ -149,14 +153,23 @@ export function CreateIssueDialog({
     }
   }
 
-  return (
-    <Modal
-      className="create-issue-dialog"
-      title="Create issue"
-      open
-      onOpenChange={(open) => !open && !submitting.current && close()}
-      onOpenAutoFocus={(event) => event.preventDefault()}
-    >
+  useEffect(() => {
+    if (!standalone || !body.trim()) return;
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [standalone, body]);
+
+  const content = <>
+      {standalone && <header className="standalone-create-header">
+        <h1>Create issue</h1>
+        <nav aria-label="Composer">
+          <a href="/projects" target="_blank" rel="noopener noreferrer">Open workspace</a>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => {
+            if (!body.trim() || window.confirm("Discard the new issue draft and sign out?")) onSignOut?.();
+          }}>Sign out</Button>
+        </nav>
+      </header>}
       <form ref={form} onSubmit={create} className="create-issue-form" aria-busy={busy}>
         <div ref={fields} className="create-issue-fields">
           <fieldset disabled={busy} inert={busy} className="form-stack">
@@ -214,26 +227,32 @@ export function CreateIssueDialog({
         {/* A zero-height anchor floats the toast above the actual footer, inside the focus trap. */}
         <ToastViewport inline message={created && showNotice ? `Issue !${created.number} created. Ready for another.` : ""}
           onDismiss={dismissNotice} paused={busy}>
-          {created && <div className="issue-created-actions"><Link to={`/issues/${created.id}`} onClick={viewIssue}
-            aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined}>View issue</Link></div>}
+          {created && <div className="issue-created-actions">{standalone
+            ? <a href={`/issues/${created.id}`} target="_blank" rel="noopener noreferrer">View issue</a>
+            : <Link to={`/issues/${created.id}`} onClick={viewIssue}
+              aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined}>View issue</Link>}</div>}
         </ToastViewport>
         <div className="create-issue-footer">
           <ErrorNotice error={error} />
           <div className="form-actions">
-            <Button
+            {!standalone && <Button
               type="button"
               variant="secondary"
               onClick={close}
               disabled={busy}
             >
               {created ? "Done" : "Cancel"}
-            </Button>
+            </Button>}
             <Button disabled={busy || awaitingRememberedLane || !body.trim()} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
               {busy ? "Creating…" : "Create issue"}
             </Button>
           </div>
         </div>
       </form>
-    </Modal>
+    </>;
+  return standalone ? <main className="standalone-create">{content}</main> : (
+    <Modal className="create-issue-dialog" title="Create issue" open
+      onOpenChange={(open) => !open && !submitting.current && close()}
+      onOpenAutoFocus={(event) => event.preventDefault()}>{content}</Modal>
   );
 }

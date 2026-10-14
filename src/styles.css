@@ -1189,6 +1189,28 @@ fieldset > small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.standalone-create {
+  height: 100dvh;
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+.standalone-create-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 14px; flex-shrink: 0; }
+.standalone-create-header h1 { font-size: 21px; margin: 0; }
+.standalone-create-header nav { display: flex; align-items: center; gap: 12px; margin-left: auto; font-size: 13px; }
+.standalone-create .create-issue-form { flex: 1; }
+.standalone-create .create-issue-fields { flex: 1; }
+.standalone-create .editor-input,
+.standalone-create .editor-source,
+.standalone-create .editor-preview { min-height: clamp(180px, 40dvh, 460px); }
+@media (max-height: 500px), (max-width: 400px) {
+  .standalone-create { padding: 12px; }
+  .standalone-create-header { margin-bottom: 8px; }
+  .standalone-create .create-issue-footer { padding-top: 8px; }
+}
 .create-issue-dialog {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { ArrowRight, Layers3, ShieldCheck } from "lucide-react";
 import type { AuthStatus } from "../../shared/types";
 import { api, message } from "../lib/api";
@@ -10,6 +11,7 @@ export function AuthPage({
   status: AuthStatus;
   reload: () => Promise<void>;
 }) {
+  const location = useLocation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -129,7 +131,7 @@ export function AuthPage({
               <div className="divider">or continue with</div>
               <a
                 className="btn btn-secondary full-width"
-                href="/api/auth/oidc/login"
+                href={location.pathname === "/new" ? "/api/auth/oidc/login?returnTo=%2Fnew" : "/api/auth/oidc/login"}
               >
                 Sign in with {status.oidc.name || "single sign-on"}
               </a>

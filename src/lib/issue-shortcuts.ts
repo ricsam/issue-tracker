@@ -35,9 +35,9 @@ export function useCreateIssueShortcut(form: RefObject<HTMLFormElement | null>, 
       if (event.defaultPrevented || !command(event, "enter")) return;
       const element = form.current;
       const target = event.target;
-      const modal = element?.closest('[role="dialog"]');
+      const modal = element?.closest('[role="dialog"], .standalone-create');
       if (!element || !modal || !(target instanceof Element) ||
-        target.closest('[role="dialog"]') !== modal || element.closest("[inert]")) return;
+        target.closest('[role="dialog"], .standalone-create') !== modal || element.closest("[inert]")) return;
       event.preventDefault();
       if (!enabled || event.repeat) return;
       element.requestSubmit();

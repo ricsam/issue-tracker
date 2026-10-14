@@ -50,6 +50,8 @@ const DetailPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./pages/admin").then((module) => ({ default: module.AdminPage })),
 );
+const StandaloneCreateIssue = lazy(() => import("./components/create-issue-dialog").then((module) => ({ default: module.CreateIssueDialog })));
+
 function SidebarCreateIssue() {
   const open = useIssueCreation();
   return <Tooltip content={newIssueTooltip()}><button type="button" className="nav-item sidebar-create-issue" onClick={open}
@@ -175,6 +177,15 @@ function AppContent() {
         )}
       </main>
     );
+  if (location.pathname === "/new") return (
+    <WorkspaceContext.Provider value={{ user: auth.user, users, projects, refresh, updateProject }}>
+      <Suspense fallback={<Loading />}>
+        <StandaloneCreateIssue key={auth.user.id} standalone onSignOut={() => void logout()}
+          onCreated={() => {}} onClose={() => {}} canViewIssue={() => true} />
+      </Suspense>
+      <ErrorNotice error={error} />
+    </WorkspaceContext.Provider>
+  );
   const issueRoute = location.pathname.startsWith("/issues/");
   const currentIssue = issueRoute && location.pathname === `/issues/${breadcrumbIssue?.id}` ? breadcrumbIssue : null;
   const breadcrumbProject = currentIssue ? projects.find((p) => p.id === currentIssue.projectId) : null;

@@ -95,6 +95,14 @@ Threadline stores canonical Markdown, not HTML. Rich **Write** mode round-trips 
 
 See [the API contract](docs/api-contract.md) for the HTTP surface.
 
+## macOS menu-bar app
+
+The native Swift companion in [`macos/`](macos/README.md) opens a persistent, up-to-640×800 issue composer beneath the menu bar. Its native Settings window configures the server URL, Open at Login, and a global keyboard shortcut (default **⇧⌘N**). Requires macOS 13+.
+
+Visit **`/new`** for the same standalone, full-viewport composer in any browser: no workspace navigation, with the existing editor, project/lane preferences, and create-and-continue behavior. Local login and OIDC return to this page. Workspace and issue links open in another window without discarding the draft. Embedded login sessions persist until the server expires or revokes them; OIDC compatibility depends on the provider.
+
+Build locally with `bash macos/scripts/build-app.sh`; see the [macOS guide](macos/README.md) for installation, tests, and Developer ID signing/notarization. The default build is ad-hoc signed for development, not a notarized release.
+
 ## Requirements
 
 - [Bun](https://bun.sh/) for development

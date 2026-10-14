@@ -31,6 +31,7 @@ test("OIDC cookie binding, replay prevention, proxy URL, immutable identity and 
       return identity;
     },
   );
+  let requestNumber = 0;
   const req = (path: string, method = "GET", body?: unknown, cookie = "") =>
     app.request("http://internal:3000" + path, {
       method,
@@ -40,7 +41,7 @@ test("OIDC cookie binding, replay prevention, proxy URL, immutable identity and 
         "Content-Type": "application/json",
       },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, { remoteAddress: `192.0.2.${++requestNumber}` });
   try {
     const setup = await req("/api/auth/setup", "POST", {
       name: "Admin",
@@ -65,7 +66,7 @@ test("OIDC cookie binding, replay prevention, proxy URL, immutable identity and 
     const flow = async () => {
       const start = await req("/api/auth/oidc/login");
       expect(start.status).toBe(302);
-      return start.headers.get("set-cookie")!.split(";")[0]!;
+      return start.headers.getSetCookie().find((value) => value.startsWith("oidc_flow="))!.split(";")[0]!;
     };
     const cookie = await flow();
     expect(
@@ -88,6 +89,17 @@ test("OIDC cookie binding, replay prevention, proxy URL, immutable identity and 
         )
       ).status,
     ).toBe(400);
+    for (const destination of ["/new", "//evil.example", "https://evil.example", "/new/", "/new?next=https://evil.example", "/\\evil.example", "%2Fnew"]) {
+      const start = await req(`/api/auth/oidc/login?returnTo=${encodeURIComponent(destination)}`);
+      const cookies = start.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
+      const result = await req("/api/auth/oidc/callback?code=x&state=state", "GET", undefined, cookies);
+      expect(result.status).toBe(302);
+      expect(result.headers.get("location")).toBe(destination === "/new" ? "/new" : "/");
+      expect(result.headers.getSetCookie().some((value) => value.startsWith("oidc_return=;") && value.includes("Max-Age=0"))).toBe(true);
+    }
+    // Even a forged return cookie cannot create an open redirect.
+    const tampered = await req("/api/auth/oidc/callback?code=x&state=state", "GET", undefined, `${await flow()}; oidc_return=https%3A%2F%2Fevil.example`);
+    expect(tampered.headers.get("location")).toBe("/");
     identity = { ...identity, email: "changed@example.com" };
     expect(
       (

@@ -4,14 +4,14 @@ Live URL: **https://issue-tracker.r5d.app**. Namespace `issue-tracker-demo`, Hel
 
 ## Reproducible deployment
 
-`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.21.2 and the published SHA image matching its release commit after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
+`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.22.0 and the published SHA image matching its release commit after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
 
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
 helm repo update issue-tracker
 export IMAGE_TAG='<published-sha-tag>@sha256:<verified-image-digest>'
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --kube-context ricsam --namespace issue-tracker-demo --version 0.21.2 \
+  --kube-context ricsam --namespace issue-tracker-demo --version 0.22.0 \
   -f deploy/demo/values.yaml --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 

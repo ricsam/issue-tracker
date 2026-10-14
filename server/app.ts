@@ -416,6 +416,8 @@ export function createApp(options: AppOptions = {}) {
         Date.now() + 600000,
       );
       setCookie(c, "oidc_flow", token, { ...cookieOptions, maxAge: 600 });
+      // An exact allowlist, never a user-controlled URL. Reset on every new flow.
+      setCookie(c, "oidc_return", c.req.query("returnTo") === "/new" ? "/new" : "/", { ...cookieOptions, maxAge: 600 });
       return c.redirect(flow.url);
     } catch {
       return c.json({ error: "Unable to start OIDC login" }, 400);
@@ -423,7 +425,9 @@ export function createApp(options: AppOptions = {}) {
   });
   app.get("/api/auth/oidc/callback", async (c) => {
     const token = getCookie(c, "oidc_flow");
+    const returnTo = getCookie(c, "oidc_return") === "/new" ? "/new" : "/";
     deleteCookie(c, "oidc_flow", cookieOptions);
+    deleteCookie(c, "oidc_return", cookieOptions);
     const flow =
       token &&
       (db
@@ -467,7 +471,7 @@ export function createApp(options: AppOptions = {}) {
         })
         .immediate();
       session(c, userId);
-      return c.redirect("/");
+      return c.redirect(returnTo);
     } catch {
       return c.json({ error: "OIDC login failed" }, 400);
     }

@@ -1,4 +1,4 @@
-# Operator values for the personal demo. Install chart version 0.21.2 explicitly.
+# Operator values for the personal demo. Install chart version 0.22.0 explicitly.
 # On a fresh database, override ingress.enabled=false until admin setup succeeds.
 image:
   repository: ghcr.io/ricsam/issue-tracker

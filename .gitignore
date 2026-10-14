@@ -16,3 +16,7 @@ test-results/
 *.pem
 *.key
 .mintlify/
+macos/.build/
+macos/.swiftpm/
+macos/build/
+.DS_Store

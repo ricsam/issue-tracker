@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.21.2` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.22.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,12 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.22.0
+
+Version 0.22.0 adds the standalone `/new` issue composer and the native macOS menu-bar companion. Local sign-in retains the composer route; OIDC accepts only the exact `/new` return destination. The macOS app includes persistent WebKit login, server URL settings, Open at Login, a configurable global shortcut, and the web app's Threadline icon. Universal macOS builds are available in GitHub Releases; the initial build is ad-hoc signed, not notarized.
+
+No database migration or deployment-value change is added. Preserve `/data`, the encryption-key Secret and existing values, and deploy the published SHA image matching this release. The companion requires this server version or newer. Upgrades from before 0.21.0 still run migration v16 (and earlier migrations as applicable); the backup and rollback restrictions below apply.
 
 ### Upgrading to 0.21.2
 

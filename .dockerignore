@@ -3,6 +3,7 @@
 .github
 charts
 docs
+macos
 
 # Dependencies and build/test output
 node_modules

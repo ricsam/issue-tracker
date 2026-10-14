@@ -160,10 +160,10 @@ test("real OIDC discovery, signed tokens, PKCE/state/nonce and identity boundari
     );
   const count = () =>
     (app.db.query("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
-  const begin = async () => {
-    const login = await req("/api/auth/oidc/login");
+  const begin = async (returnTo = "/") => {
+    const login = await req(`/api/auth/oidc/login?returnTo=${encodeURIComponent(returnTo)}`);
     expect(login.status).toBe(302);
-    const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+    const cookie = login.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
     const authorization = await fetch(login.headers.get("location")!, {
       redirect: "manual",
     });
@@ -189,9 +189,10 @@ test("real OIDC discovery, signed tokens, PKCE/state/nonce and identity boundari
     expect(
       (await req("/api/admin/oidc", "PUT", settings, adminCookie)).status,
     ).toBe(200);
-    const first = await begin();
+    const first = await begin("/new");
     const success = await req(first.path, "GET", undefined, first.cookie);
     expect(success.status).toBe(302);
+    expect(success.headers.get("location")).toBe("/new");
     expect(count()).toBe(2);
     expect(exchanges).toBe(1);
     expect(jwksReads).toBeGreaterThan(0);
