@@ -197,7 +197,7 @@ helm search repo issue-tracker --versions
 
 Install `issue-tracker/issue-tracker` instead of the local chart path. Chart archives are immutable and retained in [GitHub Releases](https://github.com/ricsam/issue-tracker/releases); maintainers must bump `Chart.yaml`'s version whenever chart content changes.
 
-Choose an image tag that you have built or confirmed is published, then follow [the deployment guide](docs/deployment.md). In particular, claim the first administrator privately before enabling public ingress.
+Chart **0.24.0** includes the CLI/API-key server release. Choose the verified application SHA tag from its [release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.24.0), then follow [the deployment guide](docs/deployment.md). The chart still requires an explicit `image.tag`: upgrading the chart alone does not replace an old application image. Back up `/data` and preserve the settings-key Secret before the additive credential-table migration. In particular, claim the first administrator privately before enabling public ingress.
 
 ## Documentation
 

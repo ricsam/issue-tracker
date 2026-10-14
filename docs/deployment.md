@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.23.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.24.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,16 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.24.0
+
+Version 0.24.0 adds scoped, expiring, revocable API keys for the CLI and third-party integrations, the **API access** settings page, and explicit browser approval for `threadline auth login`. The npm CLI is versioned independently; `@ricsam/threadline` 0.1.1 also supports saving a global endpoint with `auth config --host`. Updating the npm package alone does not add these server endpoints to an older deployment.
+
+Migration v18 additively creates API-key and device-authorization tables without changing existing issues, sessions, or project permissions. Back up the complete `/data` directory and preserve the settings-encryption-key Secret before upgrading. Avoid automatic Helm rollback (`--atomic`) across migrations; recover with a pre-upgrade backup and matching image/chart, preserving newer writes separately. Earlier draft/privacy migration warnings below still apply.
+
+No new deployment values are required. Keep `baseUrl` equal to the browser-visible HTTPS origin and route `/api/auth/device/code` and `/api/auth/device/token` unchanged through any proxy. These JSON endpoints intentionally allow requests without a browser Origin; do not disable CSRF or TLS checks. Browser-only proxy authentication can block CLI login and needs operator configuration.
+
+**Upgrade the application image as well as the chart.** `image.tag` is explicit, and neither a new chart version nor `appVersion` overrides an existing image choice. Select the verified SHA image in the [0.24.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.24.0), retaining your current ingress, storage, Secret and other deployment values. Publishing the chart does not upgrade running deployments.
 
 ### Upgrading to 0.23.0
 
