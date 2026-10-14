@@ -98,6 +98,9 @@ test("narrow viewports clamp without losing the saved width and keep the mobile 
   await dragBy(page, -50);
   await expectWidth(page, 230);
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Viewport emulation resolves before React handles the resize event. Wait for
+  // the expanded bounds before End uses them, rather than the previous 280px cap.
+  await expect(resizer(page)).toHaveAttribute("aria-valuemax", "480");
   await resizer(page).press("End");
   await expectWidth(page, 480);
   await page.setViewportSize({ width: 390, height: 844 });
