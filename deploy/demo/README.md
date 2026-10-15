@@ -15,7 +15,7 @@ helm upgrade --install issue-tracker issue-tracker/issue-tracker \
   -f deploy/demo/values.yaml --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 
-**Upgrading the current 0.22.0 deployment (migration 16):** stop writes and take a consistent full-data backup, including the settings-encryption Secret, Helm values/manifest and deployment/PVC state, on both backup hosts before upgrading. Verify SQLite integrity and matching checksums. Version 0.25.0 runs v17 (creator-only drafts), v18 (API credentials) and v19 (plugins); plugins begin disabled. Never use `--atomic` or `helm rollback` alone, or run an older image against migrated data: older applications cannot enforce draft privacy. Recovery requires restoring the pre-upgrade backup with chart 0.22.0 and image `sha-11a1967@sha256:6bed99aff8a9b53938cc8014bb109d336a7cf273316c86937779bd3716e45d36`, preserving any newer writes separately. Preserve the exact PVC binding, Secrets, OIDC configuration and ingress host.
+**Upgrading from the previous 0.22.0 deployment (migration 16):** stop writes and take a consistent full-data backup, including the settings-encryption Secret, Helm values/manifest and deployment/PVC state, on both backup hosts before upgrading. Verify SQLite integrity and matching checksums. Version 0.25.0 runs v17 (creator-only drafts), v18 (API credentials) and v19 (plugins); plugins begin disabled. Never use `--atomic` or `helm rollback` alone, or run an older image against migrated data: older applications cannot enforce draft privacy. Recovery requires restoring the pre-upgrade backup with chart 0.22.0 and image `sha-11a1967@sha256:6bed99aff8a9b53938cc8014bb109d336a7cf273316c86937779bd3716e45d36`, preserving any newer writes separately. Preserve the exact PVC binding, Secrets, OIDC configuration and ingress host.
 
 **Fresh database:** override `--set ingress.enabled=false`, then claim the administrator privately following [the deployment guide](../../docs/deployment.md). Only enable ingress once setup is complete. Do not reset the database during ordinary upgrades. Preserve the existing PVC, encryption-key Secret and registry credentials. This single-instance SQLite deployment uses Recreate.
 
@@ -38,6 +38,35 @@ Secrets are not in Git. Recovery references:
 - Kubernetes `issue-tracker-demo/issue-tracker-settings` contains the unchanged settings-encryption key; the OIDC client secret is encrypted in the tracker database.
 
 Use the secure account-secret interface or authorized Kubernetes secret access for recovery; do not print values in logs or paste them into issues. Workspace synchronization does not back up Kubernetes data or Secrets.
+
+## Deployment verification, 2026-10-15
+
+- Release commit: `2f3a6e7eb7092eed76c6b6513fcd6a6b4bc8d80f`; [release CI](https://github.com/ricsam/issue-tracker/actions/runs/38744788701) passed, including image publication. Chart [0.25.0](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.25.0) is published in the Helm repository.
+- Deployed image: `ghcr.io/ricsam/issue-tracker:sha-2f3a6e7@sha256:fd2e1bd4a0a79c1d24fb539ae93e3e508ecd7eb97294c5c3da47f43fd49744ab`.
+- Helm release `issue-tracker`, revision **14**, chart/application **0.25.0**. Upgraded from revision 13/chart 0.22.0 with explicit digest-pinned image and existing operator values; no automatic rollback.
+- Database migrated **16 → 19**, integrity check `ok`. Before/after counts match: **2 users, 1 identity, 1 project, 1 issue, 0 comments, 0 attachments, 1 board card**.
+- Existing PVC UID/spec and PV binding `pvc-38c39651-d264-4601-a1ea-03c27d37cd5b`, ingress spec/hostname, all three Secret UIDs/data, and encrypted OIDC settings were verified unchanged.
+- Rollout healthy with one ready pod and zero restarts; public HTTPS `/readyz` returned `{\"ok\":true}`. Unauthenticated POST `/mcp` returned **401**.
+- Recovery administrator API login and an isolated admin browser passed; **Administration → Plugins** lists **r5d disabled**, with no saved API key. API access renders with no keys. No settings were submitted and no keys or teams were created.
+- The user's existing OIDC browser session survived a full reload as Richie, Team member, and opened **API access** successfully. This checks session preservation, not a new OIDC login flow.
+- The initial Python verification request using its default user-agent received HTTP 403. Retesting with an explicit release-verification user-agent, and separately with Chromium, succeeded; no application or proxy changes were needed. No rollback was required.
+
+### Pre-upgrade recovery copies
+
+The Deployment was scaled to zero and its old pod fully terminated before an operator-owned, read-only backup pod mounted the existing PVC. The complete `/data` archive, settings/registry/recovery Secrets, Helm values and manifest, deployment/PVC/ingress state, previous chart archive, counts, manifest and verification are retained at:
+
+- `hetzner-kata-2:/home/r5d-backups/issue-tracker/pre-0.25.0-4ed3318f-bfca-4d43-8ac6-60a2daa398c0-84W3MK/`
+- `hetzner-ceph-1:/home/r5d-backups/issue-tracker/pre-0.25.0-4ed3318f-bfca-4d43-8ac6-60a2daa398c0-rg3T9X/`
+
+Both directories are root-owned mode 0700; data and Secret archives are mode 0600. Both extracted SQLite copies opened, passed `PRAGMA integrity_check` and foreign-key checks, and matched the pre-maintenance counts at migration 16. Every artifact checksum matches between hosts; each directory has `SHA256SUMS` and `verification.json`.
+
+| Artifact | SHA-256 (identical on both hosts) |
+| --- | --- |
+| `data.tar.gz` | `b8cba23b71180d5462237d082c3247bc3eedc3ea75195703770edf9db423161c` |
+| `secrets.json` | `8dc546de49b61682750010f73b217420b581db95207068b84a0c6f83455985eb` |
+| `SHA256SUMS` | `d8f261cf8ed9df08bab62f6e14afea503ee7b144b3807fd4b5bdd982d6a7f301` |
+
+The temporary backup pod was deleted before the upgrade; both host recovery copies remain. Restore requires stopping the app, preserving subsequent writes separately, restoring this data and its matching chart 0.22.0/image `sha-11a1967` described above—not an application-only Helm rollback.
 
 ## Initial verification, 2026-10-11 (historical)
 
