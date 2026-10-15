@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 = 18) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 = 19) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -405,6 +405,20 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
       );
       CREATE INDEX device_authorizations_expiry ON device_authorizations(expires);
       INSERT INTO migrations VALUES (18);
+    `);
+  }).immediate();
+  if (targetVersion < 19) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=19").get()) return;
+    db.exec(`
+      CREATE TABLE plugin_settings (pluginId TEXT PRIMARY KEY, enabled INTEGER NOT NULL, value TEXT NOT NULL, secrets TEXT NOT NULL);
+      CREATE TABLE plugin_state (pluginId TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(pluginId,key));
+      CREATE TABLE plugin_links (
+        pluginId TEXT NOT NULL, issueId INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        externalId TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, status TEXT, tone TEXT NOT NULL,
+        PRIMARY KEY(pluginId,issueId,externalId)
+      );
+      INSERT INTO migrations VALUES (19);
     `);
   }).immediate();
   return db;

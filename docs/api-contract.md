@@ -22,6 +22,29 @@ Device POSTs may omit Origin, but require JSON and reject foreign supplied Origi
 
 OIDC login accepts only `/new`, `/cli/authorize`, or `/cli/authorize?user_code=ABCD-EFGH` as allowlisted `returnTo` values; everything else returns to `/`.
 
+## Plugins
+
+Migration 19 adds `plugin_settings` (enabled flag, non-secret JSON, AES-256-GCM encrypted secret fields), `plugin_links` (unique plugin/issue/external ID, title, HTTP(S) URL, nullable status, tone) and `plugin_state` (plugin/key JSON). It changes no existing issue content, timestamps, board placements or credentials. Back up `DATA_DIR` and the settings encryption key before upgrading; restore the backup for rollback.
+
+| Method | Route | Request and response |
+| --- | --- | --- |
+| GET | `/api/admin/plugins` | Admin browser session → `{plugins:PluginAdminSettings[]}`; declarative fields, values, secret-presence flags and task status; no secrets |
+| PUT | `/api/admin/plugins/:id` | Admin session + Origin; `{enabled:boolean,values:Record<string,unknown>}` → `{plugin:PluginAdminSettings}`; validate/check before saving, empty/omitted secret preserves |
+| GET | `/api/plugins` | Signed-in browser → `{plugins:PluginPublicSettings[],baseUrl:string}`; enabled plugins' explicitly public non-secret settings, project mappings filtered by project access; canonical deployment origin |
+| GET | `/api/issues/:id/external-links` | Data auth → `{links:ExternalLink[]}`; identical issue/draft/private-project authorization to issue details |
+
+`Issue.externalLinks` contains the same links in detail and list responses. Disabled-plugin links are hidden. `ExternalLink` has `pluginId`, `externalId`, `title`, `url`, nullable `status`, and `tone` (`neutral`, `info`, `success`, `warning`, `danger`). Links are plugin-owned; there is no client write endpoint. URLs must use HTTP(S) without credentials. A known external ID or URL never grants issue access. Admin keys cannot bypass creator-only drafts.
+
+The compiled registry lives in `shared/plugins.ts`; server definitions/runtime in `server/plugins/`, browser actions in `src/plugins/`. Fields support text, URL, select, secret and per-project tables. Plugins can expose selected public fields, validate settings, subscribe to post-commit issue created/updated/closed/reopened, comment created and card moved hooks, and run abortable background tasks with isolated key-value state. No runtime third-party code loading. Failed hooks/tasks are logged without secret details and cannot fail content requests. Settings changes restart tasks; disabling or shutdown aborts them. No-op/failed content mutations emit no hooks.
+
+The r5d plugin uses only the configured service base URL, rejects redirects and requires HTTPS (HTTP localhost only under the existing non-production insecure-OIDC localhost option). Saving enabled settings checks `GET /api/v1/teams/:team`. Its secret team key never goes to the browser. A fresh feed lists sessions before polling events with `wait=30` and a 45-second fetch timeout; cursors and deduplication state are durable, newer status versions win, and expired cursors reconcile from a fresh list. Revocation removes links; review-request events associate pull requests with the sessions' issues. Only top-level sessions with `source:threadline` work items naming this deployment's `/issues/:id` produce links. 401/404 stops polling and reports an admin error; transient errors back off. Browser launch links use the strict r5d version-1 deflated/base64url fragment format, bounded saved issue/comment snapshots and optional mapped remote/branch/sharing. See [the guide](guides/plugins.mdx).
+
+## MCP
+
+`/mcp` is a stateless Streamable HTTP endpoint using the official v2 server SDK and finite JSON responses. It supports modern `2026-07-28` discovery and legacy `initialize` (`2025-06-18` / `2025-03-26`). Authentication is **personal API key bearer only**, never browser cookies. Every request rechecks key expiry/revocation and rejects a supplied foreign Origin. Responses are no-store; request bodies are capped at 256 KiB. Keys have the same data access as REST, not plugin administration rights.
+
+Read scope exposes `issue_get`, `issue_list`, `project_list`, `project_lanes`. Read plus write also exposes `issue_comment`, `issue_close`, `issue_reopen`, `issue_move`. `issue_get` takes canonical decimal-string `issueId`; list filters are optional `project` slug, `state` (open/closed/draft) and `text`; `project_lanes` takes `project`; commenting takes `issueId,body`; close/reopen take `issueId`; move takes `issueId,lane` (stable lane ID or null for removal). Move operates on an existing card, not off-board issue placement. Results include canonical issue URLs and current lane display names. Tool descriptions mark content as untrusted data. Tool failures use MCP `isError` results; authentication fails at HTTP 401 and foreign origins at 403. REST handlers enforce project/draft/archive permissions, content validation, attribution and history for every tool. See [MCP setup](guides/mcp.mdx).
+
 ## Data and browser authentication routes
 
 | Method | Route | Request and response |

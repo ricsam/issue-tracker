@@ -1,0 +1,53 @@
+---
+title: Plugins and r5d
+description: Configure first-party integrations, launch implementation work and follow shared sessions from Threadline.
+---
+
+## First-party plugins
+
+Threadline includes integrations compiled into the application. There is no plugin marketplace, runtime package installation or third-party code loading. Administrators enable and configure them under **Administration → Plugins**. A generated form supports text, URLs, selections, secrets and per-project mappings.
+
+Secret fields are encrypted at rest with `SETTINGS_ENCRYPTION_KEY`. Saved secrets are never returned to the browser: a presence indicator shows whether one exists, and leaving the field blank keeps it. Back up the complete `DATA_DIR` and preserve its encryption key together. Migration 19 adds plugin settings, external-link and key-value-state tables without changing existing issues, boards, credentials or timestamps. Plugins begin disabled. Restore the pre-upgrade backup for rollback.
+
+## Configure r5d
+
+1. In r5d, open your team's **Integrations** page at `https://r5d.dev/t/YOUR-TEAM/integrations`. A team administrator creates a **team API key**. This is a read-only key for that team's shared work, not a personal r5d API key.
+2. In Threadline's **Administration → Plugins**, choose **r5d** and enable it.
+3. Set **r5d base URL** (normally `https://r5d.dev`), **Team URL name** (the URL segment, not its display name) and **Team API key**.
+4. Choose the default share: **None**, **This session**, **All sessions on the branch** or **All sessions in the project**.
+5. Optionally add **Project mappings**: select a Threadline project, enter its git remote (for example `https://github.com/acme/api.git` or `git@github.com:acme/api.git`) and default branch (for example `main`).
+6. Save. When enabled, Threadline checks the key against that team's API before accepting the settings.
+
+Changing the r5d URL or team requires entering the team key again, preventing an old credential from being sent accidentally to another service. Use HTTPS. HTTP is accepted only for localhost in non-production development with the existing `ALLOW_INSECURE_OIDC=true` option; it is not a production bypass. Requests never follow redirects with credentials.
+
+Only non-secret settings reach signed-in browsers. A project's repository mapping is exposed only to users who can read that project. The team key stays on the Threadline server.
+
+## Implement an issue
+
+Open an issue or its desktop detail panel and select **Implement with r5d**. Your browser creates and opens a launch URL with:
+
+- The saved issue title, canonical Threadline URL and bounded Markdown snapshot, including comments with author names and dates. Unsaved editor changes are not sent.
+- A new `issue/NUMBER-title-slug` branch from the mapped default branch and the project's mapped remote, when configured.
+- The configured team sharing scope, unless it is **None**.
+
+Without a mapping, r5d asks you to choose a project. r5d presents **Check before starting**; nothing starts until you confirm. Review the content and sharing scope before confirming, especially for a private project or personal draft. Launching transfers the snapshot to r5d when you confirm there; the fragment is not sent to Threadline's server. Sharing with a team may expose that snapshot to the team's members, even if they cannot read the original issue in Threadline.
+
+Snapshots are limited to 100,000 characters, so long discussions can be truncated. The canonical issue URL remains available for full context. This action does not create a session directly through an API key.
+
+## Follow progress
+
+Threadline long-polls r5d's read-only team event feed from the server. It initially lists shared sessions, remembers the cursor, deduplicates events and only applies newer status versions. Expired event history triggers a fresh list. No incoming webhook or public Threadline URL is needed for this feed.
+
+Matching top-level sessions appear as links in issue details and compact badges in board cards and issue tables. Subagents are excluded. Statuses include provisioning, running, waiting for input, completed, failed, stopped and idle. Pull-request events add a link with open, merged or closed state. Revoking a share removes its session links and links no longer associated with a shared session. After expired event history, the session list repairs session badges; known pull-request links remain only for surviving sessions. The list does not include current pull-request state, so a missed pull-request change needs a later review-request event to update its badge.
+
+External links follow current issue access exactly: private-project permissions and creator-only personal drafts still apply, even to administrators. A known session URL does not grant access to the Threadline issue. Opening the r5d link requires access to its team separately.
+
+The browser refreshes link status without saving or replacing unsaved issue/comment edits. Disabling a plugin stops its task and hides its links; re-enabling it resumes synchronization. Changes to settings restart the task. A rejected key or missing team stops polling and displays an error in Administration. Correct the settings and save to restart. Temporary network errors retry with backoff.
+
+## Developing an integration
+
+Browser-safe metadata and declarative fields live in `shared/plugins.ts`. Server implementations and the `PluginService` runtime live in `server/plugins/`; browser action handlers live in `src/plugins/`. Add compiled modules to these registries, never remote executable code.
+
+A server definition can validate settings, declare public fields, subscribe to post-commit issue created/updated/closed/reopened, comment created and card moved events, and run a background task using its abort signal. Its context provides plugin-scoped key-value state and HTTP(S)-only external-link writes. Hooks run after committed changes; failures are isolated and logged without credential details. Failed mutations and no-ops emit no hooks. Tasks must honor cancellation and use their context for guarded state access.
+
+[MCP](/guides/mcp) is separate: it lets an authorized agent read and mutate Threadline issues. Configuring the r5d plugin does not grant any agent MCP access.

@@ -11,7 +11,7 @@
     "tabs": [
       { "tab": "Product", "groups": [
         { "group": "Start here", "pages": ["introduction", "quickstart"] },
-        { "group": "Work together", "pages": ["guides/projects", "guides/issues", "guides/board", "guides/rich-text", "guides/uploads", "guides/cli"] },
+        { "group": "Work together", "pages": ["guides/projects", "guides/issues", "guides/board", "guides/rich-text", "guides/uploads", "guides/cli", "guides/plugins", "guides/mcp"] },
         { "group": "Administration", "pages": ["admin/setup", "admin/local-users", "admin/oidc", "admin/limitations"] }
       ] },
       { "tab": "Self-host", "groups": [

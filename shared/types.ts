@@ -1,3 +1,5 @@
+import type { ExternalLink } from "./plugins";
+
 export type Role = "admin" | "member";
 export type Lane = string;
 export type IssueState = "open" | "closed" | "draft";
@@ -54,6 +56,8 @@ export interface Issue {
   body: string;
   labels: string[];
   taggedUserIds: string[];
+  /** Plugin links inherit the issue's current access; absent in older clients. */
+  externalLinks?: ExternalLink[];
   authorId: string;
   /** Personal drafts are creator-only; published state derives from closedAt. */
   state: IssueState;

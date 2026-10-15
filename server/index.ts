@@ -16,7 +16,7 @@ if (import.meta.main) {
         if (
           url.pathname === "/api" ||
           url.pathname.startsWith("/api/") ||
-          ["/healthz", "/readyz"].includes(url.pathname)
+          ["/healthz", "/readyz", "/mcp"].includes(url.pathname)
         ) {
           return app.fetch(request, {
             remoteAddress: server.requestIP(request)?.address,

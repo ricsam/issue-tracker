@@ -1,0 +1,15 @@
+.plugin-settings { margin-top: 2rem; }
+.plugin-settings > .settings-card { margin-top: 1rem; }
+.plugin-project-table { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.plugin-project-row { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: 1rem; }
+.plugin-project-row label { flex: 1 1 180px; min-width: 0; }
+.plugin-project-row input, .plugin-project-row select { width: 100%; }
+.plugin-issue-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.external-links { display: flex; flex-wrap: wrap; gap: .35rem; margin: .35rem 0; }
+.external-link { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding: .15rem .45rem; border-radius: 5px; font-size: .75rem; border: 1px solid currentColor; text-decoration: none; }
+.external-link:hover { text-decoration: underline; }
+.tone-neutral { color: #536171; background: #f1f3f5; }
+.tone-info { color: #1756a9; background: #eaf2ff; }
+.tone-success { color: #196537; background: #ebf7ee; }
+.tone-warning { color: #875000; background: #fff6df; }
+.tone-danger { color: #a32525; background: #fff0f0; }
