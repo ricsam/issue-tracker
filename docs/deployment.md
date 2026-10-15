@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.24.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.25.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.25.0
+
+Version 0.25.0 adds compiled first-party plugins, the r5d launch/feed integration, and the stateless bearer-authenticated `/mcp` endpoint. Administrators configure plugins in Administration; all plugins begin disabled. MCP uses existing personal API keys. See [plugins](guides/plugins.mdx) and [MCP](guides/mcp.mdx).
+
+Migration v19 additively creates encrypted plugin-settings, external-link and key-value-state tables without changing existing issues, boards, credentials or timestamps. Upgrading from 0.22.0 runs migrations v17 (creator-only drafts), v18 (API credentials) and v19 together. Back up the complete `/data` directory and the settings-encryption-key Secret first. **Never run an older image against migrated data or use `--atomic`/`helm rollback` alone:** older applications do not enforce draft privacy. Recovery requires restoring the pre-upgrade data and matching image/chart, preserving newer writes separately.
+
+No deployment-value changes are required. Preserve PVC bindings, Secrets, OIDC settings and ingress hosts. Route `/mcp` unchanged and preserve Authorization; do not put browser-only proxy login in front of agent clients. Choose the published SHA image matching the [0.25.0 release](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.25.0), preferably pinned by digest. Publishing the chart does not upgrade running deployments.
 
 ### Upgrading to 0.24.0
 

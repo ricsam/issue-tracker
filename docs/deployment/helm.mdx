@@ -3,7 +3,7 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.24.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.25.0**. A chart version and an application image tag are separate choices.
 
 ## Prerequisites
 
@@ -15,11 +15,11 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.24.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.24.0 adds scoped, revocable API keys for integrations, the **API access** settings page, and browser authorization for the [Threadline CLI](/guides/cli). The npm CLI is versioned independently (0.1.1 includes saved host configuration).
+Verify `0.25.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.25.0 adds [first-party plugins and r5d](/guides/plugins), plus the bearer-authenticated [MCP endpoint](/guides/mcp). Plugins start disabled. The release includes 0.24.0's scoped API keys, **API access** page and browser authorization for the [Threadline CLI](/guides/cli); the npm CLI remains independently versioned.
 
-Migration v18 adds credential/device-authorization tables without changing existing content, sessions or project permissions. Back up all of `/data` and preserve the encryption-key Secret before upgrading. Avoid automatic Helm rollback (`--atomic`) across migrations; recover using a pre-upgrade backup with its matching application, preserving newer writes separately. No new deployment values are required. Keep `baseUrl` equal to your browser-visible HTTPS origin and route the JSON device endpoints unchanged through proxies; do not disable CSRF or TLS checks.
+Migration v19 adds encrypted plugin settings, external links and plugin state without changing existing content, sessions or project permissions. Upgrades from 0.22.0 run v17 (draft privacy), v18 (credentials) and v19 together. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Never use `--atomic`/`helm rollback` alone or run an older image against migrated data:** restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately. No new deployment values are required. Keep the PVC binding, Secrets, OIDC settings and ingress host unchanged. Route `/mcp` and the JSON device endpoints unchanged, preserving Authorization; do not disable CSRF or TLS checks.
 
-**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.24.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.24.0); retaining an old image leaves CLI login unsupported even with the latest chart. Publishing the chart does not upgrade any running deployment.
+**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.25.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.25.0), preferably pinned by digest; retaining an old image leaves the new endpoints unavailable even with the latest chart. Publishing the chart does not upgrade any running deployment.
 
 Version 0.23.0 adds creator-only personal draft issues, including protection against other administrators. Choose **Personal draft** on creation, use **State is Draft** in tables, and **Publish issue** to share the saved issue, comments, history, and attachments. Drafts remain off shared boards and still require project access.
 
@@ -73,7 +73,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.24.0 --namespace issue-tracker \
+  --version 0.25.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -113,9 +113,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.24.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.25.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.24.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.25.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources
