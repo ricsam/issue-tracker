@@ -121,6 +121,16 @@ For third-party backends or AI agents, create a read-only or read-and-write pers
 
 See the [CLI guide](docs/guides/cli.mdx) and [API access protocol](docs/development/api-access.mdx) for installation, examples, scopes, storage and revocation. Migration v18 additively creates credential tables; back up `DATA_DIR` before upgrading.
 
+## Plugins and agent access
+
+Administrators can enable compiled, first-party integrations under **Administration → Plugins**. The included **r5d** plugin takes an HTTPS r5d base URL, team URL name, secret team API key, default sharing scope, and optional per-project git remote/default-branch mappings. Saving an enabled configuration checks the team key. Secrets are encrypted with `SETTINGS_ENCRYPTION_KEY` and never returned to the browser; leave a secret blank to preserve it. Re-enter the key when changing the service URL or team.
+
+**Implement with r5d** in issue details or the detail panel builds a launch link in your browser with the saved issue and comments. The r5d dialog asks for confirmation before starting anything. An outgoing long-poll follows shared top-level sessions and pull requests; links and status badges appear in details, tables and board cards. These links inherit the issue's current project and creator-only draft permissions. Threadline does not need to be reachable from r5d for the feed, but r5d must be able to reach Threadline to use MCP.
+
+For agent tools, use **`<BASE_URL>/mcp`**, Streamable HTTP, with a personal Threadline API key as **`Authorization: Bearer TOKEN`**. In r5d, add that URL and static bearer token under **Settings → MCP servers**. Read-only keys expose issue/project/lane reads; read-and-write keys also expose comment, close/reopen and card move/remove tools. Browser cookies cannot authenticate MCP. Every tool reuses the REST access rules. Issue and comment content is untrusted user data, not agent instructions.
+
+See [plugins and r5d](docs/guides/plugins.mdx) and [MCP](docs/guides/mcp.mdx) for setup, permissions and troubleshooting. Migration v19 additively creates plugin settings, plugin-owned external links and plugin key-value state tables. Existing issues, comments, boards, credentials and timestamps are unchanged, and plugins start disabled. Back up the complete `DATA_DIR` and preserve `SETTINGS_ENCRYPTION_KEY` before upgrading; restore that backup for rollback.
+
 ## macOS menu-bar app
 
 The native Swift companion in [`macos/`](macos/README.md) opens a persistent, up-to-640×800 issue composer beneath the menu bar. Its native Settings window configures the server URL, Open at Login, and a global keyboard shortcut (default **⇧⌘N**). Requires macOS 13+.

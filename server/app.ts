@@ -27,12 +27,15 @@ import { isLabel } from "../shared/hashtag-matches";
 import { moveLaneTo, orderedLanes } from "../shared/board";
 import { openDatabase, syncIssueTaggedUsers } from "./db";
 import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
-import { withIssueHistory, recordIssueChange, recordHistory, readHistory } from "./history";
+import { withIssueHistory, recordIssueChange, recordHistory, readHistory, issueSnapshot } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
 import { apiAccess, apiKeyAllows, authReturnTo, publicDevicePaths, type AppEnv } from "./api-access";
 import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams, issueAccessParams } from "./project-access";
 import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./attachments";
+import { PluginService, PluginError, type PluginDefinition } from "./plugins";
+import type { PluginEvent } from "../shared/plugins";
+import { registerMcp } from "./mcp";
 
 export interface AppOptions {
   dataDir?: string;
@@ -41,6 +44,8 @@ export interface AppOptions {
   production?: boolean;
   allowInsecureOidc?: boolean;
   sessionTtlMs?: number;
+  /** Compiled definitions only; test fixtures may supply an isolated registry. */
+  pluginDefinitions?: PluginDefinition[];
 }
 type Env = AppEnv;
 const id = () => crypto.randomUUID();
@@ -145,6 +150,22 @@ export function createApp(options: AppOptions = {}) {
   const db = openDatabase(resolve(dataDir, "app.sqlite"));
   const access = projectAccess(db);
   const tokens = apiAccess(db);
+  const plugins = new PluginService(db, {
+    plugins: options.pluginDefinitions,
+    baseUrl,
+    key,
+    allowInsecureLocalhost: !production &&
+      (options.allowInsecureOidc ?? process.env.ALLOW_INSECURE_OIDC === "true"),
+  });
+  // Hooks observe committed state, and neither synchronous nor asynchronous
+  // plugin failures may turn a successful application mutation into an error.
+  const emit = (event: PluginEvent) => {
+    try {
+      void Promise.resolve(plugins.emit(event)).catch(() => console.error("Plugin hook failed"));
+    } catch {
+      console.error("Plugin hook failed");
+    }
+  };
   const oidc = new OidcService(db, {
     baseUrl,
     key,
@@ -205,6 +226,7 @@ export function createApp(options: AppOptions = {}) {
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
       state: isDraft ? "draft" : row.closedAt ? "closed" : "open",
+      externalLinks: plugins.links(String(row.id)),
     };
   };
   const project = (slug: string, user: User) => {
@@ -299,6 +321,8 @@ export function createApp(options: AppOptions = {}) {
       return c.json({ error: "Invalid input" }, 400);
     if (err instanceof HTTPException)
       return c.json({ error: err.message }, err.status);
+    if (err instanceof PluginError)
+      return c.json({ error: err.message }, 400);
     if ((err as any).code?.startsWith("SQLITE_CONSTRAINT"))
       return c.json({ error: "Conflicting data" }, 409);
     return c.json({ error: "Request could not be completed" }, 500);
@@ -380,6 +404,7 @@ export function createApp(options: AppOptions = {}) {
     }),
   );
   tokens.register(app, baseUrl);
+  registerMcp(app, { tokens, baseUrl, publicUser });
   app.get("/healthz", (c) => c.json({ ok: true }));
   app.get("/readyz", (c) => {
     db.query("SELECT 1").get();
@@ -547,6 +572,23 @@ export function createApp(options: AppOptions = {}) {
     } catch {
       return c.json({ error: "Invalid OIDC settings" }, 400);
     }
+  });
+  app.get("/api/admin/plugins", (c) => {
+    requireAdmin(c);
+    return c.json({ plugins: plugins.adminSettings() });
+  });
+  app.put("/api/admin/plugins/:id", async (c) => {
+    requireAdmin(c);
+    return c.json({ plugin: await plugins.update(c.req.param("id"), await json(c)) });
+  });
+  app.get("/api/plugins", (c) => c.json({ plugins: plugins.publicSettings(c.get("user")), baseUrl }));
+  app.get("/api/issues/:id/external-links", (c) => {
+    const canonical = issueIdField.safeParse(c.req.param("id"));
+    if (!canonical.success) return fail(404, "Issue not found");
+    // Exactly the detail route's draft/project checks, including no admin
+    // override for another person's draft. Never authorize by link ownership.
+    const current = issue(canonical.data, c.get("user"));
+    return c.json({ links: current.externalLinks ?? [] });
   });
   app.get("/api/projects", (c) =>
     c.json({
@@ -720,7 +762,25 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ board: board(p.id) });
   });
   const historyTransaction = <T>(c: Context<Env>, ids: string[], mutate: () => T) => ({
-    immediate: () => withIssueHistory(db, c.get("user").id, ids, mutate),
+    immediate: () => {
+      const before = new Map([...new Set(ids)].map((id) => [id, issueSnapshot(db, id)]));
+      const actorId = c.get("user").id;
+      const result = withIssueHistory(db, actorId, ids, mutate);
+      // withIssueHistory has committed. Failed writes and no-ops emit nothing.
+      for (const [issueId, previous] of before) {
+        const current = issueSnapshot(db, issueId);
+        if (!current || !previous) continue;
+        if (previous.body !== current.body || previous.state !== current.state || previous.projectId !== current.projectId)
+          emit({ type: "issue.updated", issueId, actorId });
+        if (previous.state !== current.state && current.state === "closed")
+          emit({ type: "issue.closed", issueId, actorId });
+        if (previous.state === "closed" && current.state === "open")
+          emit({ type: "issue.reopened", issueId, actorId });
+        if (previous.lane !== current.lane || (previous.lane !== null && previous.projectId !== current.projectId))
+          emit({ type: "card.moved", issueId, actorId });
+      }
+      return result;
+    },
   });
   const pinnedProjects = (user: User, legacy = false) => ({ projectIds: (db.query(`SELECT f.projectId FROM favorite_projects f JOIN projects p ON p.id=f.projectId WHERE f.userId=? AND ${visibleProjectSql} ORDER BY ${legacy ? "f.projectId" : "f.position,f.projectId"}`)
     .all(user.id, ...accessParams(user)) as { projectId: string }[]).map((row) => row.projectId) });
@@ -996,6 +1056,8 @@ export function createApp(options: AppOptions = {}) {
       recordIssueChange(db, uid, c.get("user").id, null);
       return { issue: issue(uid, c.get("user")) };
     }).immediate();
+    emit({ type: "issue.created", issueId: result.issue.id, actorId: c.get("user").id });
+    if (input.lane != null) emit({ type: "card.moved", issueId: result.issue.id, actorId: c.get("user").id });
     return c.json(result);
   };
   app.post("/api/projects/:slug/issues", createIssue);
@@ -1119,6 +1181,7 @@ export function createApp(options: AppOptions = {}) {
       retainAttachmentReferences(db, i.id, [body]);
       recordHistory(db, i.id, c.get("user").id, "commented", [{ field: "comment", before: null, after: body }]);
     }).immediate();
+    emit({ type: "comment.created", issueId: i.id, actorId: c.get("user").id, commentId: uid });
     return c.json({
       comment: db
         .query("SELECT * FROM comments WHERE id=?")
@@ -1234,7 +1297,7 @@ export function createApp(options: AppOptions = {}) {
     return c.body(await file.arrayBuffer());
   });
   app.notFound((c) => c.json({ error: "Not found" }, 404));
-  return Object.assign(app, { db, close: () => db.close(), baseUrl });
+  return Object.assign(app, { db, plugins, close: () => { void plugins.close(); db.close(); }, baseUrl });
 }
 
 export function sniffRaster(b: Uint8Array): string {

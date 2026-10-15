@@ -1,3 +1,4 @@
+import { ExternalLinks } from "../components/plugin-issue";
 import {
   useCallback,
   useEffect,
@@ -664,7 +665,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         onClickCapture={(event) => {
           if (event.button !== 0 || event.altKey || !(event.metaKey || event.ctrlKey || event.shiftKey)) return;
           // Checkboxes keep their native toggle; popover items are not card surfaces.
-          if ((event.target as HTMLElement).closest("input, [popover]")) return;
+          if ((event.target as HTMLElement).closest("input, [popover], .external-link")) return;
           event.preventDefault();
           event.stopPropagation();
           selectBoardIssue(i.id, event.shiftKey || !checked, event.shiftKey);
@@ -728,6 +729,7 @@ function ProjectIssues({ slug }: { slug: string }) {
 
         </div>
         </Link>
+        <ExternalLinks issue={i} compact />
       </article>
     );
   }

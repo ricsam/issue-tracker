@@ -6,6 +6,7 @@ import type { IssueColumn, IssueTableState } from "../lib/issue-table";
 import { Button } from "./ui/primitives";
 import { Tooltip } from "./ui/tooltip";
 import { useNotification } from "./ui/snackbar";
+import { ExternalLinks } from "./plugin-issue";
 import { IssueStateBadge } from "./lifecycle";
 import { SendToBoardDialog } from "./send-to-board-dialog";
 import type { BoardLaneOption, IssueBoardLane } from "../lib/issue-board-lanes";
@@ -146,7 +147,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
     switch (key) {
       case "number": return <>!{issue.number}</>;
       case "state": return <IssueStateBadge state={issue.state} />;
-      case "title": return <Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong></Link>;
+      case "title": return <><Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong></Link><ExternalLinks issue={issue} compact /></>;
       case "project": {
         const project = projects?.find((candidate) => candidate.id === issue.projectId);
         return issue.projectId ? project ? <Link to={`/projects/${project.slug}`}>{project.name}{project.archivedAt && <small className="muted"> (archived)</small>}</Link> : "Unknown project" : <span className="muted">No project</span>;

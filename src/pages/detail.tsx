@@ -21,6 +21,7 @@ import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
 import { IssuePlacementControls } from "../components/issue-placement-controls";
+import { ExternalLinks, PluginIssueActions } from "../components/plugin-issue";
 import { ShareIssue } from "../components/share-issue";
 import { CopyIssueBody } from "../components/copy-issue-body";
 import { IssueHistory } from "../components/issue-history";
@@ -308,6 +309,8 @@ function IssueDetailForm({
           </div>
           <div className="issue-window-actions">{!draft && <ShareIssue id={id} />}{panelActions}</div>
         </header>
+        <PluginIssueActions issue={persisted} comments={comments} />
+        <ExternalLinks issue={persisted} />
         {draft && <p className="read-only-note">Only you can see this draft, while you have access to its project. Publishing shares the saved issue, comments and history with everyone who has access and cannot be undone. Save any changes before publishing.</p>}
         <fieldset
           disabled={busy || changingState}

@@ -5,6 +5,7 @@ import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
+import { PluginSettings } from "../components/plugin-settings";
 export function AdminPage() {
   const { user, refresh, users } = useWorkspace();
   const [settings, setSettings] = useState<OidcSettings | null>(null);
@@ -265,6 +266,7 @@ export function AdminPage() {
           </section>
         </div>
       </div>
+      <PluginSettings />
     </>
   );
 }

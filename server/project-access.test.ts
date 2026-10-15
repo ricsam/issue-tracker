@@ -231,7 +231,7 @@ test("v14 upgrades existing projects to public with deterministic oldest adminis
     for (let attempt = 0; attempt < 2; attempt++) {
       const db = openDatabase(path);
       try {
-        expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 18 });
+        expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 19 });
         expect(db.query("SELECT name,description,createdAt,visibility,ownerId FROM projects WHERE id='legacy'").get()).toEqual({ name: "Legacy", description: "Preserve me", createdAt: "old", visibility: "public", ownerId: users ? "a-admin" : null });
         expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
       } finally { db.close(); }
