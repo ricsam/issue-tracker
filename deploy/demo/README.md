@@ -9,13 +9,13 @@ Live URL: **https://issue-tracker.r5d.app**. Namespace `issue-tracker-demo`, Hel
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
 helm repo update issue-tracker
-export IMAGE_TAG='<published-sha-tag>@sha256:<verified-image-digest>'
+export IMAGE_TAG='sha-7735d06@sha256:cf88fec303aca182815bcbb0f29b9c9dcbc691f87f45382272ec3acd44feef33'
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
   --kube-context ricsam --namespace issue-tracker-demo --version 0.28.0 \
   -f deploy/demo/values.yaml --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 
-**Workspace upgrade (0.28.0):** see the [packaged chart migration guide](../../charts/issue-tracker/README.md). This deployment sets `migration.workspaceName: "richie's workspace"` and `migration.workspaceSlug: richies-workspace` **before** migration 22 first runs. Existing content stays on the same PVC and retains its internal identifiers, issue numbers, history and private-project protections. Canonical URLs become `/w/richies-workspace/projects` and `/w/richies-workspace/issues/<number>`; CLI/MCP callers must select `richies-workspace`. These migration values do not rename an already-migrated workspace. The rollout from the current 0.25.0/migration-19 deployment runs migrations 20–22. A database backup and matching old image/chart are mandatory for rollback; never roll back only the application.
+**Workspace upgrade (0.28.0):** see the [packaged chart migration guide](../../charts/issue-tracker/README.md). This deployment sets `migration.workspaceName: "richie's workspace"` and `migration.workspaceSlug: richies-workspace` **before** migration 22 first runs. Existing content stays on the same PVC and retains its internal identifiers, issue numbers, history and private-project protections. Canonical URLs become `/w/richies-workspace/projects` and `/w/richies-workspace/issues/<number>`; CLI/MCP callers must select `richies-workspace`. These migration values do not rename an already-migrated workspace. The verified rollout from 0.25.0/migration 19 ran migrations 20–22. A database backup and matching old image/chart are mandatory for rollback; never roll back only the application.
 
 **Historical upgrade from 0.22.0 (migration 16) to 0.25.0:** stop writes and take a consistent full-data backup, including the settings-encryption Secret, Helm values/manifest and deployment/PVC state, on both backup hosts before upgrading. Verify SQLite integrity and matching checksums. Version 0.25.0 runs v17 (creator-only drafts), v18 (API credentials) and v19 (plugins); plugins begin disabled. Never use `--atomic` or `helm rollback` alone, or run an older image against migrated data: older applications cannot enforce draft privacy. Recovery requires restoring the pre-upgrade backup with chart 0.22.0 and image `sha-11a1967@sha256:6bed99aff8a9b53938cc8014bb109d336a7cf273316c86937779bd3716e45d36`, preserving any newer writes separately. Preserve the exact PVC binding, Secrets, OIDC configuration and ingress host.
 
@@ -40,6 +40,29 @@ Secrets are not in Git. Recovery references:
 - Kubernetes `issue-tracker-demo/issue-tracker-settings` contains the unchanged settings-encryption key; the OIDC client secret is encrypted in the tracker database.
 
 Use the secure account-secret interface or authorized Kubernetes secret access for recovery; do not print values in logs or paste them into issues. Workspace synchronization does not back up Kubernetes data or Secrets.
+
+## Deployment verification, 2026-10-16 — workspaces 0.28.0
+
+- Live workspace: **[richie's workspace](https://issue-tracker.r5d.app/w/richies-workspace/projects)**; slug `richies-workspace`, internal ID `default`.
+- Application commit `7735d06ed51f8d8f5d8c32390432623f103c51c5`; [CI](https://github.com/ricsam/issue-tracker/actions/runs/38921363083) passed all verification and published the image. [Documentation checks](https://github.com/ricsam/issue-tracker/actions/runs/38921363111) passed. The workspace feature/chart source is commit `7799d6b121d2348502d967b5ce30f562ffaf481c`.
+- Deployed image: `ghcr.io/ricsam/issue-tracker:sha-7735d06@sha256:cf88fec303aca182815bcbb0f29b9c9dcbc691f87f45382272ec3acd44feef33`; digest verified against the registry manifest bytes.
+- Helm release `issue-tracker`, revision **16**, chart/application **0.28.0**. [Published chart](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.28.0) and [migration/rollback guide](../../charts/issue-tracker/README.md); the guide is also packaged inside the chart. Package SHA-256 `915de3961b950dabf09dba93ccf60c5fe00039e7e2268d98b13994a8bd6c6a87`.
+- Database migrated **19 → 22**. Both rehearsal and live checks passed SQLite integrity/foreign keys. Normalized before/after hashes matched for existing content, identities, private-project grants, board placement, history and encrypted settings: **2 users, 1 identity, 2 projects, 1 issue, 0 comments, 0 attachments, 1 board card, 8 history entries**.
+- Richie is now a **workspace administrator**, retaining the global **member** role. Recovery administrator remains a system/workspace administrator. The role change preserved legacy grants and did not convert private-project protections. No other users or content were created.
+- PVC UID/spec/PV binding, ingress UID/spec/hostname and all three Secret UIDs/data were verified unchanged. OIDC remains enabled with closed signup; r5d plugin remains enabled/running with preserved encrypted settings. One ready pod, zero restarts; public HTTPS `/readyz` passed.
+- An isolated recovery-admin browser verified projects, Administration → All workspaces, workspace settings and `/new` workspace selection, then logged out. The owner's existing signed-in Chrome session survived and opened the renamed workspace and member-management UI as Richie. No fresh OAuth flow or new invitation email delivery was tested; invitations do not send email.
+- Local verification: **267 API/CLI/unit tests passed**; full browser sweep plus focused reruns **247 passed, 1 intentional skip**; final CI repeated the isolated browser suite, typecheck, build, CLI packaging and Helm checks.
+
+### Workspace-upgrade recovery copies
+
+The app was stopped before a read-only backup pod mounted the existing PVC. Full data, Secrets, Helm values/manifests/release records, storage/routing state and matching old chart were copied securely to both hosts:
+
+- `hetzner-kata-2:/home/r5d-backups/issue-tracker/pre-0.28.0-aa41f209-352a-4756-87de-a146054a562f-K7YMEf/`
+- `hetzner-ceph-1:/home/r5d-backups/issue-tracker/pre-0.28.0-aa41f209-352a-4756-87de-a146054a562f-zTJGLz/`
+
+Both root-owned directories are mode 0700, Secret archives mode 0600. Both `data.tar.gz` copies match SHA-256 `5c45f04fec52d2bdeeb804fa0800bcf88c7fa121c9be1e373a63508570209be7`; extracted copies passed SQLite integrity/foreign-key and count checks at migration 19. `SHA256SUMS`, `verification.json`, and post-upgrade evidence/checksums are retained. The temporary backup pod was deleted. Preserve these and older backups.
+
+Rollback requires stopping writes, preserving any newer data separately, restoring this matching pre-upgrade data/key backup, and using chart **0.25.0** plus image `sha-f092a31@sha256:dff9f485d4ccc8683c2730743651a82c74f7872ea566e257c56c8a69ba795d67`. **Do not run the old image against migration 22 or use an application-only Helm rollback.**
 
 ## Deployment verification, 2026-10-16 — per-launch sharing
 
