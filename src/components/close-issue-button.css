@@ -1,0 +1,28 @@
+.comment-actions { align-items: flex-start; flex-wrap: wrap; }
+.close-issue-control { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 100%; }
+.close-issue-split { display: inline-flex; max-width: 100%; }
+.close-issue-split .close-issue-submit { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.close-issue-split .close-issue-toggle { border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 9px; margin-left: -1px; flex-shrink: 0; }
+.close-reason-icon { flex-shrink: 0; }
+.close-reason-icon.completed { color: #8250df; }
+.close-reason-icon.not_planned, .close-reason-icon.duplicate { color: #656d76; }
+.close-duplicate-selection { color: #656d76; }
+.close-reason-popover { z-index: 110; width: min(345px, calc(100vw - 24px)); max-height: var(--radix-popover-content-available-height); overflow-y: auto; padding: 8px; background: white; border: 1px solid #ddd9e5; border-radius: 12px; box-shadow: 0 8px 28px #21172e24; }
+.close-reason-option { display: flex; align-items: flex-start; gap: 10px; width: 100%; border: 0; background: transparent; text-align: left; border-radius: 6px; padding: 12px 8px; cursor: pointer; color: #24292f; }
+.close-reason-option:hover, .close-reason-option:focus-visible, .close-reason-option[aria-checked="true"] { background: #f1f2f4; }
+.close-reason-option:focus-visible, .close-duplicate-options button:focus-visible { outline: 2px solid #8250df; outline-offset: -2px; }
+.close-reason-option > svg { margin-top: 2px; flex-shrink: 0; }
+.close-reason-option .unchecked { visibility: hidden; }
+.close-reason-option > span { flex: 1; }
+.close-reason-option strong { display: block; font-size: 14px; font-weight: 600; }
+.close-reason-option small { display: block; color: #656d76; font-size: 12px; margin-top: 5px; }
+.close-reason-option:last-child { border-top: 1px solid #e5e7eb; border-top-left-radius: 0; border-top-right-radius: 0; }
+.close-duplicate-picker { display: flex; flex-direction: column; gap: 10px; padding: 4px; }
+.close-duplicate-picker > .btn { align-self: flex-start; }
+.close-duplicate-picker label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.close-duplicate-picker input { width: 100%; min-width: 0; }
+.close-duplicate-picker p { margin: 0; font-size: 13px; }
+.close-duplicate-options { max-height: 220px; overflow-y: auto; }
+.close-duplicate-options button { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 10px; background: transparent; cursor: pointer; overflow-wrap: anywhere; }
+.close-duplicate-options button:hover { background: #f1f2f4; }
+.close-duplicate-options strong { color: #656d76; }

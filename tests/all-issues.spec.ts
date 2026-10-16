@@ -56,7 +56,7 @@ test("sidebar creation works without a project, switches projects, and unlinked 
   await editor.fill(`${marker} edited #global`);
   await editor.press("Control+s");
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close issue", exact: true }).click();
+  await page.getByRole("button", { name: "Close as completed", exact: true }).click();
   await expect(page.getByRole("button", { name: "Reopen issue" })).toBeVisible();
   await page.getByRole("button", { name: "Reopen issue" }).click();
   await page.locator(".comments [contenteditable=true]").fill("Unlinked discussion");

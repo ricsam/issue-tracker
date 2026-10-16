@@ -102,12 +102,20 @@ export function registerMcp(app: Hono<AppEnv>, options: {
         tool("issue_comment", "Add a Markdown comment to an issue.", { issueId, body: z.string().trim().min(1).max(100000) }, true, async ({ issueId, body }) => ({
           ...await rest<object>(`/api/issues/${issueId}/comments`, "POST", { body }), url: url(`/issues/${issueId}`),
         }));
-        for (const state of ["closed", "open"] as const) {
-          tool(state === "closed" ? "issue_close" : "issue_reopen", state === "closed" ? "Close an issue without changing board placement." : "Reopen an issue. For your personal draft, this publishes it to the project's audience (or the workspace when unlinked).", { issueId }, true, async ({ issueId }) => {
-            await rest(`/api/issues/${issueId}`, "PATCH", { state });
-            return detail(issueId);
-          });
-        }
+        tool("issue_close", "Close an issue without changing board placement. Optionally specify a reason, duplicate target and atomic comment.", {
+          issueId, reason: z.enum(["completed", "not_planned", "duplicate"]).optional(),
+          duplicateOfId: issueId.optional(), comment: z.string().trim().min(1).max(100000).optional(),
+        }, true, async ({ issueId, reason, duplicateOfId, comment }) => {
+          // Preserve the legacy idempotent operation when no new options are supplied.
+          if (reason === undefined && duplicateOfId === undefined && comment === undefined)
+            await rest(`/api/issues/${issueId}`, "PATCH", { state: "closed" });
+          else await rest(`/api/issues/${issueId}/close`, "POST", { reason: reason ?? "completed", duplicateOfId, comment });
+          return detail(issueId);
+        });
+        tool("issue_reopen", "Reopen an issue. For your personal draft, this publishes it to the project's audience (or the workspace when unlinked).", { issueId }, true, async ({ issueId }) => {
+          await rest(`/api/issues/${issueId}`, "PATCH", { state: "open" });
+          return detail(issueId);
+        });
         tool("issue_move", "Move an issue's existing board card to a visible lane by stable lane value, or remove it from the board by passing null. Does not add missing cards.", {
           issueId, lane: z.string().min(1).max(100).nullable(),
         }, true, async ({ issueId, lane }) => {

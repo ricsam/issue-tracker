@@ -1,4 +1,6 @@
 import { ExternalLinks } from "../components/plugin-issue";
+import { BoardSubIssueProgress } from "../components/board-sub-issue-progress";
+import { useBoardSubIssueProgress } from "../lib/use-board-sub-issue-progress";
 import {
   useCallback,
   useEffect,
@@ -223,6 +225,11 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [laneDrag, setLaneDrag] = useState<LaneDrag | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [progressRevision, setProgressRevision] = useState(0);
+  const refreshProgress = useCallback(() => setProgressRevision((value) => value + 1), []);
+  const cardMembershipKey = JSON.stringify(boardSettings.cards.map((card) => card.issueId).sort());
+  const subIssueProgress = useBoardSubIssueProgress(slug, board && !loading && !loadFailed && !!project,
+    cardMembershipKey, progressRevision);
   const [error, setError] = useState("");
   const [listQuery, setListQuery] = useState("");
   const [boardPreferences, updateBoardPreferences] = useBoardPreferences(user.id, project?.id);
@@ -352,6 +359,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         }
       }));
       if (closedIds.length) {
+        refreshProgress();
         try { await refresh(); }
         catch (cause) { setError(`Issues closed, but workspace counts could not refresh: ${message(cause)}`); }
       }
@@ -720,7 +728,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           <span className="issue-number">!{i.number}</span>
           <strong>{i.title}</strong>
         <div className="issue-meta">
-          {i.state === "closed" && <ClosedTag />}
+          {i.state === "closed" && <ClosedTag closeReason={i.closeReason} />}
           {i.labels.slice(0, 3).map((l) => (
             <span className="tag" key={l}>
               {l}
@@ -728,6 +736,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           ))}
 
         </div>
+          <BoardSubIssueProgress issueNumber={i.number} progress={subIssueProgress.progress[i.id]} />
         </Link>
         <ExternalLinks issue={i} compact />
       </article>
@@ -813,6 +822,10 @@ function ProjectIssues({ slug }: { slug: string }) {
         {board && <BoardFilters value={boardFilters} onChange={setBoardFilters}
           lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving} />}
         <ErrorNotice error={error} />
+        {board && subIssueProgress.error && <div className="board-progress-error">
+          <ErrorNotice error={`Could not refresh sub-issue progress: ${subIssueProgress.error}`} />
+          <Button variant="ghost" onClick={() => void subIssueProgress.retry()}>Retry sub-issue progress</Button>
+        </div>}
         {board ? (
           <>
             <div className="issue-bulk-actions issue-board-actions" role="group" aria-label="Selected board issue actions" aria-busy={!!saving}>
@@ -1016,8 +1029,10 @@ function ProjectIssues({ slug }: { slug: string }) {
               </>}
               onBoardChanged={listBoardChanged}
               onCreated={issueCreated}
+              onRelationshipsChanged={refreshProgress}
               onPendingChange={onPendingChange}
               onSaved={(updated) => {
+                refreshProgress();
                 if (all) {
                   setWorkspaceBoards((current) => Object.fromEntries(Object.entries(current).map(([projectId, settings]) => [
                     projectId, projectId === updated.projectId ? settings : {

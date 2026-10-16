@@ -2,6 +2,7 @@ import type { ExternalLink } from "./plugins";
 
 export type Role = "admin" | "member";
 export type Lane = string;
+export type IssueCloseReason = "completed" | "not_planned" | "duplicate";
 export type IssueState = "open" | "closed" | "draft";
 export interface BoardLane {
   value: Lane;
@@ -37,6 +38,10 @@ export interface BoardCard {
   issueId: string;
   lane: Lane;
 }
+export interface SubIssueProgress {
+  total: number;
+  closed: number;
+}
 export interface BoardSettings {
   lanes: Lane[];
   customLanes: BoardLane[];
@@ -67,6 +72,8 @@ export interface Issue {
   state: IssueState;
   closedAt: string | null;
   closedById: string | null;
+  closeReason?: IssueCloseReason | null;
+  duplicateOfId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,7 +84,7 @@ export interface IssueHistoryEntry {
   createdAt: string;
   action: "created" | "updated" | "commented" | "comment_edited" | "comment_deleted";
   changes: {
-    field: "body" | "state" | "project" | "boardLane" | "comment";
+    field: "body" | "state" | "project" | "boardLane" | "comment" | "closeReason";
     before: string | null;
     after: string | null;
   }[];

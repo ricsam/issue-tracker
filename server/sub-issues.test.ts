@@ -146,17 +146,18 @@ test("migration 20 is additive, idempotent and transactional with database const
   const schema = db.query("SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name").all();
   db.exec("CREATE TABLE issue_relationships (sentinel TEXT)");
   db.close();
-  expect(() => openDatabase(path)).toThrow();
+  expect(() => openDatabase(path, 20)).toThrow();
   db = openDatabase(path, 19);
   expect(db.query("SELECT 1 FROM migrations WHERE version=20").get()).toBeNull();
   db.exec("DROP TABLE issue_relationships"); db.close();
-  db = openDatabase(path);
+  // Isolate migration 20: later migrations intentionally change the issues schema.
+  db = openDatabase(path, 20);
   expect(db.query("SELECT name,sql FROM sqlite_master WHERE type='table' AND name!='issue_relationships' ORDER BY name").all()).toEqual(schema);
   expect(db.query("SELECT * FROM migrations WHERE version=20").all()).toHaveLength(1);
   expect(() => db.query("INSERT INTO issue_relationships VALUES (1,1)").run()).toThrow();
   expect(() => db.query("INSERT INTO issue_relationships VALUES (1,999)").run()).toThrow();
   db.query("INSERT INTO issue_relationships VALUES (2,1)").run();
-  db.close(); db = openDatabase(path);
+  db.close(); db = openDatabase(path, 20);
   expect(db.query("SELECT * FROM issue_relationships").all()).toEqual([{ childId: 2, parentId: 1 }]);
   expect(db.query("SELECT * FROM issues").all()).toEqual(issues);
   expect(db.query("SELECT * FROM users").all()).toEqual(users);

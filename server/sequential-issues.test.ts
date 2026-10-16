@@ -49,7 +49,7 @@ test("v11 atomically renumbers globally, preserves children, archives, lifecycle
   const mapping = new Map([[ids[1], '1'], [ids[0], '2'], [ids[2], '3']]);
   for (let attempt = 0; attempt < 2; attempt++) {
     const db = openDatabase(path);
-    expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(oldRows.map((row, index) => ({ ...row, id: index + 1, number: index + 1, isDraft: 0 })));
+    expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(oldRows.map((row, index) => ({ ...row, id: index + 1, number: index + 1, isDraft: 0, closeReason: row.closedAt === null ? null : "completed", duplicateOfId: null })));
     expect(db.query("SELECT * FROM comments ORDER BY id").all()).toEqual(comments.map((row) => ({ ...row, issueId: mapping.get(row.issueId) })));
     expect(db.query("SELECT * FROM legacy_project_boards").all()).toEqual(archive);
     expect(db.query("SELECT * FROM issue_tagged_users ORDER BY issueId").all()).toEqual(['1','2','3'].map((issueId) => ({ issueId, userId: 'u' })));

@@ -2,16 +2,16 @@ import type { Database } from "bun:sqlite";
 import { type IssueHistoryEntry } from "../shared/types";
 import { orderedLanes } from "../shared/board";
 
-type Snapshot = { body: string; state: string; project: string | null; boardLane: string | null; projectId: string | null; lane: string | null };
+type Snapshot = { closeReason: string | null; body: string; state: string; project: string | null; boardLane: string | null; projectId: string | null; lane: string | null };
 export function issueSnapshot(db: Database, issueId: string): Snapshot | null {
-  const row = db.query(`SELECT i.body,i.closedAt,i.isDraft,i.projectId,p.name AS project,b.lane,pb.customLanes,pb.laneLabels
+  const row = db.query(`SELECT i.body,i.closedAt,i.closeReason,i.isDraft,i.projectId,p.name AS project,b.lane,pb.customLanes,pb.laneLabels
     FROM issues i LEFT JOIN projects p ON p.id=i.projectId
     LEFT JOIN board_issues b ON b.issueId=i.id
     LEFT JOIN project_boards pb ON pb.projectId=i.projectId WHERE i.id=?`).get(issueId) as
-    { body: string; closedAt: string | null; isDraft: number; projectId: string | null; project: string | null; lane: string | null; customLanes: string | null; laneLabels: string | null } | null;
+    { body: string; closeReason: string | null; closedAt: string | null; isDraft: number; projectId: string | null; project: string | null; lane: string | null; customLanes: string | null; laneLabels: string | null } | null;
   if (!row) return null;
   const definitions = orderedLanes(row.lane === null ? [] : [row.lane], JSON.parse(row.customLanes ?? "[]"), JSON.parse(row.laneLabels ?? "{}"));
-  return { body: row.body, state: row.isDraft ? "draft" : row.closedAt ? "closed" : "open", project: row.project,
+  return { closeReason: row.closeReason, body: row.body, state: row.isDraft ? "draft" : row.closedAt ? "closed" : "open", project: row.project,
     projectId: row.projectId, lane: row.lane,
     boardLane: row.lane === null ? null : definitions.find((lane) => lane.value === row.lane)?.label ?? row.lane };
 }
@@ -25,7 +25,7 @@ export function recordIssueChange(db: Database, issueId: string, actorId: string
   const after = issueSnapshot(db, issueId);
   if (!after) throw new Error("History target missing");
   const changes: IssueHistoryEntry["changes"] = [];
-  for (const field of ["body", "state", "project", "boardLane"] as const) {
+  for (const field of ["body", "state", "project", "boardLane", "closeReason"] as const) {
     // Compare identities too: two distinct projects may have the same name.
     const identityChanged = field === "project" ? before?.projectId !== after.projectId
       : field === "boardLane" ? before?.lane !== after.lane : false;

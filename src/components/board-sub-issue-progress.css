@@ -1,0 +1,26 @@
+.board-sub-issue-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 12px;
+  color: #696275;
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.board-sub-issue-count, .board-sub-issue-percent { flex: none; white-space: nowrap; }
+.board-sub-issue-percent { min-width: 4ch; text-align: right; }
+.board-sub-issue-track {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #8254d3 var(--sub-issue-completion), #e0d2f7 var(--sub-issue-completion));
+  /* Gaps are transparent so the selected-card background still shows through. */
+  mask-image: repeating-linear-gradient(to right, #000 0, #000 calc(100% / var(--sub-issue-segments) - 2px), transparent calc(100% / var(--sub-issue-segments) - 2px), transparent calc(100% / var(--sub-issue-segments)));
+}
+@media (forced-colors: active) {
+  .board-sub-issue-track { forced-color-adjust: none; background: linear-gradient(to right, Highlight var(--sub-issue-completion), GrayText var(--sub-issue-completion)); }
+}

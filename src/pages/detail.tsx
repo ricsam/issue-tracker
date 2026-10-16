@@ -12,6 +12,7 @@ import type {
   Issue,
   IssueDetail,
   IssueState,
+  IssueCloseReason,
   Comment,
   BoardSettings,
 } from "../../shared/types";
@@ -29,6 +30,8 @@ import { IssueRelationshipsSection } from "../components/issue-relationships";
 import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
+import { CloseIssueButton } from "../components/close-issue-button";
+import { closeReasonLabels } from "../lib/issue-close-reasons";
 import { CommentItem } from "./comment";
 import { CreateIssueDialog } from "../components/create-issue-dialog";
 import { NEW_ISSUE_KEYS, SAVE_ISSUE_KEYS, newIssueTooltip, saveIssueTooltip, useIssueSaveShortcut } from "../lib/issue-shortcuts";
@@ -55,6 +58,7 @@ type IssueDetailsProps = {
   existingTags?: string[];
   onSaved?: (issue: Issue) => void;
   onCreated?: (issue: Issue) => void;
+  onRelationshipsChanged?: () => void;
   onBoardChanged?: (projectId: string, board: BoardSettings) => void;
   onPendingChange?: (pending: boolean) => void;
 };
@@ -144,6 +148,7 @@ function IssueDetailForm({
   embedded = false,
   onSaved,
   onCreated,
+  onRelationshipsChanged,
   onBoardChanged,
   onPendingChange,
   initialDetail,
@@ -174,7 +179,7 @@ function IssueDetailForm({
   const catalog = useProjectTags(project?.slug, issue.projectId === initialDetail.issue.projectId ? existingTags : undefined);
   const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
   const dirty = issue.body !== persisted.body;
-  useIssueSaveShortcut(form, dirty && !busy && !changingState && !moving && !relating && !archived, id);
+  useIssueSaveShortcut(form, dirty && !busy && !posting && !changingState && !moving && !relating && !archived, id);
   useIssueCreationHandler(() => setCreating(true), !embedded);
   const setBreadcrumb = useIssueBreadcrumb();
   useEffect(() => {
@@ -195,7 +200,7 @@ function IssueDetailForm({
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!dirty || submitting.current || busy || changingState || moving || relating || archived || form.current?.closest("[inert]")) return;
+    if (!dirty || submitting.current || busy || posting || changingState || moving || relating || archived || form.current?.closest("[inert]")) return;
     submitting.current = true;
     setBusy(true);
     setError("");
@@ -221,9 +226,43 @@ function IssueDetailForm({
       setBusy(false);
     }
   }
-  // Close/reopen immediately without saving or discarding other unsaved edits.
+  // Lifecycle actions preserve unsaved body edits. A close can post the comment atomically.
+  function lifecycleChanged(updated: Issue) {
+    const { state, closedAt, closedById, closeReason, duplicateOfId, updatedAt, taggedUserIds } = updated;
+    const lifecycle = { state, closedAt, closedById, closeReason, duplicateOfId, updatedAt, taggedUserIds };
+    setIssue((current) => ({ ...current, ...lifecycle }));
+    setPersisted((current) => ({ ...current, ...lifecycle }));
+    refreshHistory();
+    onSaved?.(updated);
+  }
+  async function closeIssue(reason: IssueCloseReason, duplicateOfId?: string) {
+    if (submitting.current || busy || posting || changingState || moving || relating || archived || issue.state !== "open") return false;
+    submitting.current = true;
+    setChangingState(true);
+    setError("");
+    try {
+      if (comment.trim()) validateBody(comment);
+      const result = await api<{ issue: Issue; comment?: Comment }>(`/api/issues/${id}/close`, {
+        method: "POST",
+        body: JSON.stringify({ reason, duplicateOfId, ...(comment.trim() ? { comment } : {}) }),
+      });
+      if (result.comment) setComments((current) => [...current, result.comment!]);
+      setComment("");
+      lifecycleChanged(result.issue);
+      notify(result.comment ? "Issue closed with comment" : "Issue closed");
+      void refresh().catch((cause) => setError(`Issue closed, but workspace counts could not refresh: ${message(cause)}`));
+      return true;
+    } catch (cause) {
+      setError(message(cause));
+      return false;
+    } finally {
+      submitting.current = false;
+      setChangingState(false);
+    }
+  }
   async function changeState(state: IssueState) {
-    if (busy || changingState || moving || relating || archived || (issue.state === "draft" && dirty)) return;
+    if (submitting.current || busy || posting || changingState || moving || relating || archived || (issue.state === "draft" && dirty)) return;
+    submitting.current = true;
     setChangingState(true);
     setError("");
     try {
@@ -231,17 +270,13 @@ function IssueDetailForm({
         method: "PATCH",
         body: JSON.stringify({ state }),
       });
-      const { closedAt, closedById, updatedAt } = result.issue;
-      const lifecycle = { state: result.issue.state, closedAt, closedById, updatedAt };
-      setIssue((v) => (v ? { ...v, ...lifecycle } : v));
-      setPersisted((v) => (v ? { ...v, ...lifecycle } : v));
-      refreshHistory();
-      onSaved?.(result.issue);
+      lifecycleChanged(result.issue);
       notify(issue.state === "draft" ? "Issue published" : state === "closed" ? "Issue closed" : "Issue reopened");
       await refresh();
     } catch (e) {
       setError(message(e));
     } finally {
+      submitting.current = false;
       setChangingState(false);
     }
   }
@@ -254,7 +289,8 @@ function IssueDetailForm({
   }
   async function post(e: FormEvent) {
     e.preventDefault();
-    if (!comment.trim()) return;
+    if (!comment.trim() || submitting.current || busy || posting || changingState || moving || relating || archived) return;
+    submitting.current = true;
     setPosting(true);
     setError("");
     try {
@@ -269,6 +305,7 @@ function IssueDetailForm({
     } catch (e) {
       setError(message(e));
     } finally {
+      submitting.current = false;
       setPosting(false);
     }
   }
@@ -298,7 +335,7 @@ function IssueDetailForm({
               if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
                 && currentPending.current && !window.confirm("Discard unsaved issue changes or comment?")) event.preventDefault();
             }}>ISSUE !{issue.number}</Link></h2>
-            <IssueStateBadge state={issue.state} />
+            <IssueStateBadge state={issue.state} closeReason={issue.closeReason} />
             <IssuePlacementControls issue={persisted} board={issue.projectId ? boards?.[issue.projectId] : undefined}
               disabled={busy || changingState || posting || relating} onBusyChange={setMoving}
               onMoved={(updated) => {
@@ -325,30 +362,25 @@ function IssueDetailForm({
               <small className="issue-created-meta muted">
                 Created <time dateTime={issue.createdAt}>{new Date(issue.createdAt).toLocaleDateString()}</time>
                 {" · by "}{users.find((u) => u.id === issue.authorId)?.name || "a teammate"}
-                {issue.closedAt && <> · Closed {new Date(issue.closedAt).toLocaleDateString()}{closer && ` by ${closer}`}</>}
+                {issue.closedAt && <> · Closed as {closeReasonLabels[issue.closeReason ?? "completed"].toLowerCase()} {new Date(issue.closedAt).toLocaleDateString()}{closer && ` by ${closer}`}
+                  {issue.duplicateOfId && <> · Duplicate of <Link to={`/issues/${issue.duplicateOfId}`} onClick={(event) => {
+                    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
+                      && currentPending.current && !window.confirm("Discard unsaved issue changes or comment?")) event.preventDefault();
+                  }}>!{issue.duplicateOfId}</Link></>}
+                </>}
               </small>
             {!archived && (
               <div className="save-actions">
                 {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                   <Plus size={15} /> Create issue
                 </Button>}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busy || changingState || moving || relating || (draft && dirty)}
-                  onClick={() => void changeState(draft || closed ? "open" : "closed")}
-                >
-                  {closed ? <RotateCcw size={15} /> : <CircleCheck size={15} />}
-                  {draft ? (changingState ? "Publishing…" : "Publish issue") : changingState
-                    ? closed
-                      ? "Reopening…"
-                      : "Closing…"
-                    : closed
-                      ? "Reopen issue"
-                      : "Close issue"}
-                </Button>
-                <Button type="button" variant="secondary" disabled={!dirty || busy || changingState || moving || relating} onClick={() => { update({ body: persisted.body }); notify("Body changes discarded"); }}>Discard changes</Button>
-                <Button disabled={!dirty || busy || changingState || moving || relating} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
+                {draft && <Button type="button" variant="secondary"
+                  disabled={busy || posting || changingState || moving || relating || dirty}
+                  onClick={() => void changeState("open")}>
+                  <CircleCheck size={15} />{changingState ? "Publishing…" : "Publish issue"}
+                </Button>}
+                <Button type="button" variant="secondary" disabled={!dirty || busy || posting || changingState || moving || relating} onClick={() => { update({ body: persisted.body }); notify("Body changes discarded"); }}>Discard changes</Button>
+                <Button disabled={!dirty || busy || posting || changingState || moving || relating} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
                   <Save size={15} />
                   {busy ? "Saving…" : "Save changes"}
                 </Button>
@@ -383,7 +415,7 @@ function IssueDetailForm({
         </fieldset>
       </form>
       {!draft && <IssueRelationshipsSection issue={persisted} readOnly={archived} disabled={busy || changingState || moving || posting}
-        revision={historyRevision} onChanged={refreshHistory} onBusyChange={setRelating}
+        revision={historyRevision} onChanged={() => { refreshHistory(); onRelationshipsChanged?.(); }} onBusyChange={setRelating}
         canNavigate={() => !currentPending.current || window.confirm("Discard unsaved issue changes or comment?")}
         onCreated={(created) => {
           onCreated?.(created);
@@ -413,8 +445,9 @@ function IssueDetailForm({
         ))}
         {!archived && (
           <form className="form-stack" onSubmit={post}>
-            <fieldset disabled={posting}>
+            <fieldset disabled={posting || changingState || busy || moving || relating}>
               <legend className="sr-only">Add a comment</legend>
+              <div inert={posting || changingState || busy || moving || relating}>
               <RichEditor
                 value={comment}
                 onChange={setComment}
@@ -422,7 +455,12 @@ function IssueDetailForm({
                 placeholder="Share an update or ask a question…"
                 minimal
               />
-              <div className="form-actions">
+              </div>
+              <div className="form-actions comment-actions">
+                {!draft && (closed ? <Button type="button" variant="secondary" onClick={() => void changeState("open")}>
+                  <RotateCcw size={15} />{changingState ? "Reopening…" : "Reopen issue"}
+                </Button> : <CloseIssueButton issueId={id} hasComment={!!comment.trim()}
+                  disabled={posting || changingState || busy || moving || relating} closing={changingState} onClose={closeIssue} />)}
                 <Button disabled={posting || !comment.trim()}>
                   {posting ? "Posting…" : "Post comment"}
                 </Button>

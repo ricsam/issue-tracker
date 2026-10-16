@@ -42,6 +42,7 @@ test("history snapshots creation, combined changes, comments, pagination and arc
     { field: "body", before: "# First", after: "# Changed\n\n**markdown**" },
     { field: "state", before: "open", after: "closed" },
     { field: "project", before: "Renamed", after: null }, { field: "boardLane", before: "Todo", after: null },
+    { field: "closeReason", before: null, after: "completed" },
   ]);
   await call(`/api/issues/${issue.id}`, "PATCH", { state: "closed" });
   expect((await history()).history).toHaveLength(2);
@@ -146,7 +147,7 @@ test("migration 12 is additive, preserves events across replay/reopen, and suppo
     const upgraded = openDatabase(path);
     expect(upgraded.query("SELECT * FROM issue_history").all()).toEqual([]);
     expect(upgraded.query("SELECT body FROM issues").all()).toEqual([{ body: "# Old" }]);
-    expect(upgraded.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 20 });
+    expect(upgraded.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 21 });
     upgraded.close();
   }
   expect(issue.id).toBe("1");

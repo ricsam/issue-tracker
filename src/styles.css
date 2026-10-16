@@ -1351,6 +1351,12 @@ fieldset > small {
   background: #f0ebfc;
   border-color: #dfd5f7;
 }
+.state-badge.closed.close-not_planned, .state-badge.closed.close-duplicate,
+.closed-tag.close-not_planned, .closed-tag.close-duplicate {
+  color: #59636e;
+  background: #eff1f3;
+  border-color: #d8dee4;
+}
 .board-card.is-closed .issue-link strong {
   color: #8a8496;
 }

@@ -1,24 +1,29 @@
 import { useEffect, useState } from "react";
-import { Archive, ArchiveRestore, CircleCheck, CircleDot, LockKeyhole } from "lucide-react";
-import type { IssueState, Project } from "../../shared/types";
+import { Archive, ArchiveRestore, CircleCheck, CircleDot, CircleSlash, LockKeyhole } from "lucide-react";
+import type { IssueCloseReason, IssueState, Project } from "../../shared/types";
 import { api, message } from "../lib/api";
+import { closeReasonLabels } from "../lib/issue-close-reasons";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 
-export function IssueStateBadge({ state }: { state: IssueState }) {
+export function IssueStateBadge({ state, closeReason }: { state: IssueState; closeReason?: IssueCloseReason | null }) {
+  const reason = closeReason ?? "completed";
+  const ClosedIcon = reason === "completed" ? CircleCheck : CircleSlash;
   return (
-    <span className={`state-badge ${state}`}>
-      {state === "draft" ? <LockKeyhole size={14} /> : state === "closed" ? <CircleCheck size={14} /> : <CircleDot size={14} />}
+    <span className={`state-badge ${state}${state === "closed" ? ` close-${reason}` : ""}`} title={state === "closed" ? `Closed as ${closeReasonLabels[reason].toLowerCase()}` : undefined}>
+      {state === "draft" ? <LockKeyhole size={14} /> : state === "closed" ? <ClosedIcon size={14} /> : <CircleDot size={14} />}
       {state === "draft" ? "Draft" : state === "closed" ? "Closed" : "Open"}
     </span>
   );
 }
 
 /** Marks closed work wherever open and closed issues can appear together. */
-export function ClosedTag() {
+export function ClosedTag({ closeReason }: { closeReason?: IssueCloseReason | null }) {
+  const reason = closeReason ?? "completed";
+  const Icon = reason === "completed" ? CircleCheck : CircleSlash;
   return (
-    <span className="tag closed-tag">
-      <CircleCheck size={11} />
+    <span className={`tag closed-tag close-${reason}`} title={`Closed as ${closeReasonLabels[reason].toLowerCase()}`}>
+      <Icon size={11} />
       Closed
     </span>
   );

@@ -67,8 +67,8 @@ Edits on the detail page are not automatically saved.
 When switching issues in the desktop side panel, the previous issue remains visible but non-interactive while the new one loads. A failed load shows an error and **Retry** without replacing the previous content.
 
 <Note>
-  **Close issue** and **Reopen issue** save immediately.
-  They neither save nor discard other unsaved edits on the page.
+  The close/reopen controls beside **Post comment** save immediately without saving or discarding unsaved issue-body edits.
+  **Close with comment** also posts the comment draft atomically; reopening leaves comment drafts untouched.
 </Note>
 
 Use [rich text and Markdown](/guides/rich-text) for structured issue bodies.
@@ -144,12 +144,13 @@ Other members can read the discussion and post their own comments, but cannot ed
 
 ## Close or reopen an issue
 
-Select **Close issue** in the issue details when the work is finished or no longer needed.
-The issue shows a **Closed** badge, records who closed it and when, and moves from **Open** to **Closed** in the list.
-It keeps its content and comments, can still be edited, and still counts toward the project's total issue count.
-Select **Reopen issue** to return it to the open list.
+Use the split close button beside **Post comment** in issue details. Its arrow offers **Close as completed** (done, fixed, resolved), **Close as not planned** (won’t fix, can’t reproduce, stale), and **Close as duplicate**. For a duplicate, search by title or `!number` and select an accessible published issue. Choosing a reason or target does not close immediately; press the main close button to confirm.
 
-To close several open issues from the list or board, select their checkboxes and choose **Close selected issues**. In the list, the header checkbox selects issues on the current page only; selections persist across pages but filtering removes hidden issues. On the board, selection uses the cards matching its filters in visible lanes, and the board defaults to all states. Only selected open issues are closed. **Clear selection** deselects everything. If some closes fail, successful ones stay closed and failed ones remain selected for retry. Closing an issue with a pending draft in the side panel asks before discarding that draft. Closed issues can be selected for tagging, but cannot be closed again. Archived projects cannot use bulk actions.
+With a nonblank comment draft, the button becomes **Close with comment**. The comment and closure save together, or neither saves if validation fails. The posted comment clears on success, while unsaved issue-body edits stay in place. **Post comment** alone never closes the issue.
+
+The issue shows a **Closed** badge and its reason, records who closed it and when, and moves from **Open** to **Closed** in the list. Closure reasons also appear in change history; duplicate links are shown only while you can access the target. It keeps its content and comments, can still be edited, and still counts toward the project's total issue count. Select **Reopen issue** beside Post comment to return it to the open list and clear the close reason and duplicate link, without posting or discarding a comment draft.
+
+To close several open issues from the list or board, select their checkboxes and choose **Close selected issues**. In the list, the header checkbox selects issues on the current page only; selections persist across pages but filtering removes hidden issues. On the board, selection uses the cards matching its filters in visible lanes, and the board defaults to all states. Only selected open issues are closed, with the completed reason. **Clear selection** deselects everything. If some closes fail, successful ones stay closed and failed ones remain selected for retry. Closing an issue with a pending draft in the side panel asks before discarding that draft. Closed issues can be selected for tagging, but cannot be closed again. Archived projects cannot use bulk actions.
 
 Closing never changes the board: a closed issue keeps its lane, and its card shows a **Closed** tag.
 Move the card to **Done** or remove it from the board if you want it out of the way.

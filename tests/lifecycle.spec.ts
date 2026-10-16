@@ -68,7 +68,7 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   await editor.click();
   await page.keyboard.press("ControlOrMeta+End");
   await page.keyboard.type(" Draft kept.");
-  await page.getByRole("button", { name: "Close issue", exact: true }).click();
+  await page.getByRole("button", { name: "Close as completed", exact: true }).click();
   await expect(page.locator(".issue-detail-header .state-badge")).toHaveText("Closed");
   await expect(page.getByText("Issue closed", { exact: true })).toBeVisible();
   await expect(page.locator(".issue-created-meta")).toContainText("Closed");
@@ -191,7 +191,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(page.locator(".read-only-note")).toContainText("archived project");
   await expect(page.getByRole("article", { name: "Issue" })).toContainText("Ship the beta");
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toHaveCount(0);
-  for (const name of ["Close issue", "Save changes", "Post comment", "Edit comment", "Delete comment"])
+  for (const name of ["Close as completed", "Save changes", "Post comment", "Edit comment", "Delete comment"])
     await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   await expect(page.locator(".comment")).toContainText("Kept for reference");
   await expect(page.getByRole("combobox", { name: "Assignee" })).toHaveCount(0);
@@ -223,7 +223,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   const restored = (await (await page.request.get(`/api/projects/${project.slug}`)).json()).project;
   expect(restored).toMatchObject({ archivedAt: null, archivedById: null });
   await page.goto(`/issues/${issues[0]!.id}`);
-  await expect(page.getByRole("button", { name: "Close issue", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
   await expect(page.locator(".detail-form .editor-preview")).toBeVisible();
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toBeVisible();

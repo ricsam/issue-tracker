@@ -11,6 +11,7 @@ import {
   LANES,
   type BoardCard,
   type BoardSettings,
+  type SubIssueProgress,
   type User,
   type Issue,
   type IssueRelationships,
@@ -53,6 +54,11 @@ const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const issueIdField = z.string().regex(/^[1-9][0-9]*$/).max(16)
   .refine((value) => Number.isSafeInteger(Number(value)));
+const closeFields = z.object({
+  reason: z.enum(["completed", "not_planned", "duplicate"]),
+  duplicateOfId: issueIdField.optional(),
+  comment: z.string().trim().min(1).max(100000).optional(),
+}).strict();
 const issueIdsField = z.array(issueIdField).min(1).max(1000)
   .refine((values) => new Set(values).size === values.length);
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -211,10 +217,13 @@ export function createApp(options: AppOptions = {}) {
   const requireAdmin = (c: any) => {
     if (c.get("user").role !== "admin") fail(403, "Administrator required");
   };
+  const visibleDuplicate = (targetId: string, user: User) => !!db.query(
+    `SELECT 1 FROM issues i WHERE i.id=? AND i.isDraft=0 AND ${visibleIssueSql}`,
+  ).get(targetId, ...issueAccessParams(user));
   const issue = (issueId: string | number, user: User): Issue => {
     const row = db
       .query(
-        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,isDraft,createdAt,updatedAt FROM issues WHERE id=?",
+        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,closeReason,duplicateOfId,isDraft,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
     if (!row || (row.isDraft && row.authorId !== user.id)) return fail(404, "Issue not found");
@@ -223,6 +232,7 @@ export function createApp(options: AppOptions = {}) {
     return {
       ...fields,
       id: String(row.id),
+      duplicateOfId: row.duplicateOfId != null && visibleDuplicate(String(row.duplicateOfId), user) ? String(row.duplicateOfId) : null,
       number: Number(row.id),
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
@@ -706,6 +716,24 @@ export function createApp(options: AppOptions = {}) {
   app.get("/api/projects/:slug/board", (c) =>
     c.json({ board: board(project(c.req.param("slug"), c.get("user")).id) }),
   );
+  app.get("/api/projects/:slug/board/sub-issue-progress", (c) => {
+    const user = c.get("user"), p = project(c.req.param("slug"), user);
+    // Both endpoints use current issue permissions. No lane filter: hidden cards
+    // remain board members, and children need not belong to any board/project.
+    const rows = db.query(`SELECT CAST(b.issueId AS TEXT) AS issueId,
+      COUNT(*) AS total, SUM(CASE WHEN i.closedAt IS NOT NULL THEN 1 ELSE 0 END) AS closed
+      FROM board_issues b
+      JOIN issue_relationships r ON r.parentId=b.issueId
+      JOIN issues i ON i.id=r.childId
+      WHERE b.projectId=? AND i.isDraft=0 AND ${visibleIssueSql}
+        AND EXISTS (SELECT 1 FROM issues i WHERE i.id=b.issueId AND i.isDraft=0 AND ${visibleIssueSql})
+      GROUP BY b.issueId`).all(p.id, ...issueAccessParams(user), ...issueAccessParams(user)) as
+      (SubIssueProgress & { issueId: string })[];
+    const progress: Record<string, SubIssueProgress> = Object.fromEntries(
+      rows.map(({ issueId, total, closed }) => [issueId, { total, closed }]),
+    );
+    return c.json({ progress });
+  });
   app.patch("/api/projects/:slug/board", async (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));
     const input = boardFields.parse(await json(c));
@@ -1152,6 +1180,35 @@ export function createApp(options: AppOptions = {}) {
       comments: db.query("SELECT *,CAST(issueId AS TEXT) AS issueId FROM comments WHERE issueId=? ORDER BY createdAt,id").all(current.id) as Comment[],
     });
   });
+  app.post("/api/issues/:id/close", async (c) => {
+    const issueId = issueIdField.parse(c.req.param("id"));
+    const input = closeFields.parse(await json(c));
+    const user = c.get("user");
+    let comment: Comment | undefined;
+    historyTransaction(c, [issueId], () => {
+      const current = activeIssue(issueId, user);
+      if (current.state !== "open") fail(409, current.state === "draft" ? "Publish draft issue before closing it" : "Issue is already closed");
+      if (input.reason === "duplicate") {
+        if (!input.duplicateOfId || input.duplicateOfId === issueId) return fail(400, "A distinct duplicate target is required");
+        if (!visibleDuplicate(input.duplicateOfId, user)) fail(404, "Duplicate target not found");
+      } else if (input.duplicateOfId !== undefined) fail(400, "Duplicate target requires duplicate reason");
+      const time = now();
+      db.query("UPDATE issues SET closedAt=?,closedById=?,closeReason=?,duplicateOfId=?,updatedAt=? WHERE id=?")
+        .run(time, user.id, input.reason, input.duplicateOfId ?? null, time, issueId);
+      if (input.comment !== undefined) {
+        validateMentions(input.comment);
+        validateAttachments(input.comment, user);
+        comment = { id: id(), issueId, authorId: user.id, body: input.comment, createdAt: time, updatedAt: time };
+        db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)")
+          .run(comment.id, issueId, user.id, comment.body, time, time);
+        syncIssueTaggedUsers(db, issueId);
+        retainAttachmentReferences(db, issueId, [comment.body]);
+        recordHistory(db, issueId, user.id, "commented", [{ field: "comment", before: null, after: comment.body }]);
+      }
+    }).immediate();
+    if (comment) emit({ type: "comment.created", issueId, actorId: user.id, commentId: comment.id });
+    return c.json({ issue: issue(issueId, user), ...(comment ? { comment } : {}) });
+  });
   app.patch("/api/issues/:id", async (c) => {
     const issueId = issueIdField.parse(c.req.param("id"));
     const raw = await json(c);
@@ -1207,11 +1264,11 @@ export function createApp(options: AppOptions = {}) {
       // Closing an already closed issue keeps its original close time and closer.
       if (input.state === "closed")
         db.query(
-          "UPDATE issues SET closedAt=?,closedById=? WHERE id=? AND closedAt IS NULL",
+          "UPDATE issues SET closedAt=?,closedById=?,closeReason='completed',duplicateOfId=NULL WHERE id=? AND closedAt IS NULL",
         ).run(merged.updatedAt, c.get("user").id, current.id);
       else if (input.state === "open")
         db.query(
-          "UPDATE issues SET isDraft=0,closedAt=NULL,closedById=NULL WHERE id=?",
+          "UPDATE issues SET isDraft=0,closedAt=NULL,closedById=NULL,closeReason=NULL,duplicateOfId=NULL WHERE id=?",
         ).run(current.id);
       if (body !== current.body)
         syncIssueTaggedUsers(db, current.id);

@@ -1,0 +1,151 @@
+import { randomUUID } from "node:crypto";
+import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+
+let session: Awaited<ReturnType<APIRequestContext["storageState"]>>;
+test.beforeAll(async ({ request, baseURL }) => {
+  const { setupRequired } = await (await request.get("/api/auth/status")).json();
+  expect((await request.post(setupRequired ? "/api/auth/setup" : "/api/auth/login", {
+    headers: { Origin: baseURL! }, data: { ...(setupRequired ? { name: "Alex Morgan" } : {}), email: "alex@example.test", password: "local-browser-test-password" },
+  })).ok()).toBeTruthy();
+  session = await request.storageState();
+});
+test.beforeEach(async ({ context }) => { await context.addCookies(session.cookies); });
+async function seed(page: Page, baseURL: string) {
+  const headers = { Origin: baseURL };
+  const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Close reasons ${randomUUID()}` } })).json();
+  const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Original issue", lane: "todo" } })).json();
+  return { issue, project, headers };
+}
+const commentEditor = (page: Page) => page.locator(".comments form [contenteditable=true]");
+const badge = (page: Page) => page.locator(".issue-detail-header .state-badge");
+const closeButton = (page: Page, name = "Close as completed") => page.getByRole("button", { name, exact: true });
+
+for (const embedded of [false, true]) test(`${embedded ? "sidebar" : "full page"}: close with comment is atomic and preserves body draft`, async ({ page, baseURL }) => {
+  const { issue, project } = await seed(page, baseURL!);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+  if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
+  const form = page.locator(".detail-form");
+  await expect(form.getByRole("button", { name: /Close as/ })).toHaveCount(0);
+  await expect(page.locator(".comment-actions").getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
+  await form.getByRole("button", { name: "Markdown", exact: true }).click();
+  await form.getByLabel("Markdown source").fill("Unsaved body stays here");
+  await commentEditor(page).fill("This is done.");
+  const writes: string[] = [];
+  page.on("request", (request) => { if (request.method() === "POST" && request.url().includes(`/api/issues/${issue.id}/`)) writes.push(request.url()); });
+  const closed = page.waitForResponse((response) => response.url().endsWith(`/api/issues/${issue.id}/close`));
+  await closeButton(page, "Close with comment").click();
+  const response = await closed;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).toEqual({ reason: "completed", comment: "This is done." });
+  await expect(badge(page)).toHaveAttribute("title", "Closed as completed");
+  await expect(page.locator(".comment")).toHaveCount(1);
+  await expect(page.locator(".comment")).toContainText("This is done.");
+  await expect(commentEditor(page)).toBeEmpty();
+  await expect(form.getByLabel("Markdown source")).toHaveValue("Unsaved body stays here");
+  expect(writes).toHaveLength(1);
+  const saved = await (await page.request.get(`/api/issues/${issue.id}`)).json();
+  expect(saved.issue).toMatchObject({ state: "closed", closeReason: "completed", body: "Original issue", duplicateOfId: null });
+  expect(saved.comments).toHaveLength(1);
+  expect((await (await page.request.get(`/api/projects/${project.slug}/board`)).json()).board.cards).toContainEqual({ issueId: issue.id, lane: "todo" });
+  await page.locator(".issue-history > summary").click();
+  await expect(page.locator(".issue-history")).toContainText("Close reason: None → Completed");
+  await commentEditor(page).fill("Unsent reopen draft");
+  await closeButton(page, "Reopen issue").click();
+  await expect(badge(page)).toHaveText("Open");
+  await expect(commentEditor(page)).toHaveText("Unsent reopen draft");
+  expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue).toMatchObject({ closeReason: null, duplicateOfId: null });
+  await page.getByRole("button", { name: "Post comment", exact: true }).click();
+  await expect(page.locator(".comment")).toHaveCount(2);
+  await expect(badge(page)).toHaveText("Open");
+  expect(errors).toEqual([]);
+});
+
+test("close reason menu supports keyboard selection, dismissal and closing without comment", async ({ page, baseURL }, testInfo) => {
+  const { issue } = await seed(page, baseURL!);
+  await page.goto(`/issues/${issue.id}`);
+  const trigger = page.getByRole("button", { name: "Choose close reason", exact: true });
+  await trigger.focus();
+  await trigger.press("ArrowDown");
+  const menu = page.getByRole("menu", { name: "Close reason", exact: true });
+  await expect(menu.getByRole("menuitemradio", { name: /Close as completed/ })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitemradio", { name: /Close as not planned/ })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(badge(page)).toHaveText("Open");
+  await trigger.click();
+  await expect(menu.getByRole("menuitemradio", { name: /Close as not planned/ })).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({ path: testInfo.outputPath("close-reason-menu.png") });
+  await page.keyboard.press("Escape");
+  await closeButton(page, "Close as not planned").click();
+  await expect(badge(page)).toHaveAttribute("title", "Closed as not planned");
+  await expect(page.locator(".issue-created-meta")).toContainText("Closed as not planned");
+  await page.reload();
+  await expect(badge(page)).toHaveAttribute("title", "Closed as not planned");
+  const saved = await (await page.request.get(`/api/issues/${issue.id}`)).json();
+  expect(saved.issue.closeReason).toBe("not_planned");
+  expect(saved.comments).toEqual([]);
+});
+
+test("mobile duplicate picker searches, retries and requires explicit close confirmation", async ({ page, baseURL }, testInfo) => {
+  const { issue, project, headers } = await seed(page, baseURL!);
+  const { issue: target } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Canonical issue" } })).json();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/issues/${issue.id}`);
+  await commentEditor(page).fill("Tracked elsewhere.");
+  await page.getByRole("button", { name: "Choose close reason", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /Close as duplicate/ }).click();
+  const picker = page.getByRole("dialog", { name: "Choose duplicate issue", exact: true });
+  await expect(picker.getByRole("searchbox", { name: "Duplicate of" })).toBeFocused();
+  await picker.getByRole("searchbox").fill(`!${issue.id}`);
+  await expect(picker.getByText("No matching issues.", { exact: true })).toBeVisible();
+  await page.route("**/api/issues/references?*", (route) => route.fulfill({ status: 503, json: { error: "Search unavailable" } }));
+  await picker.getByRole("searchbox").fill(`!${target.id}`);
+  await expect(picker.getByRole("alert")).toContainText("Search unavailable");
+  await page.unroute("**/api/issues/references?*");
+  await picker.getByRole("button", { name: "Retry search", exact: true }).click();
+  await picker.getByRole("button", { name: `!${target.number} Canonical issue`, exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(badge(page)).toHaveText("Open");
+  await expect(page.getByText(`Duplicate of !${target.number}`, { exact: true })).toBeVisible();
+  await closeButton(page, "Close with comment").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("close-with-comment-mobile.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await closeButton(page, "Close with comment").click();
+  await expect(badge(page)).toHaveAttribute("title", "Closed as duplicate");
+  await expect(page.locator(".issue-created-meta").getByRole("link", { name: `!${target.number}`, exact: true })).toHaveAttribute("href", `/issues/${target.id}`);
+  const saved = await (await page.request.get(`/api/issues/${issue.id}`)).json();
+  expect(saved.issue).toMatchObject({ closeReason: "duplicate", duplicateOfId: target.id });
+  expect(saved.comments).toHaveLength(1);
+});
+
+test("failed close retains draft and reason; in-flight actions cannot double-submit", async ({ page, baseURL }) => {
+  const { issue } = await seed(page, baseURL!);
+  await page.goto(`/issues/${issue.id}`);
+  await commentEditor(page).fill("Keep this on failure");
+  await page.getByRole("button", { name: "Choose close reason", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /Close as not planned/ }).click();
+  await page.route(`**/api/issues/${issue.id}/close`, (route) => route.fulfill({ status: 503, json: { error: "Close unavailable" } }));
+  await closeButton(page, "Close with comment").click();
+  await expect(page.getByRole("alert")).toContainText("Close unavailable");
+  await expect(commentEditor(page)).toHaveText("Keep this on failure");
+  await expect(badge(page)).toHaveText("Open");
+  expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).comments).toEqual([]);
+  await page.unroute(`**/api/issues/${issue.id}/close`);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/issues/${issue.id}/close`, async (route) => { await held; await route.continue(); });
+  await closeButton(page, "Close with comment").click();
+  await expect(closeButton(page, "Closing…")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Post comment", exact: true, includeHidden: true })).toBeDisabled();
+  release();
+  await expect(badge(page)).toHaveAttribute("title", "Closed as not planned");
+  await expect(page.locator(".comment")).toHaveCount(1);
+  await expect(commentEditor(page)).toBeEmpty();
+});

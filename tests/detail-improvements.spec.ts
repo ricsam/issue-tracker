@@ -50,9 +50,9 @@ for (const embedded of [false, true]) {
     expect(writes).toBe(2);
     await source.fill("Discard this body only");
     const comment = detail.locator(".comments [contenteditable=true]");
+    await detail.getByRole("button", { name: "Close as completed", exact: true }).click();
+    await expect(detail.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
     await comment.fill("Keep this comment draft");
-    await form.getByRole("button", { name: "Close issue", exact: true }).click();
-    await expect(form.getByRole("button", { name: "Reopen issue", exact: true })).toBeVisible();
     await form.getByRole("button", { name: "Discard changes", exact: true }).click();
     await expect(source).toHaveValue("Second save");
     await expect(comment).toContainText("Keep this comment draft");

@@ -34,11 +34,10 @@ for (const embedded of [false, true]) {
     await expect(history.locator("pre").nth(1)).toHaveText("Updated body");
     await source.fill("Unsaved draft stays out of history");
     const comment = page.locator(".comments [contenteditable=true]");
-    await comment.fill("A discussion update");
-    await form.getByRole("button", { name: "Close issue", exact: true }).click();
+    await page.getByRole("button", { name: "Close as completed", exact: true }).click();
     await expect(history).toContainText("State: Open → Closed");
     await expect(source).toHaveValue("Unsaved draft stays out of history");
-    await expect(comment).toHaveText("A discussion update");
+    await comment.fill("A discussion update");
     await page.getByRole("button", { name: "Post comment", exact: true }).click();
     await expect(history).toContainText("Alex Morgan added a comment");
     await page.getByRole("button", { name: "Edit comment", exact: true }).click();

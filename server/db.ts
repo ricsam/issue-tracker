@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 = 20) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 = 21) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -432,6 +432,16 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
       );
       CREATE INDEX issue_relationships_parent ON issue_relationships(parentId,childId);
       INSERT INTO migrations VALUES (20);
+    `);
+  }).immediate();
+  if (targetVersion < 21) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=21").get()) return;
+    db.exec(`
+      ALTER TABLE issues ADD COLUMN closeReason TEXT CHECK(closeReason IN ('completed','not_planned','duplicate'));
+      ALTER TABLE issues ADD COLUMN duplicateOfId INTEGER REFERENCES issues(id);
+      UPDATE issues SET closeReason='completed' WHERE closedAt IS NOT NULL;
+      INSERT INTO migrations VALUES (21);
     `);
   }).immediate();
   return db;

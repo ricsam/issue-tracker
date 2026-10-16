@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { History } from "lucide-react";
 import type { IssueHistoryEntry } from "../../shared/types";
 import { api, message } from "../lib/api";
+import { closeReasonLabels } from "../lib/issue-close-reasons";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice } from "./ui/primitives";
 import "./issue-history.css";
@@ -13,9 +14,10 @@ const actions: Record<IssueHistoryEntry["action"], string> = {
   comment_edited: "edited a comment",
   comment_deleted: "deleted a comment",
 };
-const fields = { body: "Body", state: "State", project: "Project", boardLane: "Board lane", comment: "Comment" };
+const fields = { body: "Body", state: "State", closeReason: "Close reason", project: "Project", boardLane: "Board lane", comment: "Comment" };
 function displayValue(field: IssueHistoryEntry["changes"][number]["field"], value: string | null) {
   if (value === null) return field === "project" ? "No project" : field === "boardLane" ? "Not on board" : "None";
+  if (field === "closeReason") return closeReasonLabels[value as keyof typeof closeReasonLabels] ?? value;
   if (field === "state") return value === "draft" ? "Draft" : value === "closed" ? "Closed" : "Open";
   return value || "(empty)";
 }

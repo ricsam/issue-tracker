@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.26.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.27.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.27.0
+
+Version 0.27.0 adds GitHub-style closure reasons: completed, not planned, and duplicate with a permission-safe issue picker. The split close button sits beside Post comment and becomes **Close with comment** when text is present; both writes commit atomically without saving or discarding unsaved issue-body edits. Reopening clears closure metadata. Reasons appear in issue metadata and history. Board cards now show closed/total direct-child progress, including accessible off-board and cross-project children; a Done lane alone does not count as closed.
+
+Migration v21 adds nullable close-reason and duplicate-target columns, backfilling existing closed issues as completed without changing content, board placement, timestamps or historical entries. Back up the complete `/data` directory and preserve the settings-encryption-key Secret before upgrading. Avoid automatic Helm rollback (`--atomic`) or running an older image against migrated data; recovery requires the pre-upgrade backup and matching image/chart, preserving newer writes separately. Earlier migrations still apply to upgrades from older releases.
+
+No deployment-value changes are required. Preserve PVC bindings, Secrets, OIDC settings and ingress hosts. Select the matching verified SHA image in the [0.27.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.27.0): upgrading the chart alone does not replace an explicit `image.tag`. Publishing this chart does not upgrade running deployments.
 
 ### Upgrading to 0.26.0
 

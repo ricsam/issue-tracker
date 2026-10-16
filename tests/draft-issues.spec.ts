@@ -52,14 +52,14 @@ test("personal draft creation, persisted table filtering and publishing", async 
   const detail = page.locator(".detail-form");
   await expect(detail.getByText(/Only you can see this draft/)).toBeVisible();
   await expect(detail.getByRole("button", { name: "Share issue", exact: true })).toHaveCount(0);
-  await expect(detail.getByRole("button", { name: "Close issue", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Close as completed", exact: true })).toHaveCount(0);
   await expect(detail.getByRole("button", { name: "Change board lane", exact: true })).toHaveCount(0);
   await detail.getByRole("button", { name: "Markdown", exact: true }).click();
   await detail.getByLabel("Markdown source").fill("Unsaved private edits");
   await expect(detail.getByRole("button", { name: "Publish issue", exact: true })).toBeDisabled();
   await detail.getByRole("button", { name: "Discard changes", exact: true }).click();
   await detail.getByRole("button", { name: "Publish issue", exact: true }).click();
-  await expect(detail.getByRole("button", { name: "Close issue", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
   await expect(detail.getByRole("button", { name: "Share issue", exact: true })).toBeVisible();
   expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.state).toBe("open");
   expect((await (await page.request.get(`/api/projects/${project.slug}/board`)).json()).board.cards).toEqual([]);
@@ -146,7 +146,7 @@ test("member drafts are hidden from an admin's lists, reference picker and detai
 
     await member.goto(`/issues/${issue.id}`);
     await member.getByRole("button", { name: "Publish issue", exact: true }).click();
-    await expect(member.getByRole("button", { name: "Close issue", exact: true })).toBeVisible();
+    await expect(member.getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
     await admin.goto("/issues");
     await setTableState(admin, "open");
     await admin.getByRole("textbox", { name: "Search issues", exact: true }).fill(title);

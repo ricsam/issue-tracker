@@ -146,7 +146,7 @@ export function IssueTable({ issues, allIssues, users, projects, boardLanes, lan
   const cellContent = (issue: Issue, key: IssueColumn) => {
     switch (key) {
       case "number": return <>!{issue.number}</>;
-      case "state": return <IssueStateBadge state={issue.state} />;
+      case "state": return <IssueStateBadge state={issue.state} closeReason={issue.closeReason} />;
       case "title": return <><Link ref={(node) => { if (node) links.current.set(issue.id, node); else links.current.delete(issue.id); }} data-issue-id={issue.id} className="issue-link" to={`/issues/${issue.id}`} onClick={(event) => { if (!event.altKey && !event.ctrlKey && !event.metaKey && event.button === 0) { activeId.current = issue.id; range.current = { key: orderKey, anchor: issue.id, base: [...selected] }; } onOpen(event, issue); }} aria-current={selectedId === issue.id ? "true" : undefined} aria-controls={controls} aria-label={`!${issue.number} ${issue.title}`}><strong>{issue.title}</strong></Link><ExternalLinks issue={issue} compact /></>;
       case "project": {
         const project = projects?.find((candidate) => candidate.id === issue.projectId);
