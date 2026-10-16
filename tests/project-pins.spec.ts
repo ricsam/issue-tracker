@@ -134,7 +134,22 @@ test("sidebar drag pins, inserts, reorders both ways, persists and unpins", asyn
   await expect(page).toHaveURL("/w/default/projects");
   await page.reload();
   await expectOrder(pins, [c, b, a]);
-  await row(pins, c).dragTo(others.locator(".nav-label"));
+  // The workspace selector makes this navigation independently scrollable. Begin
+  // the native drag before scrolling the destination: dragTo scrolls the target
+  // between mouse-down and drag-start, which can pick up the next row instead.
+  const source = row(pins, c);
+  const destination = others.locator(".nav-label");
+  await source.scrollIntoViewIfNeeded();
+  const sourceBox = (await source.boundingBox())!;
+  await page.mouse.move(sourceBox.x + 30, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sourceBox.x + 42, sourceBox.y + sourceBox.height / 2, { steps: 4 });
+  await expect(source).toHaveClass(/is-dragging/);
+  await destination.scrollIntoViewIfNeeded();
+  const targetBox = (await destination.boundingBox())!;
+  await page.mouse.move(targetBox.x + 30, targetBox.y + targetBox.height / 2, { steps: 8 });
+  await page.mouse.move(targetBox.x + 31, targetBox.y + targetBox.height / 2);
+  await page.mouse.up();
   await expectOrder(pins, [b, a]);
   await expect(row(others, c)).toBeVisible();
   expect((await (await page.request.get("/api/me/pinned-projects")).json()).projectIds).toEqual([b.id, a.id]);
@@ -284,11 +299,11 @@ test("project pages keep details fresher than the loaded sidebar", async ({ page
   await expect(page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
 });
 
-test("projects is the root breadcrumb and redundant sidebar copy is removed", async ({ page, baseURL }) => {
+test("workspace names the root breadcrumb and issue breadcrumbs retain project links", async ({ page, baseURL }) => {
   const { project, headers } = await seed(page, baseURL!);
   await page.goto("/");
   const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb", exact: true });
-  await expect(breadcrumb).toHaveText("Projects");
+  await expect(breadcrumb).toHaveText("Default");
   await expect(page.getByText("Team workspace", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Let’s make progress", { exact: true })).toHaveCount(0);
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Breadcrumb issue" } })).json();
