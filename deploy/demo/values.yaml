@@ -2,7 +2,7 @@
 # On a fresh database, override ingress.enabled=false until admin setup succeeds.
 image:
   repository: ghcr.io/ricsam/issue-tracker
-  # Supply the published SHA tag/digest matching the chart release commit.
+  # Supply the verified published SHA tag/digest documented in README.md.
   tag: ""
 imagePullSecrets:
   - name: ghcr-registry

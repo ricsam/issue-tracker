@@ -4,7 +4,7 @@ Live URL: **https://issue-tracker.r5d.app**. Namespace `issue-tracker-demo`, Hel
 
 ## Reproducible deployment
 
-`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.25.0 and the published SHA image matching its release commit after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
+`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.25.0 and the verified published SHA image documented below after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
 
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
@@ -38,6 +38,20 @@ Secrets are not in Git. Recovery references:
 - Kubernetes `issue-tracker-demo/issue-tracker-settings` contains the unchanged settings-encryption key; the OIDC client secret is encrypted in the tracker database.
 
 Use the secure account-secret interface or authorized Kubernetes secret access for recovery; do not print values in logs or paste them into issues. Workspace synchronization does not back up Kubernetes data or Secrets.
+
+## Deployment verification, 2026-10-16 — per-launch sharing
+
+- Application commit: `f092a312a4a4aa964331d67a1bdd23ae92972521`; [CI](https://github.com/ricsam/issue-tracker/actions/runs/38864862572) passed, including the full browser suite and image publication. Documentation checks also passed.
+- Deployed image: `ghcr.io/ricsam/issue-tracker:sha-f092a31@sha256:dff9f485d4ccc8683c2730743651a82c74f7872ea566e257c56c8a69ba795d67`.
+- Helm release `issue-tracker`, revision **15**, retaining chart/application **0.25.0**. The rendered manifest changed only the image; no migration, chart or operator-value change was needed.
+- A fresh consistent full-data backup was taken with the application stopped and verified on both hosts before rollout. Recovery copies (root-owned mode 0700, Secret archives mode 0600):
+  - `hetzner-kata-2:/home/r5d-backups/issue-tracker/pre-f092a31-903ba05f-c855-46e6-be53-464fdd6ea080-TdU4Ho/`
+  - `hetzner-ceph-1:/home/r5d-backups/issue-tracker/pre-f092a31-903ba05f-c855-46e6-be53-464fdd6ea080-b9PN38/`
+  - Both `data.tar.gz` files: SHA-256 `e80b03fe044cfef7e0dfdf304e79998a2438e33b63c6d1668ca93e722d5f590a`. Both extracted SQLite copies passed integrity/foreign-key checks at migration 19 with matching content counts. Recovery metadata, Secrets and checksums are retained alongside them. The temporary read-only backup pod was deleted before upgrade.
+- One ready application pod, zero restarts; public HTTPS `/readyz` returned `{"ok":true}`. Before/after checks confirmed unchanged database integrity, migration, content counts, encrypted plugin/OIDC settings, PVC UID/spec/binding, ingress UID/spec and all three Secret UIDs/data.
+- An isolated Chromium administrator session verified the live plugin is enabled and running, the saved team key is retained, and setup has no **Default share** field. Both admin and public settings omit the retired field and never expose the key.
+- The live **Implement with r5d** action produced the connected team with `scope: "branch"` even without a project mapping. The outgoing URL was intercepted and decoded locally: no issue content was sent to r5d, no agent session was launched, no shares/settings were changed. The verification login was logged out afterwards.
+- Local checks before pushing: typecheck, production build, 239 API/CLI/unit tests and seven plugin browser tests passed. The inherited-share launch dialog remains r5d's responsibility; this deployment did not modify or re-test that upstream UI.
 
 ## Deployment verification, 2026-10-15
 
