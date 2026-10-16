@@ -85,6 +85,16 @@ Hover **Create issue** or **Save changes** to see keyboard shortcuts. Cmd/Ctrl+N
 
 Full-page issues use the top breadcrumb for returning to the project, or **All issues** when unlinked. Creation metadata is inline beside the issue number and state; mentions and tags stay in the body/comments rather than in a separate properties card. Empty discussions have only the comment editor.
 
+## Sub-issues
+
+Break work down from **Sub-issues** in full-page issue details or the desktop detail panel. **Create sub-issue** uses the usual Markdown composer, defaults to the parent’s project (including **No project**), and creates and links the child atomically. **Add existing issue** searches by title or `!number`. Each issue has at most one parent, but can have its own sub-issues; self-links and cycles are rejected. Remove the existing parent before attaching an issue elsewhere.
+
+The section shows direct children, their state, and completed/total progress; children link to their details, which include a **Sub-issue of** link back to the parent. **Refresh sub-issues** updates progress without disturbing unsaved body or comment edits. Removing a relationship does not delete either issue. Closing/reopening, board changes, and project moves never cascade to related issues. Child issues remain ordinary issues in lists and boards.
+
+Published open or closed issues may be linked across projects. Both issues must be accessible and their projects active when linking or unlinking. Personal drafts must be published first. A relationship never grants access: unreadable parents/children are omitted, and progress includes only visible direct children. Archived relationships remain readable but cannot be changed until both projects are active. Link changes are not copied into issue history, so later access changes cannot expose related issue identities through historical snapshots.
+
+Migration v20 additively creates the relationship table and leaves existing issues unchanged. Back up the full `DATA_DIR` before upgrading; restore the backup for rollback.
+
 ## Issue change history
 
 Expand **Change history** below an issue's discussion in full-page details or the side panel to see who changed what and when, newest first. Body and comment entries expand to show the saved Markdown before and after. History includes creation, edits, closing/reopening, moving projects, board membership/lane changes, bulk tags/mentions, and comment creation/editing/deletion. Unsaved drafts, failed operations, no-ops, and card-order-only changes are not recorded. Deleted comments disappear from discussion but their content remains in history. Archived projects' history stays readable. Use **Load older changes** to page through older events and **Refresh history** to see changes made elsewhere without disturbing drafts.
@@ -207,7 +217,7 @@ helm search repo issue-tracker --versions
 
 Install `issue-tracker/issue-tracker` instead of the local chart path. Chart archives are immutable and retained in [GitHub Releases](https://github.com/ricsam/issue-tracker/releases); maintainers must bump `Chart.yaml`'s version whenever chart content changes.
 
-Chart **0.25.0** includes first-party plugins, the r5d integration and the bearer-authenticated MCP endpoint. Choose the verified application SHA tag from its [release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.25.0), then follow [the deployment guide](docs/deployment.md). The chart still requires an explicit `image.tag`: upgrading the chart alone does not replace an old application image. Back up all of `/data` and preserve the settings-key Secret before migration v19; upgrades from 0.22.0 also run v17 (draft privacy) and v18 (API credentials). Never run an older image against migrated data or use `--atomic`/`helm rollback` alone: recovery requires the pre-upgrade backup with its matching image/chart. Plugins start disabled. Claim the first administrator privately before enabling public ingress.
+Chart **0.26.0** adds nested sub-issues below the issue body, with parent navigation, completion progress, and permission-safe creation, linking and removal. Choose the verified application SHA tag from its [release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.26.0), then follow [the deployment guide](docs/deployment.md). The chart still requires an explicit `image.tag`: upgrading the chart alone does not replace an old application image. Back up all of `/data` and preserve the settings-key Secret before migration v20; upgrades from older releases also run their intervening migrations. Never run an older image against migrated data or use `--atomic`/`helm rollback` alone: recovery requires the pre-upgrade backup with its matching image/chart. Existing deployment values remain valid. Claim the first administrator privately before enabling public ingress.
 
 ## Documentation
 

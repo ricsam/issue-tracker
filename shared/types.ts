@@ -46,6 +46,10 @@ export interface BoardSettings {
   cards: BoardCard[];
 }
 export type IssueReference = Pick<Issue, "id" | "number" | "title" | "state">;
+export interface IssueRelationships {
+  parent: IssueReference | null;
+  subIssues: IssueReference[];
+}
 export interface Issue {
   /** Global sequential integer key serialized as a canonical decimal string. */
   id: string;

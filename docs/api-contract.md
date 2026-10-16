@@ -97,6 +97,21 @@ Read scope exposes `issue_get`, `issue_list`, `project_list`, `project_lanes`. R
 | GET | `/api/uploads/:id/:name` | Authorized download following draft/saved-reference access; raster images inline, other files forced attachment with nosniff and restrictive CSP |
 | GET | `/healthz`, `/readyz` | Public minimal probes |
 
+## Sub-issues
+
+Migration 20 transactionally adds `issue_relationships` (one parent per child, indexed parent lookup, foreign keys and a self-link check). Startup is idempotent and preserves all existing data. Back up the data directory before upgrading; rollback requires restoring that backup.
+
+- `GET /api/issues/:id/relationships` → `IssueRelationships` directly: `{parent: IssueReference|null, subIssues: IssueReference[]}`.
+- `POST /api/issues/:id/sub-issues` with `{issueId:string}` attaches an existing child and returns the parent's `IssueRelationships`.
+- `DELETE /api/issues/:id/sub-issues/:childId` detaches that pair and returns the parent's `IssueRelationships`.
+- Both issue creation routes additionally accept `parentId?:string`. Creation and attachment are atomic; failure leaves no issue, board placement or history behind. Existing create response shapes are unchanged.
+
+References contain only `{id,number,title,state}`. Children are ordered by numeric ID. All IDs use canonical decimal strings. Reads authorize the requested issue and filter every related endpoint against current permissions; hidden parents appear as null and hidden children are omitted without counts or placeholders. Relationships are not embedded in issue lists/details.
+
+Mutations require read access and active (unarchived) projects for both endpoints. Draft endpoints are rejected (409; inaccessible drafts return 404). Closed and cross-project/workspace published issues are supported. Nesting is allowed; self-links, cycles and a different existing parent return 409. The existing-parent conflict is generic even if that parent is hidden or archived; remove it explicitly with access to both endpoints (and restore archived projects first). No old parent metadata is returned. Attaching the same pair and detaching an absent pair are idempotent after authorization; neither silently reparents. Missing/inaccessible endpoints return 404, malformed inputs 400, anonymous requests 401, and read-only bearer mutations 403.
+
+Moves, access revocation, archive/restore and close/reopen preserve relationships without cascading lifecycle changes. Link changes do not write text history or copy related IDs/titles into another issue's history. This deliberately avoids durable cross-project disclosure after later access changes. Existing issue history is otherwise unchanged. Cookie CSRF and bearer read/write scopes apply as for other data routes.
+
 ## Project and attachment authorization
 
 `Project` includes `visibility:"public"|"private"`, `ownerId:string|null`, and `sharedUserIds:string[]`. Public is readable by all **authenticated** users, never anonymous users. Private is readable by its owner, explicit shared users, and administrators. Published unlinked issues remain workspace-wide. Personal drafts additionally require creator identity, with no administrator or project-owner exception. All direct project/issue/comment/history routes and every mutation enforce this boundary; inaccessible targets return 404. Lists, board maps, references, and pins omit inaccessible data. Readable projects retain existing collaboration permissions: metadata, archive/restore, issue content and boards do not require ownership. Comment edit/delete still additionally require author/admin privileges.

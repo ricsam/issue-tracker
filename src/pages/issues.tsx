@@ -1015,6 +1015,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                   aria-label="Close issue details" onClick={closeDetails}><X size={18} /></Button>
               </>}
               onBoardChanged={listBoardChanged}
+              onCreated={issueCreated}
               onPendingChange={onPendingChange}
               onSaved={(updated) => {
                 if (all) {

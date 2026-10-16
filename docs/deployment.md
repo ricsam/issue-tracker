@@ -10,7 +10,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.25.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.26.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -150,6 +150,14 @@ unset ADMIN_PASSWORD
 In Kubernetes, mount the retained claim in a temporary operator-controlled recovery pod using the same image, UID and filesystem group, after stopping the Deployment and confirming its pod has terminated. Do not mount SQLite into two running app instances. Restore one replica after recovery. Never delete the PVC to recover login access.
 
 ## Persistence and upgrades
+
+### Upgrading to 0.26.0
+
+Version 0.26.0 adds nested sub-issues directly below the issue body, before discussion, in full-page and sidebar details. Create and link a child atomically, attach an existing published issue, remove either end of the relationship, navigate to the parent, and view completion progress for visible direct children. Each child has one parent; self-links and cycles are rejected. Relationships never grant access or cascade closing, board placement, or project moves. Personal drafts must be published before linking.
+
+Migration v20 additively creates the relationship table without changing existing issues, comments, boards or timestamps. Back up the complete `/data` directory and preserve the settings-encryption-key Secret before upgrading. Avoid automatic Helm rollback (`--atomic`) across migrations; recovery requires the pre-upgrade backup and matching image/chart, preserving newer writes separately. Earlier draft/privacy migration warnings still apply when upgrading from older versions.
+
+No deployment-value changes are required. Preserve PVC bindings, Secrets, OIDC settings and ingress hosts. Select the verified SHA image in the [0.26.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.26.0): upgrading the chart alone does not replace an explicit `image.tag`. Publishing this chart does not upgrade running deployments.
 
 ### Upgrading to 0.25.0
 

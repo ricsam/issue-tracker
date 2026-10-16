@@ -14,6 +14,7 @@ import { ToastViewport, useNotification } from "./ui/snackbar";
 
 export function CreateIssueDialog({
   project,
+  parentIssue,
   onCreated,
   onClose,
   canViewIssue,
@@ -26,6 +27,8 @@ export function CreateIssueDialog({
   standalone?: boolean;
   onSignOut?: () => void;
   project?: Project | null;
+  /** Create and link atomically; personal drafts cannot be sub-issues. */
+  parentIssue?: Issue;
   existingTags?: string[];
   onCreated: (issue: Issue) => void;
   onBoardChanged?: (projectId: string, board: BoardSettings) => void;
@@ -35,7 +38,7 @@ export function CreateIssueDialog({
 }) {
   const { user, users, projects } = useWorkspace();
   const notify = useNotification();
-  const [projectId, setProjectId] = useState(() => creationProject(projects, readCreationPreferences(user.id).projectId, project));
+  const [projectId, setProjectId] = useState(() => parentIssue ? parentIssue.projectId ?? "" : creationProject(projects, readCreationPreferences(user.id).projectId, project));
   const selectedProject = projects.find((candidate) => candidate.id === projectId && !candidate.archivedAt);
   const [requestedLane, setLane] = useState(() => readCreationPreferences(user.id).lanes[projectId] ?? "");
   const [boardResult, setBoardResult] = useState<{ projectId: string; board?: BoardSettings; error?: string } | null>(null);
@@ -108,7 +111,7 @@ export function CreateIssueDialog({
         selectedProject ? `/api/projects/${encodeURIComponent(selectedProject.slug)}/issues` : "/api/issues",
         {
           method: "POST",
-          body: JSON.stringify({ body, state, ...(selectedProject && lane ? { lane } : {}) }),
+          body: JSON.stringify({ body, state, ...(parentIssue ? { parentId: parentIssue.id } : {}), ...(selectedProject && lane ? { lane } : {}) }),
         },
       );
       setCreated(issue);
@@ -180,19 +183,20 @@ export function CreateIssueDialog({
                 const next = event.target.value;
                 setProjectId(next);
                 setLane(readCreationPreferences(user.id).lanes[next] ?? "");
-                if (!project) rememberCreationSelection(user.id, { projectId: next });
+                if (!project && !parentIssue) rememberCreationSelection(user.id, { projectId: next });
                 setCreatedTags([]);
               }}>
                 <option value="">No project</option>
                 {projects.filter((candidate) => !candidate.archivedAt).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
               </select>
             </label>
-            <label>Visibility
+            {parentIssue && <p className="muted">Sub-issue of <strong>!{parentIssue.number} {parentIssue.title}</strong>. Creating this issue publishes it to the selected project’s audience.</p>}
+            {!parentIssue && <label>Visibility
               <select aria-label="Visibility" value={state} onChange={(event) => setState(event.target.value as "open" | "draft")}>
                 <option value="open">Published issue</option>
                 <option value="draft">Personal draft</option>
               </select>
-            </label>
+            </label>}
             {draft && <p className="muted">Only you can see this draft, while you have access to its project. Publish it to share with others or add it to a board.</p>}
             {selectedProject && !draft && <div>
               <label>Board lane
@@ -253,14 +257,14 @@ export function CreateIssueDialog({
               {created ? "Done" : "Cancel"}
             </Button>}
             <Button disabled={busy || awaitingRememberedLane || !body.trim()} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
-              {busy ? "Creating…" : draft ? "Save draft" : "Create issue"}
+              {busy ? "Creating…" : draft ? "Save draft" : parentIssue ? "Create sub-issue" : "Create issue"}
             </Button>
           </div>
         </div>
       </form>
     </>;
   return standalone ? <main className="standalone-create">{content}</main> : (
-    <Modal className="create-issue-dialog" title="Create issue" open
+    <Modal className="create-issue-dialog" title={parentIssue ? "Create sub-issue" : "Create issue"} open
       onOpenChange={(open) => !open && !submitting.current && close()}
       onOpenAutoFocus={(event) => event.preventDefault()}>{content}</Modal>
   );

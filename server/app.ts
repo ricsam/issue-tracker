@@ -13,6 +13,7 @@ import {
   type BoardSettings,
   type User,
   type Issue,
+  type IssueRelationships,
   type Comment,
   type Project,
 } from "../shared/types";
@@ -253,6 +254,37 @@ export function createApp(options: AppOptions = {}) {
     const i = issue(issueId, user);
     if (i.projectId !== null) requireActiveProjectId(i.projectId, user);
     return i;
+  };
+  const relationships = (issueId: string, user: User): IssueRelationships => {
+    const references = (direction: "parent" | "children") => {
+      const join = direction === "parent" ? "r.parentId=i.id WHERE r.childId=?" : "r.childId=i.id WHERE r.parentId=?";
+      const rows = db.query(`SELECT i.id,i.title,i.closedAt FROM issue_relationships r JOIN issues i ON ${join} AND i.isDraft=0 AND ${visibleIssueSql} ORDER BY i.id`)
+        .all(issueId, ...issueAccessParams(user)) as { id: number; title: string; closedAt: string | null }[];
+      return rows.map((row) => ({ id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const }));
+    };
+    return { parent: references("parent")[0] ?? null, subIssues: references("children") };
+  };
+  const relationshipEndpoints = (parentId: string, childId: string, user: User) => {
+    // Check both read permissions before revealing either endpoint's lifecycle state.
+    const parent = issue(parentId, user), child = issue(childId, user);
+    if (parent.state === "draft" || child.state === "draft") fail(409, "Draft issues cannot have relationships");
+    for (const endpoint of [parent, child]) if (endpoint.projectId !== null) requireActiveProjectId(endpoint.projectId, user);
+  };
+  // Called inside an immediate transaction, including create+link.
+  const attachSubIssue = (parentId: string, childId: string, user: User) => {
+    relationshipEndpoints(parentId, childId, user);
+    if (parentId === childId) fail(409, "Invalid issue relationship");
+    const old = db.query("SELECT parentId FROM issue_relationships WHERE childId=?").get(childId) as { parentId: number } | null;
+    if (old) {
+      if (String(old.parentId) === parentId) return;
+      // Never disclose the old parent's ID, title, project or lifecycle.
+      fail(409, "Issue relationship conflict");
+    }
+    const cycle = db.query(`WITH RECURSIVE ancestors(id) AS (
+      SELECT ? UNION SELECT r.parentId FROM issue_relationships r JOIN ancestors a ON r.childId=a.id
+    ) SELECT 1 FROM ancestors WHERE id=CAST(? AS INTEGER)`).get(Number(parentId), childId);
+    if (cycle) fail(409, "Issue relationship conflict");
+    db.query("INSERT INTO issue_relationships (childId,parentId) VALUES (?,?)").run(childId, parentId);
   };
   const board = (projectId: string): BoardSettings => {
     const row = db
@@ -1011,7 +1043,7 @@ export function createApp(options: AppOptions = {}) {
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");
-    const fields = issueFields.extend({ lane: laneField.nullable().optional(), state: z.enum(["open", "draft"]).default("open") });
+    const fields = issueFields.extend({ lane: laneField.nullable().optional(), state: z.enum(["open", "draft"]).default("open"), parentId: issueIdField.optional() });
     const input = (slug ? fields : fields.extend({ projectId: text(100).nullable().optional() }))
       .parse(await json(c)) as z.infer<typeof fields> & { projectId?: string | null };
     const originalBody = input.title === undefined ? input.body : prependLegacyTitle(input.title, input.body);
@@ -1045,6 +1077,7 @@ export function createApp(options: AppOptions = {}) {
       ) as { id: number };
       const uid = String(inserted.id);
       db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
+      if (input.parentId !== undefined) attachSubIssue(input.parentId, uid, c.get("user"));
       syncIssueTaggedUsers(db, uid);
       retainAttachmentReferences(db, uid, [body]);
       if (input.lane != null && projectId !== null) {
@@ -1074,6 +1107,30 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null; isDraft: number }[]).map((row) => ({
       id: String(row.id), number: row.id, title: row.title, state: row.isDraft ? "draft" as const : row.closedAt ? "closed" as const : "open" as const,
     })) });
+  });
+  app.get("/api/issues/:id/relationships", (c) => {
+    const canonical = issueIdField.safeParse(c.req.param("id"));
+    if (!canonical.success) return fail(404, "Issue not found");
+    issue(canonical.data, c.get("user"));
+    return c.json(relationships(canonical.data, c.get("user")));
+  });
+  app.post("/api/issues/:id/sub-issues", async (c) => {
+    const parentId = issueIdField.parse(c.req.param("id"));
+    const { issueId: childId } = z.object({ issueId: issueIdField }).strict().parse(await json(c));
+    const result = db.transaction(() => {
+      attachSubIssue(parentId, childId, c.get("user"));
+      return relationships(parentId, c.get("user"));
+    }).immediate();
+    return c.json(result);
+  });
+  app.delete("/api/issues/:id/sub-issues/:childId", (c) => {
+    const parentId = issueIdField.parse(c.req.param("id")), childId = issueIdField.parse(c.req.param("childId"));
+    const result = db.transaction(() => {
+      relationshipEndpoints(parentId, childId, c.get("user"));
+      db.query("DELETE FROM issue_relationships WHERE parentId=? AND childId=?").run(parentId, childId);
+      return relationships(parentId, c.get("user"));
+    }).immediate();
+    return c.json(result);
   });
   app.get("/api/issues/:id/history", (c) => {
     const canonical = issueIdField.safeParse(c.req.param("id"));

@@ -1,0 +1,29 @@
+.issue-relationships { display: grid; gap: 14px; min-width: 0; border: 1px solid #e5e1ec; border-radius: 10px; padding: 16px; margin: 20px 0; }
+.issue-parent { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; padding-bottom: 14px; border-bottom: 1px solid #ebe7f0; font-size: 12px; }
+.issue-parent > a { color: #7050d9; overflow-wrap: anywhere; flex: 1 1 180px; }
+.issue-parent > a:hover, .sub-issues-list a:hover { text-decoration: underline; }
+.sub-issues-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.sub-issues-heading h2 { display: flex; align-items: center; gap: 7px; font-size: 15px; }
+.sub-issues-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sub-issues-actions .btn { font-size: 12px; padding: 6px 9px; min-height: 32px; }
+.sub-issues-progress { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #70667e; }
+.sub-issues-progress progress { width: 110px; height: 7px; border: none; border-radius: 5px; overflow: hidden; accent-color: #7050d9; background: #eee9f7; }
+.sub-issues-progress progress::-webkit-progress-bar { background: #eee9f7; }
+.sub-issues-progress progress::-webkit-progress-value { background: #7050d9; }
+.sub-issues-progress progress::-moz-progress-bar { background: #7050d9; }
+.sub-issues-list { margin: 0; padding: 0; list-style: none; }
+.sub-issues-list > li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 0; border-top: 1px solid #f0edf4; }
+.sub-issues-list a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sub-issues-note { font-size: 11px; line-height: 1.5; }
+.sub-issue-picker { max-width: 580px; }
+.sub-issue-options { display: grid; max-height: min(360px, 45vh); overflow: auto; }
+.sub-issue-options > button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid #e5e1ec; background: white; border-radius: 6px; padding: 11px; margin: 3px 0; }
+.sub-issue-options > button > span:not(.state-badge) { min-width: 0; overflow-wrap: anywhere; }
+.sub-issue-options > button > svg:last-child { margin-left: auto; }
+.sub-issue-options > button:hover:not(:disabled) { background: #f8f5fc; }
+.sub-issue-options > button:focus-visible { outline: 2px solid #8a6ae1; outline-offset: -2px; }
+@media (max-width: 600px) {
+  .issue-relationships { padding: 12px; }
+  .sub-issues-actions { width: 100%; }
+  .sub-issues-list > li { gap: 6px; font-size: 12px; }
+}

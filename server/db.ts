@@ -14,7 +14,7 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 = 19) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 = 20) {
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -419,6 +419,19 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
         PRIMARY KEY(pluginId,issueId,externalId)
       );
       INSERT INTO migrations VALUES (19);
+    `);
+  }).immediate();
+  if (targetVersion < 20) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=20").get()) return;
+    db.exec(`
+      CREATE TABLE issue_relationships (
+        childId INTEGER PRIMARY KEY REFERENCES issues(id),
+        parentId INTEGER NOT NULL REFERENCES issues(id),
+        CHECK (childId != parentId)
+      );
+      CREATE INDEX issue_relationships_parent ON issue_relationships(parentId,childId);
+      INSERT INTO migrations VALUES (20);
     `);
   }).immediate();
   return db;

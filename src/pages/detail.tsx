@@ -25,6 +25,7 @@ import { ExternalLinks, PluginIssueActions } from "../components/plugin-issue";
 import { ShareIssue } from "../components/share-issue";
 import { CopyIssueBody } from "../components/copy-issue-body";
 import { IssueHistory } from "../components/issue-history";
+import { IssueRelationshipsSection } from "../components/issue-relationships";
 import { RichEditor } from "../components/rich-editor";
 import { Markdown } from "../components/markdown";
 import { IssueStateBadge } from "../components/lifecycle";
@@ -53,6 +54,7 @@ type IssueDetailsProps = {
   boards?: Record<string, BoardSettings>;
   existingTags?: string[];
   onSaved?: (issue: Issue) => void;
+  onCreated?: (issue: Issue) => void;
   onBoardChanged?: (projectId: string, board: BoardSettings) => void;
   onPendingChange?: (pending: boolean) => void;
 };
@@ -141,6 +143,7 @@ function IssueDetailForm({
   id,
   embedded = false,
   onSaved,
+  onCreated,
   onBoardChanged,
   onPendingChange,
   initialDetail,
@@ -161,6 +164,7 @@ function IssueDetailForm({
   const [posting, setPosting] = useState(false);
   const notify = useNotification();
   const [moving, setMoving] = useState(false);
+  const [relating, setRelating] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   const submitting = useRef(false);
   const [creating, setCreating] = useState(false);
@@ -170,7 +174,7 @@ function IssueDetailForm({
   const catalog = useProjectTags(project?.slug, issue.projectId === initialDetail.issue.projectId ? existingTags : undefined);
   const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
   const dirty = issue.body !== persisted.body;
-  useIssueSaveShortcut(form, dirty && !busy && !changingState && !moving && !archived, id);
+  useIssueSaveShortcut(form, dirty && !busy && !changingState && !moving && !relating && !archived, id);
   useIssueCreationHandler(() => setCreating(true), !embedded);
   const setBreadcrumb = useIssueBreadcrumb();
   useEffect(() => {
@@ -178,7 +182,7 @@ function IssueDetailForm({
     setBreadcrumb(persisted);
     return () => setBreadcrumb(null);
   }, [embedded, persisted, setBreadcrumb]);
-  const pending = dirty || !!comment.trim() || busy || posting || changingState || moving;
+  const pending = dirty || !!comment.trim() || busy || posting || changingState || moving || relating;
   // The post-creation toast can outlive its dialog; always guard the latest draft.
   const currentPending = useRef(pending);
   currentPending.current = pending;
@@ -191,7 +195,7 @@ function IssueDetailForm({
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!dirty || submitting.current || busy || changingState || moving || archived || form.current?.closest("[inert]")) return;
+    if (!dirty || submitting.current || busy || changingState || moving || relating || archived || form.current?.closest("[inert]")) return;
     submitting.current = true;
     setBusy(true);
     setError("");
@@ -219,7 +223,7 @@ function IssueDetailForm({
   }
   // Close/reopen immediately without saving or discarding other unsaved edits.
   async function changeState(state: IssueState) {
-    if (busy || changingState || moving || archived || (issue.state === "draft" && dirty)) return;
+    if (busy || changingState || moving || relating || archived || (issue.state === "draft" && dirty)) return;
     setChangingState(true);
     setError("");
     try {
@@ -296,7 +300,7 @@ function IssueDetailForm({
             }}>ISSUE !{issue.number}</Link></h2>
             <IssueStateBadge state={issue.state} />
             <IssuePlacementControls issue={persisted} board={issue.projectId ? boards?.[issue.projectId] : undefined}
-              disabled={busy || changingState || posting} onBusyChange={setMoving}
+              disabled={busy || changingState || posting || relating} onBusyChange={setMoving}
               onMoved={(updated) => {
                 setIssue((current) => ({ ...updated, body: current.body }));
                 setPersisted(updated);
@@ -331,7 +335,7 @@ function IssueDetailForm({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={busy || changingState || moving || (draft && dirty)}
+                  disabled={busy || changingState || moving || relating || (draft && dirty)}
                   onClick={() => void changeState(draft || closed ? "open" : "closed")}
                 >
                   {closed ? <RotateCcw size={15} /> : <CircleCheck size={15} />}
@@ -343,8 +347,8 @@ function IssueDetailForm({
                       ? "Reopen issue"
                       : "Close issue"}
                 </Button>
-                <Button type="button" variant="secondary" disabled={!dirty || busy || changingState || moving} onClick={() => { update({ body: persisted.body }); notify("Body changes discarded"); }}>Discard changes</Button>
-                <Button disabled={!dirty || busy || changingState || moving} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
+                <Button type="button" variant="secondary" disabled={!dirty || busy || changingState || moving || relating} onClick={() => { update({ body: persisted.body }); notify("Body changes discarded"); }}>Discard changes</Button>
+                <Button disabled={!dirty || busy || changingState || moving || relating} title={saveIssueTooltip()} aria-keyshortcuts={SAVE_ISSUE_KEYS}>
                   <Save size={15} />
                   {busy ? "Saving…" : "Save changes"}
                 </Button>
@@ -378,6 +382,14 @@ function IssueDetailForm({
           </div>
         </fieldset>
       </form>
+      {!draft && <IssueRelationshipsSection issue={persisted} readOnly={archived} disabled={busy || changingState || moving || posting}
+        revision={historyRevision} onChanged={refreshHistory} onBusyChange={setRelating}
+        canNavigate={() => !currentPending.current || window.confirm("Discard unsaved issue changes or comment?")}
+        onCreated={(created) => {
+          onCreated?.(created);
+          if (created.projectId === persisted.projectId) setNewTags((current) => [...new Set([...current, ...created.labels])]);
+          if (!onCreated) void refresh().catch((cause) => setError(`Sub-issue created, but workspace counts could not refresh: ${message(cause)}`));
+        }} onBoardChanged={onBoardChanged} />}
       <section className="comments">
         {comments.length > 0 && <h2>
           <MessageSquare size={18} /> Discussion{" "}
