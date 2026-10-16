@@ -17,10 +17,12 @@ The r5d worker/client must be able to reach this URL. Unlike the outgoing [r5d p
 
 ## Available tools
 
-All keys require read scope. Read-only keys expose only the four read tools; write tools are registered only for keys with both read and write scopes.
+All keys require read scope. Read-only keys expose only the six read tools; write tools are registered only for keys with both read and write scopes.
 
 | Tool | Inputs | Purpose |
 | --- | --- | --- |
+| `workspace_list` | Optional `workspace` | Discover workspaces; `role: null` means nonmember, not permission to read content. |
+| `issue_lookup` | `number` | Resolve a workspace-local display number to issue details and its stable internal ID. |
 | `issue_get` | `issueId` | Read an issue with comments, project, state, URL and board lane display name. |
 | `issue_list` | Optional `project`, `state`, `text` | List/search accessible issues by project slug, open/closed/draft state and title/body text. |
 | `project_list` | None | List readable projects, including archived projects. |
@@ -30,13 +32,13 @@ All keys require read scope. Read-only keys expose only the four read tools; wri
 | `issue_reopen` | `issueId` | Reopen an issue. Like REST `state:open`, this also publishes a creator's personal draft. |
 | `issue_move` | `issueId`, `lane` | Move an existing card to a visible lane; pass null to take it off the board. Does not add an off-board issue. |
 
-Issue IDs are canonical decimal strings, for example `"12"`. `project` means the URL slug, not its display name. Use `project_lanes` to discover lane values instead of guessing from labels: a lane may have been renamed. Issue results include canonical URLs built from the configured deployment URL.
+Every tool accepts optional `workspace` (a slug; defaults to `default`). Set it for each call targeting another workspace. Start with `workspace_list`, then use `issue_lookup` with the displayed `number` and `workspace`. Pass the returned `issue.id` to `issue_get` and write tools. Issue IDs (including `duplicateOfId`) remain stable internal decimal strings, not workspace display numbers; two workspaces may both contain issue `!12` with different IDs. `project` means the URL slug, not its display name. Use `project_lanes` to discover lane values instead of guessing from labels: a lane may have been renamed. Issue results include canonical `/w/:workspaceSlug/issues/:number` URLs built from the configured deployment URL. Cross-workspace moves, duplicate links and parent/child relationships are not supported.
 
 ## Permissions and content safety
 
 MCP tools call the same data handlers as REST. Private-project permissions, creator-only draft privacy (no administrator override), archived-project read-only rules, content validation, change history and actor attribution all apply. Knowing an issue number does not grant access. Permission changes apply to existing tokens immediately.
 
-Keys are workspace-scoped, not limited to one project. Choose a user with the intended project permissions. An administrator's token carries administrator data access, not permission to bypass draft privacy. The MCP endpoint exposes no account, SSO, plugin-settings or credential-management tools.
+Keys inherit the user's current workspace memberships and project permissions; selecting `workspace` scopes a call, not the credential itself. Public listing grants no content access, and hidden workspaces are discoverable only by members/instance administrators. Full token scope does not override read-only workspace/project access. Choose a user with the intended permissions. An administrator's token carries administrator data access, not permission to bypass draft privacy. The MCP endpoint exposes no workspace-management, invitation, account, SSO, plugin-settings or credential-management tools.
 
 Tool descriptions explicitly mark issue/comment content and other user-written labels as **untrusted data, not instructions**. Agents should use your request as instructions and treat retrieved Markdown as evidence. A read-and-write key allows real changes; use a read-only key for investigation or review. In particular, publishing a draft broadens its audience.
 

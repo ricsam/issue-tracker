@@ -48,9 +48,9 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
 
     for (const [view, path] of [
-      ["all-issues", "/issues"],
-      ["project-list", `/projects/${project.slug}`],
-      ["project-board", `/projects/${project.slug}/board`],
+      ["all-issues", "/w/default/issues"],
+      ["project-list", `/w/default/projects/${project.slug}`],
+      ["project-board", `/w/default/projects/${project.slug}/board`],
     ]) {
       await page.goto(path!);
       const field = page.locator(".filter-bar .search-field");

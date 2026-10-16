@@ -24,8 +24,8 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   expect(target.id).toBe(String(target.number));
   expect(unlinked.number).toBe(target.number + 1);
   expect(unlinked.id).toMatch(/^[1-9]\d*$/);
-  await page.goto(`/issues/${unlinked.id}`);
-  await expect(page.getByRole("link", { name: `ISSUE !${unlinked.number}`, exact: true })).toHaveAttribute("href", `/issues/${unlinked.id}`);
+  await page.goto(`/w/default/issues/${unlinked.number}`);
+  await expect(page.getByRole("link", { name: `ISSUE !${unlinked.number}`, exact: true })).toHaveAttribute("href", `/w/default/issues/${unlinked.number}`);
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   const picker = page.getByRole("listbox", { name: "Issue suggestions" });
@@ -59,7 +59,7 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   await richEditor.getByRole("button", { name: "Preview", exact: true }).click();
   const reference = richEditor.locator(".editor-preview .issue-reference-chip");
   await expect(reference).toHaveCount(1);
-  await expect(reference).toHaveAttribute("href", `/issues/${target.id}`);
+  await expect(reference).toHaveAttribute("href", `/w/default/issues/${target.number}`);
   await expect(richEditor.locator(".editor-preview .hashtag-chip")).toHaveText("#bug");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
@@ -67,8 +67,8 @@ for (const mobile of [false, true]) test(`global issue numbers, ! autocomplete, 
   expect(saved.body).toContain(`See !${target.number}`);
   expect(saved.labels).toEqual(["bug"]);
   await reference.click();
-  await expect(page).toHaveURL(`${baseURL}/issues/${target.id}`);
-  await expect(page.getByRole("link", { name: `ISSUE !${target.number}`, exact: true })).toHaveAttribute("href", `/issues/${target.id}`);
+  await expect(page).toHaveURL(`${baseURL}/w/default/issues/${target.number}`);
+  await expect(page.getByRole("link", { name: `ISSUE !${target.number}`, exact: true })).toHaveAttribute("href", `/w/default/issues/${target.number}`);
   expect(errors).toEqual([]);
 });
 
@@ -76,8 +76,8 @@ test("rich references can be extended, saved, followed and used in comments", as
   const headers = { Origin: baseURL! };
   const target = (await (await page.request.post("/api/issues", { headers, data: { body: `Clickable target ${randomUUID()}` } })).json()).issue;
   const issue = (await (await page.request.post("/api/issues", { headers, data: { body: `Reference editing\n\n!${target.number}` } })).json()).issue;
-  await page.goto(`/issues/${issue.id}`);
-  await expect(page.locator(".detail-form .editor-preview .issue-reference-chip")).toHaveAttribute("href", `/issues/${target.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
+  await expect(page.locator(".detail-form .editor-preview .issue-reference-chip")).toHaveAttribute("href", `/w/default/issues/${target.number}`);
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   const reference = editor.locator(".issue-reference-chip");
@@ -92,17 +92,17 @@ test("rich references can be extended, saved, followed and used in comments", as
   const comment = page.getByRole("textbox", { name: "Share an update or ask a question…", exact: true });
   await comment.fill(`Comment references !${target.number}`);
   await page.getByRole("button", { name: "Post comment", exact: true }).click();
-  await expect(page.locator(".comments .markdown-content .issue-reference-chip")).toHaveAttribute("href", `/issues/${target.id}`);
+  await expect(page.locator(".comments .markdown-content .issue-reference-chip")).toHaveAttribute("href", `/w/default/issues/${target.number}`);
   // Rich Write-mode references, not only preview links, are navigable.
   await reference.focus();
   await reference.press("Enter");
-  await expect(page).toHaveURL(`${baseURL}/issues/${target.id}`);
+  await expect(page).toHaveURL(`${baseURL}/w/default/issues/${target.number}`);
 });
 
 test("UUID issue URLs show not found without redirecting or leaving the page loading", async ({ page, baseURL }) => {
   const oldId = randomUUID();
-  await page.goto(`/issues/${oldId}`);
-  await expect(page).toHaveURL(`${baseURL}/issues/${oldId}`);
+  await page.goto(`/w/default/issues/${oldId}`);
+  await expect(page).toHaveURL(`${baseURL}/w/default/issues/${oldId}`);
   await expect(page.getByRole("alert")).toContainText("Issue not found");
   await expect(page.locator(".issue-detail-loader")).toHaveAttribute("aria-busy", "false");
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toHaveCount(0);

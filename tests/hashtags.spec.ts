@@ -8,7 +8,7 @@ test("body hashtags derive labels across rich creation, source editing and reloa
     headers, data: { ...(setupRequired ? { name: "Alex Morgan" } : {}), email: "alex@example.test", password: "local-browser-test-password" },
   })).ok()).toBeTruthy();
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Hashtags ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
   await expect(dialog.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
@@ -26,14 +26,14 @@ test("body hashtags derive labels across rich creation, source editing and reloa
   expect(issues[0].labels).toEqual(["bug", "design-2"]);
   await dialog.getByRole("link", { name: "View issue" }).click();
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(`/projects/${project.slug}`);
+  await expect(page).toHaveURL(`/w/default/projects/${project.slug}`);
   await page.getByRole("link", { name: /^ISSUE !\d+$/ }).click();
   const form = page.locator(".detail-form");
   await expect(form.getByRole("textbox", { name: "Labels", exact: true })).toHaveCount(0);
   await expect(page.locator(".back-link")).toHaveCount(0);
   const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb", exact: true });
   await expect(breadcrumb).toContainText(`Issue !${issues[0].number}`);
-  await expect(breadcrumb.getByRole("link", { name: project.name, exact: true })).toHaveAttribute("href", `/projects/${project.slug}`);
+  await expect(breadcrumb.getByRole("link", { name: project.name, exact: true })).toHaveAttribute("href", `/w/default/projects/${project.slug}`);
   await page.screenshot({ path: "test-results/clean-issue-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   // Wait for the existing responsive navigation transition before capturing.

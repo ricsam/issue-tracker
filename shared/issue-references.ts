@@ -1,11 +1,15 @@
-/** Canonical, globally unique issue IDs. Other entity IDs remain UUIDs. */
+/** Canonical positive integer identifiers / workspace-local issue numbers. */
 export function isIssueId(value: string): boolean {
   return /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value));
 }
 
+/** Parse a canonical workspace issue link. The result is a display number, not a database ID. */
+export function issueReference(url: string): { workspaceSlug: string; number: string } | null {
+  const match = /^\/w\/([a-z0-9]+(?:-[a-z0-9]+)*)\/issues\/([1-9]\d*)$/.exec(url);
+  return match && isIssueId(match[2]!) ? { workspaceSlug: match[1]!, number: match[2]! } : null;
+}
 export function issueReferenceId(url: string): string | null {
-  const match = /^\/issues\/([1-9]\d*)$/.exec(url);
-  return match && isIssueId(match[1]!) ? match[1]! : null;
+  return issueReference(url)?.number ?? null;
 }
 
 /** Prose only; callers exclude Markdown links, images, HTML and code. */

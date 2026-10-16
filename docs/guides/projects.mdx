@@ -7,14 +7,14 @@ Projects group related issues into a list and a board.
 Use a project for a product, a team initiative, or a clearly scoped body of work.
 
 <Note>
-  **Public** means all signed-in users, never anonymous visitors. **Private** means the owner, explicitly shared users, and administrators only. Issues without a project remain visible to the whole signed-in workspace.
+  Select a [workspace](/guides/workspaces) first. Membership defaults and project Read/Full overrides control access. Public workspace listing does not grant content access. Unlinked issues use the member's default access.
 </Note>
 
 ## Manage access
 
-New projects default to public and belong to their creator. Choose private visibility to limit the audience, and select the users to share with. Open **Manage access** on the project's List or Board to change visibility, transfer ownership to an existing user, or update sharing. Only the owner or an administrator sees this action; access settings remain editable for archived projects. Transferring a private project without keeping yourself under **Shared users** removes your access and returns you to the project list.
+New projects belong to their creator. Configure workspace membership defaults and project-specific overrides for the intended audience. Legacy project visibility/owner/sharing fields remain available; migrated Default memberships retain private-project owner/sharing restrictions until explicitly converted with `convertLegacyAccess:true` (unchanged saves preserve legacy restrictions). Only authorized owners/administrators can change project access settings.
 
-Sharing grants collaboration, not a read-only role: readers can edit active project details, issues, and boards, and archive or restore projects. Comment editing and deletion still require the comment author or an administrator. Tagging someone does not share a private project with them.
+Full access permits collaborative writes to active project details, issues and boards, and archive/restore. Read access is read-only, even when an API key has write scope. Comment editing and deletion still require the comment author or an administrator. Tagging someone does not share a private project with them.
 
 Users who lose access stop seeing the project in lists, pins, issue references, and move destinations. Direct project, issue, comment, and history routes return not found. Saved pins return if access is restored. Attachments follow current issue access, including references retained in history.
 
@@ -26,10 +26,10 @@ On upgrade, existing projects remain public. Their owner is the earliest adminis
 2. Select **Create project**, or **Create your first project** in an empty workspace.
 3. Enter a **Project name**, such as `Website redesign`.
 4. Add an optional **Description** explaining the goal and scope.
-5. Choose **Visibility** and optionally select **Shared users**. Public is workspace-wide; private is limited to the owner, shared users, and administrators.
+5. Review project visibility/sharing and the workspace membership defaults and overrides; listing or visibility alone is not a membership grant.
 6. Select **Create project** to open the new project's issue list.
 
-Any authenticated member can create a project; administrator access is not required.
+Project creation requires Full default workspace access or workspace/instance administration privileges.
 You can change the name and description later using **Edit project**.
 
 | Field | Limit | Suggested content |
@@ -37,14 +37,14 @@ You can change the name and description later using **Edit project**.
 | Project name | Required; up to 100 characters | A short, recognizable initiative name |
 | Description | Up to 10,000 characters | Purpose, scope, and what belongs here |
 
-The project URL uses a generated slug derived from the name plus a random suffix.
+The project URL is `/w/WORKSPACE/projects/PROJECT`, using a generated project slug derived from the name plus a random suffix.
 You do not need to choose or manage that slug yourself.
 Copy the browser URL when directing teammates to the project.
 Recipients must sign in and have project access to see its data.
 
 ## Edit a project
 
-Open the project's **List** or **Board**, select **Edit project**, then update its name or description and choose **Save changes**. To change only the name, open the project's **⋮** menu in the sidebar and choose **Rename project**. The name is required; the description can be cleared. Any signed-in member with access can edit an active project.
+Open the project's **List** or **Board**, select **Edit project**, then update its name or description and choose **Save changes**. To change only the name, open the project's **⋮** menu in the sidebar and choose **Rename project**. The name is required; the description can be cleared. Members with Full access can edit an active project.
 
 Renaming keeps the project's URL, issue links, board, and history unchanged. The sidebar and project cards show the saved name immediately. Canceling a changed draft asks before discarding it, and a failed save keeps your draft for retry. Editing project details never saves or discards unsaved issue edits in the side panel.
 
@@ -71,8 +71,8 @@ Pins and their order are personal to your signed-in account and follow you acros
 ## Start organizing work
 
 Open a project card, then select **Create issue** to add the first task.
-Issues receive globally unique numbers across every project and unlinked issue, shown as `!1`, `!2`, and so on.
-Use `!12` in an issue or comment to link to that issue, or share its `/issues/12` URL.
+Issues receive workspace-local numbers across its projects and unlinked issues, shown as `!1`, `!2`, and so on.
+Use `!12` in an issue or comment to link to that issue, or share its `/w/WORKSPACE/issues/12` URL.
 
 Use **List** to scan issues; it starts with a **State is Open** filter that you can edit or remove.
 Use **Board** to plan selected work in lanes; see [the board guide](/guides/board).
@@ -92,16 +92,16 @@ They stay readable, including issues, comments, and the board, but are read-only
 Open issues stay open; archiving does not close them.
 
 To work in the project again, open it and select **Restore project**.
-Any signed-in member with access can archive or restore a project.
+Members with Full access can archive or restore a project.
 
 ## Plan for retained projects
 
 The current release has no project delete action.
-Issues can move between active projects you can access or become **No project** issues. Moving changes the audience of their content, comments, history, and attachments; unlinking makes them workspace-wide.
+Issues can move between active projects with Full access in the same workspace or become **No project** issues when default workspace access permits. Cross-workspace moves are not supported. Moving changes the audience of their content, comments, history, and attachments; unlinking makes them workspace-wide.
 Create projects deliberately rather than treating them as disposable folders.
 
 When work finishes, close its issues and archive the project to keep it as a reference.
-Use private visibility and explicit sharing for restricted work. Administrators retain access, and already-downloaded or copied information cannot be retracted.
+Use workspace membership defaults and project overrides for restricted work. Administrators retain access, and already-downloaded or copied information cannot be retracted.
 Review [current limitations](/admin/limitations) before inviting a broader audience.
 
 <CardGroup cols={2}>

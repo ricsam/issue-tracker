@@ -8,6 +8,8 @@ Its display title is derived from that body rather than entered in a separate fi
 Its discussion keeps comments alongside the work.
 Published issues are collaborative within their project's access rules; published unlinked issues are workspace-wide. Personal drafts are visible only to their creator, including in public projects. Issues can belong to a project or be unlinked.
 
+Choose a [workspace](/guides/workspaces) first. Read-only members can inspect content but cannot create/edit issues, comment, close/reopen or change boards. Mutations require Full access. Cross-workspace moves, duplicate targets and parent/child relationships are not supported.
+
 ## Create an issue
 
 1. Select **Create issue** in the sidebar or press **Alt+N**. You can also create from a project's **List** or **Board**.
@@ -19,7 +21,7 @@ Published issues are collaborative within their project's access rules; publishe
 
 New published issues are open; personal drafts have the Draft state and stay off-board. **Not on board** is the initial default; choosing a lane creates the issue and appends its card atomically. You can also [add existing issues later](/guides/board).
 The issue body must contain non-whitespace content; tags may be empty.
-Numbers are allocated from one global sequence across all projects and unlinked issues, displayed as `!12`, with URLs such as `/issues/12`. Moving an issue between projects keeps its number and URL; unlinked issues cannot join project boards.
+Numbers are allocated within each workspace across its projects and unlinked issues, displayed as `!12`, with URLs such as `/w/team/issues/12`. Internal issue IDs remain globally stable and are distinct from display numbers. Moving an issue between projects keeps its number and URL; unlinked issues cannot join project boards.
 
 ## Personal drafts
 
@@ -27,7 +29,7 @@ Choose **Personal draft** when creating an issue to keep it private. Other users
 
 Find saved drafts by choosing **Draft** in the **State** filter in a project table or **All issues**. The default **Open** filter hides them; removing the State filter includes all visible states. Your filter choice persists across reloads.
 
-Edit and save the draft, then select **Publish issue** when ready. Publishing shares the saved content, comments, and history with everyone who can access the project (or all signed-in users for **No project**). Save or discard body edits before publishing. Publishing cannot be undone by returning to draft. Moving a draft does not publish it, and drafts must be published before closing or adding to a board.
+Edit and save the draft, then select **Publish issue** when ready. Publishing shares the saved content, comments, and history with everyone who can access the project (or workspace members with default Read/Full access for **No project**). Save or discard body edits before publishing. Publishing cannot be undone by returning to draft. Moving a draft does not publish it, and drafts must be published before closing or adding to a board.
 
 ## Tags, mentions and issue references
 
@@ -44,7 +46,7 @@ Type `@` and select a teammate in an issue or comment to associate them with the
 
 Type `!` in an issue or comment in Write or Markdown mode to reference another issue. Search by number or title across the whole workspace, including closed and archived issues. Use Up/Down and Enter/Tab, or click a suggestion; Escape dismisses the menu. Plain `!12` renders as a link to issue 12; `#12` is a tag, not an issue reference. Code, images, URLs and existing links are not interpreted as references.
 
-On upgrade, existing issues receive global numbers in creation order while their content, comments, board placement/order and lifecycle stay intact. Use the new numeric URLs; old UUID links are not supported. Back up before upgrading; restoring an earlier app requires restoring the matching database backup.
+The workspace upgrade puts existing issues in Default and preserves their IDs, display numbers, content, comments, board placement/order and lifecycle. Use canonical `/w/default/issues/NUMBER` links; old UUID links are not supported. Back up before upgrading; restoring an earlier app requires restoring the matching database backup.
 
 ## How display titles work
 
@@ -110,7 +112,7 @@ Tags are appended to each selected issue’s latest saved body without replacing
 
 Use **Move issue** in full-page details or the desktop detail panel. Choose an active project or **No project**, then confirm. The source project must also be active; restore an archived project before moving its issues.
 
-Moving preserves the issue's global number, URL, saved body, comments, tags, tagged users and draft/open/closed history. Unsaved issue and comment drafts stay in the editor: moving neither saves nor discards them. A changed project removes the old board placement without adding the issue to the destination board; use **Send to board** afterward if needed. Choosing the same project keeps the existing lane and card order. Failed moves leave the issue and board unchanged.
+Moving within the same workspace preserves the issue's stable internal ID, workspace-local number, URL, saved body, comments, tags, tagged users and draft/open/closed history. Unsaved issue and comment drafts stay in the editor: moving neither saves nor discards them. A changed project removes the old board placement without adding the issue to the destination board; use **Send to board** afterward if needed. Choosing the same project keeps the existing lane and card order. Failed moves leave the issue and board unchanged.
 
 ## Send issues to a board lane
 

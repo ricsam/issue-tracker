@@ -55,12 +55,11 @@ New local users always receive the **member** role; the form has no role selecto
 
 ## Explain member access
 
-Members can create projects and issues, update issues, post comments, and upload files.
-They can access public projects and private projects they own or are explicitly shared on. Published unlinked issues are workspace-wide. Personal draft issues are visible only to their creator; administrators and project owners have no application-level bypass. Uploads follow saved issue access, including personal draft privacy. Unreferenced uploads remain uploader-only with administrator recovery access. Tagging does not grant project access or share drafts.
-All authenticated users can see the workspace user directory, including names and email addresses.
+Workspace membership controls access separately from the instance member role. Defaults and project-specific Read/Full overrides determine which projects a member can read or change; Read cannot write. Configure [workspace invitations and permissions](/guides/workspaces) rather than assuming a local account can access every workspace. Published unlinked issues are workspace-wide. Personal draft issues are visible only to their creator; administrators and project owners have no application-level bypass. Uploads follow saved issue access, including personal draft privacy. Unreferenced uploads remain uploader-only with administrator recovery access. Tagging does not grant project access or share drafts.
+The available workspace user directory includes names and email addresses.
 
 Only administrators can manage OIDC settings and create local users.
-A comment's author or an administrator can edit or delete that comment, provided they still have project access.
+A comment's author or an administrator can edit or delete that comment, provided they still have Full project access.
 Being tagged on an issue does not grant special permissions over other people's comments.
 
 ## Keep recovery access
@@ -76,7 +75,7 @@ Read [OIDC account matching](/admin/oidc) before planning account provisioning.
 
 ## Know the management limits
 
-The current interface and API do not provide user deletion, role changes, or password resets.
+The current interface and API do not provide user deletion, instance-role changes, or password resets. Workspace roles and invitations can be managed separately.
 There is also no built-in local self-registration after first setup.
 If sign-in fails, check the email and password rather than trying to run setup again.
 Repeated authentication requests are rate-limited; wait before retrying after a rate-limit response.

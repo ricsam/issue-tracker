@@ -39,7 +39,7 @@ import {
 } from "../../shared/types";
 import { moveLaneTo, orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
-import { useWorkspace } from "../lib/workspace";
+import { useWorkspace, issuePath, workspacePath, canCreateInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { Snackbar } from "../components/ui/snackbar";
 import { Tooltip } from "../components/ui/tooltip";
@@ -101,7 +101,7 @@ export function IssuesPage() {
 }
 
 function ProjectIssues({ slug }: { slug: string }) {
-  const { refresh, user, users, projects } = useWorkspace();
+  const { refresh, user, users, projects, workspace } = useWorkspace();
   const all = !slug;
   const navigate = useNavigate();
   const board = useLocation().pathname.endsWith("/board");
@@ -150,7 +150,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     // Keep the existing narrow-screen fallback only for a viewport transition.
     // Collapsing a fullscreen modal must never navigate or discard a draft.
     if (shrank && selectedId && !expanded && canLeaveDetails()) {
-      navigate(`/issues/${selectedId}`);
+      const selected = issues.find(issue => issue.id === selectedId);
+      if (selected) navigate(issuePath(selected));
     }
   }, [desktop, selectedId, expanded, navigate, canLeaveDetails]);
   function closeDetails() {
@@ -178,7 +179,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     opener.current = source;
     openerId.current = issue.id;
     if (desktop) setSelectedId(issue.id);
-    else navigate(`/issues/${issue.id}`);
+    else navigate(issuePath(issue));
     return true;
   }
   const [project, setProject] = useState<Project | null>(null);
@@ -245,7 +246,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       && `${issue.title} ${issue.number} ${issue.labels.join(" ")} ${users.filter((user) => issue.taggedUserIds.includes(user.id)).map((user) => user.name).join(" ")}`.toLowerCase().includes(query.trim().replace(/^!(?=\d)/, "").toLowerCase());
   });
   const visibleBoardKey = JSON.stringify(visibleBoardCards.map((card) => card.issueId));
-  const [tableState, setTableState] = useIssueTablePreferences(user.id, all ? "all" : project ? `project:${project.id}` : null);
+  const [tableState, setTableState] = useIssueTablePreferences(user.id, all ? `workspace:${workspace!.id}` : project ? `project:${project.id}` : null);
   // Older links to the closed list now initialize the visible State chip.
   useEffect(() => {
     const state = searchParams.get("state");
@@ -310,6 +311,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   }, [visibleBoardKey]);
   function tagIssues(ids: string[], kind: "mentions" | "labels" = "mentions") {
     if (project?.archivedAt || bulkClosing.current || boardBusy.current || !ids.length) return;
+    ids = ids.filter(id => issues.some(issue => issue.id === id && issue.access === "full"));
+    if (!ids.length) return;
     if (selectedId && ids.includes(selectedId)) {
       if (!canLeaveDetails()) return;
       setSelectedId(null);
@@ -326,8 +329,8 @@ function ProjectIssues({ slug }: { slug: string }) {
   const [closingIssues, setClosingIssues] = useState(false);
   const saving = closingIssues ? "closing" : boardSaving;
   async function closeIssues(ids: string[]): Promise<{ closedIds: string[]; error?: string }> {
-    if (bulkClosing.current || boardBusy.current || project?.archivedAt) return { closedIds: [] };
-    const targets = issues.filter((issue) => ids.includes(issue.id) && issue.state === "open");
+    if (bulkClosing.current || boardBusy.current || readOnly) return { closedIds: [] };
+    const targets = issues.filter((issue) => ids.includes(issue.id) && issue.access === "full" && issue.state === "open");
     if (!targets.length) return { closedIds: [] };
     // Do not silently discard an editor draft when its issue is part of the batch.
     if (selectedId && targets.some((issue) => issue.id === selectedId)) {
@@ -566,7 +569,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       </>
     );
   // Archived projects are read-only until restored.
-  const readOnly = !!project?.archivedAt;
+  const readOnly = all ? !canCreateInWorkspace(workspace) && !projects.some(p => p.access === "full" && !p.archivedAt) : !!project?.archivedAt || project?.access !== "full";
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes, boardSettings.laneLabels);
   const shownLanes = lanes.filter((lane) => !hiddenLanes.includes(lane.value));
   const canReorderLanes = shownLanes.length > 1 && !saving && !closingIssues && !readOnly;
@@ -718,7 +721,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           aria-label={i.title}
           draggable={false}
           data-issue-id={i.id}
-          to={`/issues/${i.id}`}
+          to={issuePath(i)}
           onClick={(event) => openDetails(event, i)}
           aria-current={selectedId === i.id ? "true" : undefined}
           aria-controls={
@@ -758,7 +761,8 @@ function ProjectIssues({ slug }: { slug: string }) {
             {project && <ProjectAccessSummary project={project} />}
           </div>
           <div className="page-actions">
-            {project && (user.role === "admin" || project.ownerId === user.id) && <Button variant="secondary" onClick={() => { if (canLeaveDetails()) setEditingAccess(true); }}>Manage access</Button>}
+            {project && workspace?.id === "default" && (workspace.canManage || project.ownerId === user.id) && <Button variant="secondary" onClick={() => { if (canLeaveDetails()) setEditingAccess(true); }}>Manage access</Button>}
+            {project && workspace?.id !== "default" && workspace?.canManage && <Link className="btn btn-secondary" to={workspacePath(workspace.slug, "/settings")}>Manage workspace access</Link>}
             {!readOnly && <>
               {project && <>
                 <Button variant="secondary" onClick={() => { setProjectSaved(""); setEditingProject(true); }}>Edit project</Button>
@@ -772,18 +776,18 @@ function ProjectIssues({ slug }: { slug: string }) {
           </div>
         </header>
         <Snackbar message={projectSaved} onDismiss={dismissProjectSaved} />
-        {readOnly && project && (
+        {project?.archivedAt && project.access === "full" && (
           <ArchivedProjectNotice project={project} onChange={setProject} />
         )}
         <div className="filter-bar">
           {!all && <div className="view-toggle">
-            <Link className={!board ? "active" : ""} to={`/projects/${slug}`}>
+            <Link className={!board ? "active" : ""} to={workspacePath(workspace!.slug, `/projects/${slug}`)}>
               <List size={16} />
               List
             </Link>
             <Link
               className={board ? "active" : ""}
-              to={`/projects/${slug}/board`}
+              to={workspacePath(workspace!.slug, `/projects/${slug}/board`)}
             >
               <Columns3 size={16} />
               Board
@@ -985,7 +989,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           </>
         ) : (
           <IssueTable
-            preferenceScope={project ? `project:${project.id}` : "all"}
+            preferenceScope={project ? `project:${project.id}` : `workspace:${workspace!.id}`}
             issues={filtered}
             allIssues={issues}
             users={users}
@@ -1060,8 +1064,8 @@ function ProjectIssues({ slug }: { slug: string }) {
       )}
       {editingAccess && project && <ProjectAccessDialog project={project}
         onSaved={(updated, refreshFailed) => {
-          if (updated.visibility === "private" && user.role !== "admin" && updated.ownerId !== user.id && !updated.sharedUserIds.includes(user.id)) {
-            navigate("/projects", { replace: true });
+          if (!updated.access) {
+            navigate(workspacePath(workspace!.slug), { replace: true });
           } else {
             setProject(updated);
             setProjectSaved(refreshFailed ? "Access saved. Workspace refresh failed; reload to retry." : "Project access updated");
@@ -1110,7 +1114,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           onViewIssue={(issue, source) => {
             if (!currentDesktop.current || !all && issue.projectId !== project?.id) {
               setOpen(false);
-              navigate(`/issues/${issue.id}`);
+              navigate(issuePath(issue));
               return;
             }
             pending.current = false;

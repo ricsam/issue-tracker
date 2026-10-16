@@ -25,7 +25,7 @@ for (const embedded of [false, true]) test(`${embedded ? "sidebar" : "full page"
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+  await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
   if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const form = page.locator(".detail-form");
   await expect(form.getByRole("button", { name: /Close as/ })).toHaveCount(0);
@@ -65,7 +65,7 @@ for (const embedded of [false, true]) test(`${embedded ? "sidebar" : "full page"
 
 test("close reason menu supports keyboard selection, dismissal and closing without comment", async ({ page, baseURL }, testInfo) => {
   const { issue } = await seed(page, baseURL!);
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const trigger = page.getByRole("button", { name: "Choose close reason", exact: true });
   await trigger.focus();
   await trigger.press("ArrowDown");
@@ -97,7 +97,7 @@ test("mobile duplicate picker searches, retries and requires explicit close conf
   const { issue, project, headers } = await seed(page, baseURL!);
   const { issue: target } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Canonical issue" } })).json();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await commentEditor(page).fill("Tracked elsewhere.");
   await page.getByRole("button", { name: "Choose close reason", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /Close as duplicate/ }).click();
@@ -119,7 +119,7 @@ test("mobile duplicate picker searches, retries and requires explicit close conf
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await closeButton(page, "Close with comment").click();
   await expect(badge(page)).toHaveAttribute("title", "Closed as duplicate");
-  await expect(page.locator(".issue-created-meta").getByRole("link", { name: `!${target.number}`, exact: true })).toHaveAttribute("href", `/issues/${target.id}`);
+  await expect(page.locator(".issue-created-meta").getByRole("link", { name: `!${target.number}`, exact: true })).toHaveAttribute("href", `/w/default/issues/${target.number}`);
   const saved = await (await page.request.get(`/api/issues/${issue.id}`)).json();
   expect(saved.issue).toMatchObject({ closeReason: "duplicate", duplicateOfId: target.id });
   expect(saved.comments).toHaveLength(1);
@@ -127,7 +127,7 @@ test("mobile duplicate picker searches, retries and requires explicit close conf
 
 test("failed close retains draft and reason; in-flight actions cannot double-submit", async ({ page, baseURL }) => {
   const { issue } = await seed(page, baseURL!);
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await commentEditor(page).fill("Keep this on failure");
   await page.getByRole("button", { name: "Choose close reason", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /Close as not planned/ }).click();

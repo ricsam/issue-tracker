@@ -19,7 +19,7 @@ const session = (id = "s", status = "running", version = 1) => ({
   parentSessionId: null,
   status,
   statusVersion: version,
-  workItems: [{ source: "threadline", url: "https://issues.test/issues/1" }],
+  workItems: [{ source: "threadline", url: "https://issues.test/w/default/issues/1" }],
   links: { session: `https://r5d.test/t/acme/s/${id}` },
 });
 function setup(handler: (path: URL) => Response | Promise<Response>) {
@@ -93,7 +93,7 @@ for (const legacyScope of [undefined, "none", "session", "branch", "project"]) {
       expect(publicSettings.values.projects).toEqual(projects);
       expect(admin.hasSecrets.apiKey).toBe(true);
       expect(JSON.stringify([admin, publicSettings])).not.toContain(key);
-      const issue = db.query("SELECT * FROM issues WHERE id=1").get() as Issue;
+      const issue = db.query("SELECT *, 'default' AS workspaceSlug FROM issues WHERE id=1").get() as Issue;
       for (const projectId of [null, "p"]) {
         // Also ignore stale settings delivered by an older server/browser cache.
         const url = await r5dLaunchUrl({ ...publicSettings, values: { ...publicSettings.values, defaultShare: legacyScope } }, {
@@ -103,7 +103,7 @@ for (const legacyScope of [undefined, "none", "session", "branch", "project"]) {
         expect(payload.share).toEqual({ team: "acme", scope: "branch" });
         if (projectId) {
           expect(payload.remote).toBe(projects[0]!.remote);
-          expect(payload.branch).toEqual({ mode: "new", name: "issue/1-issue", from: "main" });
+          expect(payload.branch).toEqual({ mode: "new", name: "issue/default/1-issue", from: "main" });
         } else {
           expect(payload).not.toHaveProperty("remote");
           expect(payload).not.toHaveProperty("branch");
@@ -121,6 +121,28 @@ for (const legacyScope of [undefined, "none", "session", "branch", "project"]) {
     }
   });
 }
+
+test("r5d resolves equal issue numbers by workspace and rejects legacy work-item URLs", async () => {
+  const fixture = setup((url) => {
+    if (url.pathname.endsWith("/acme")) return json({});
+    if (url.pathname.endsWith("/sessions")) return json({ sessions: [
+      session("default"),
+      { ...session("second"), workItems: [{ source: "threadline", url: "https://issues.test/w/second/issues/1" }] },
+      { ...session("legacy"), workItems: [{ source: "threadline", url: "https://issues.test/issues/1" }] },
+      { ...session("missing"), workItems: [{ source: "threadline", url: "https://issues.test/w/missing/issues/1" }] },
+    ], cursor: "1" });
+    return json({ events: [], cursor: "1" });
+  });
+  try {
+    fixture.db.exec(`INSERT INTO workspaces (id,slug,name,visibility,createdAt) VALUES ('second','second','Second','hidden','now');
+      INSERT INTO issues(id,number,workspaceId,title,body,status,priority,labels,authorId,createdAt,updatedAt)
+      VALUES (2,1,'second','Second issue','Body','todo','normal','[]','u','now','now');`);
+    await fixture.enable();
+    await until(() => fixture.service.links("2").length === 1);
+    expect(fixture.service.links("1").map((l) => l.externalId)).toEqual(["session:default"]);
+    expect(fixture.service.links("2").map((l) => l.externalId)).toEqual(["session:second"]);
+  } finally { await fixture.close(); }
+});
 
 test("r5d snapshot, exact work-item matching, newer versions, dedup, reviews, revoke and truncation", async () => {
   let listCount = 0;
@@ -140,7 +162,7 @@ test("r5d snapshot, exact work-item matching, newer versions, dedup, reviews, re
                   workItems: [
                     {
                       source: "threadline",
-                      url: "https://other.test/issues/1",
+                      url: "https://other.test/w/default/issues/1",
                     },
                   ],
                 },
@@ -149,7 +171,7 @@ test("r5d snapshot, exact work-item matching, newer versions, dedup, reviews, re
                   workItems: [
                     {
                       source: "threadline",
-                      url: "https://issues.test/issues/1/extra",
+                      url: "https://issues.test/w/default/issues/1/extra",
                     },
                   ],
                 },

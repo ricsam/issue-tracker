@@ -11,7 +11,7 @@ import { HashtagNode, IssueReferenceNode, registerHashtags } from "../src/compon
 import { issueReferenceQuery } from "../src/components/issue-reference-autocomplete";
 import { mentionQuery } from "../src/components/mention-autocomplete";
 import { extractIssueLabels } from "../shared/labels";
-import { isIssueId, matchIssueReferences } from "../shared/issue-references";
+import { isIssueId, issueReference, issueReferenceId, matchIssueReferences } from "../shared/issue-references";
 
 function editor() {
   const instance = createEditor({ nodes: [LinkNode, HeadingNode, QuoteNode, CodeNode, ListNode, ListItemNode, HashtagNode, IssueReferenceNode], onError: error => { throw error; } });
@@ -22,7 +22,14 @@ function references(node: LexicalNode): IssueReferenceNode[] {
   return node instanceof IssueReferenceNode ? [node] : $isElementNode(node) ? node.getChildren().flatMap(references) : [];
 }
 
-test("global issue IDs and standalone references exclude malformed tokens and URLs", () => {
+test("workspace issue links retain scope and reject ambiguous old URLs", () => {
+  expect(issueReference("/w/team-one/issues/12")).toEqual({ workspaceSlug: "team-one", number: "12" });
+  expect(issueReferenceId("/w/team-two/issues/12")).toBe("12");
+  for (const url of ["/issues/12", "/w/team/issues/01", "/w/team/issues/0", "/w/team/issues/9007199254740992", "/w/UPPER/issues/1", "/w/team/issues/1/extra", "https://foreign.test/w/team/issues/1"])
+    expect(issueReference(url)).toBeNull();
+});
+
+test("issue numbers and standalone references exclude malformed tokens and URLs", () => {
   expect(matchIssueReferences("Fix !12, (!3) [!4] !5. #12 !9007199254740991").map(m => m.id)).toEqual(["12", "3", "4", "5", "9007199254740991"]);
   for (const text of ["word!12", "https://host/!12", "!0", "!01", "!-1", "!12abc", "!12.5", "!12-foo", "!9007199254740992", "!!12"])
     expect(matchIssueReferences(text)).toEqual([]);
@@ -42,11 +49,11 @@ test("Markdown links references in prose and preserves #tags, code, links, image
   const body = "See !12 and **!3** #12\n\n`!4`\n\n```\n!5\n```\n\n[!6](https://example.test) ![!7](/api/uploads/a/image.png)\n\n[unsafe](javascript:alert)\n\n#[tag !8]";
   const html = renderToStaticMarkup(<Markdown>{body}</Markdown>);
   expect(html.match(/class="issue-reference-chip"/g)).toHaveLength(3);
-  expect(html).toContain('href="/issues/12"');
-  expect(html).toContain('href="/issues/3"');
+  expect(html).toContain('href="/w/default/issues/12"');
+  expect(html).toContain('href="/w/default/issues/3"');
   expect(html).not.toContain('href="javascript:');
-  expect(html).not.toContain('href="/issues/4"');
-  expect(html).toContain('href="/issues/8"');
+  expect(html).not.toContain('href="/w/default/issues/4"');
+  expect(html).toContain('href="/w/default/issues/8"');
   expect(extractIssueLabels(body)).toEqual(["12"]);
 });
 

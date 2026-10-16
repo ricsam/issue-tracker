@@ -29,11 +29,11 @@ async function seed(page: Page, baseURL: string) {
   });
   expect(response.ok()).toBeTruthy();
   const { project } = await response.json();
-  const projectPath = `/projects/${project.slug}`;
+  const projectPath = `/w/default/projects/${project.slug}`;
   const issueIds: string[] = [];
   for (const title of ["Sidebar alpha", "Sidebar beta", "Other issue"]) {
     const created = await page.request.post(
-      `${projectPath.replace("/projects", "/api/projects")}/issues`,
+      `${projectPath.replace("/w/default/projects", "/api/projects")}/issues`,
       {
         headers,
         data: { body: title },
@@ -104,7 +104,7 @@ for (const width of [1440, 1024]) {
     await expect(page.locator(".issue-row")).toHaveCount(2);
     const alpha = issueLink(page, "Sidebar alpha");
     const beta = issueLink(page, "Sidebar beta");
-    await expect(alpha).toHaveAttribute("href", /^\/issues\/.+/);
+    await expect(alpha).toHaveAttribute("href", /^\/w\/default\/issues\/.+/);
     await alpha.click();
     await expect(page).toHaveURL(projectPath);
     await expect(issuePreview(page)).toContainText("Sidebar alpha");
@@ -416,26 +416,23 @@ test("rapid selection ignores stale responses and failed details can retry witho
   const projectPath = await seed(page, baseURL!);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath);
-  const alphaPath = (await issueLink(page, "Sidebar alpha").getAttribute(
-    "href",
-  ))!;
-  const betaPath = (await issueLink(page, "Sidebar beta").getAttribute(
-    "href",
-  ))!;
+  const alphaPath = (await issueLink(page, "Sidebar alpha").getAttribute("href"))!;
+  const alphaId = (await issueLink(page, "Sidebar alpha").getAttribute("data-issue-id"))!;
+  const betaId = (await issueLink(page, "Sidebar beta").getAttribute("data-issue-id"))!;
   let releaseAlpha!: () => void;
   const alphaGate = new Promise<void>((resolve) => {
     releaseAlpha = resolve;
   });
   let alphaFinished!: () => void;
   const alphaDone = new Promise<void>((resolve) => { alphaFinished = resolve; });
-  await page.route(`**/api${alphaPath}`, async (route) => {
+  await page.route(`**/api/issues/${alphaId}`, async (route) => {
     const response = await route.fetch();
     await alphaGate;
     await route.fulfill({ response });
     alphaFinished();
   });
   let failBeta = true;
-  await page.route(`**/api${betaPath}`, async (route) => {
+  await page.route(`**/api/issues/${betaId}`, async (route) => {
     if (failBeta) {
       await route.fulfill({
         status: 500,
@@ -463,8 +460,8 @@ test("rapid selection ignores stale responses and failed details can retry witho
     .click();
   await expect(issuePreview(page)).toContainText("Sidebar beta");
   await expect(page).toHaveURL(projectPath);
-  await page.unroute(`**/api${alphaPath}`);
-  await page.unroute(`**/api${betaPath}`);
+  await page.unroute(`**/api/issues/${alphaId}`);
+  await page.unroute(`**/api/issues/${betaId}`);
   // Keyboard activation is a normal selection; modified clicks retain native links.
   await sidebar(page)
     .getByRole("button", { name: "Close issue details" })

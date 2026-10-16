@@ -49,9 +49,9 @@ test("issues close and reopen without losing edits, filter the list and stay on 
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { headers, project, issues } = await seed(page, baseURL!, "Lifecycle");
-  const projectPath = `/projects/${project.slug}`;
+  const projectPath = `/w/default/projects/${project.slug}`;
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/issues/${issues[0]!.id}`);
+  await page.goto(`/w/default/issues/${issues[0]!.number}`);
 
   // Metadata stays inline; heading actions keep clear space above the editor.
   const save = page.getByRole("button", { name: "Save changes", exact: true });
@@ -151,7 +151,7 @@ test("archived projects leave navigation, become read-only and can be restored",
     data: { body: "Kept for reference" },
   });
   expect(comment.ok()).toBeTruthy();
-  const projectPath = `/projects/${project.slug}`;
+  const projectPath = `/w/default/projects/${project.slug}`;
   const nav = page.getByRole("navigation", { name: "Workspace" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(projectPath);
@@ -187,7 +187,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(page.locator(".board-card-handle").first()).toHaveAttribute("draggable", "false");
   await expect(page.locator(".board-column h2").first()).toHaveAttribute("draggable", "false");
 
-  await page.goto(`/issues/${issues[0]!.id}`);
+  await page.goto(`/w/default/issues/${issues[0]!.number}`);
   await expect(page.locator(".read-only-note")).toContainText("archived project");
   await expect(page.getByRole("article", { name: "Issue" })).toContainText("Ship the beta");
   await expect(page.getByRole("textbox", { name: "Issue", exact: true })).toHaveCount(0);
@@ -197,7 +197,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(page.getByRole("combobox", { name: "Assignee" })).toHaveCount(0);
 
   // Archived projects are listed separately from active work.
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await expect(page.locator(".project-card").filter({ hasText: project.name })).toHaveCount(0);
   const status = page.getByRole("navigation", { name: "Project status" });
   await status.getByRole("link", { name: /Archived/ }).click();
@@ -222,7 +222,7 @@ test("archived projects leave navigation, become read-only and can be restored",
   await expect(nav.getByRole("link", { name: project.name })).toBeVisible();
   const restored = (await (await page.request.get(`/api/projects/${project.slug}`)).json()).project;
   expect(restored).toMatchObject({ archivedAt: null, archivedById: null });
-  await page.goto(`/issues/${issues[0]!.id}`);
+  await page.goto(`/w/default/issues/${issues[0]!.number}`);
   await expect(page.getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
   await expect(page.locator(".detail-form .editor-preview")).toBeVisible();
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();

@@ -12,21 +12,26 @@ Send the token as `Authorization: Bearer TOKEN` to the existing `/api` data rout
 For example, with a secret manager supplying `THREADLINE_TOKEN` and your deployment origin in `THREADLINE_HOST`:
 
 ```js
-const response = await fetch(`${process.env.THREADLINE_HOST}/api/issues/12`, {
-  headers: { Authorization: `Bearer ${process.env.THREADLINE_TOKEN}` },
+const response = await fetch(`${process.env.THREADLINE_HOST}/api/issues/by-number/12`, {
+  headers: {
+    Authorization: `Bearer ${process.env.THREADLINE_TOKEN}`,
+    'X-Workspace-Slug': process.env.THREADLINE_WORKSPACE || 'default',
+  },
   redirect: 'error',
 });
 if (!response.ok) throw new Error(`Threadline returned ${response.status}`);
 const { issue, comments } = await response.json();
 ```
 
-Use `PATCH /api/issues/12` with JSON `{ "body": "# Updated issue\n\nDetails" }` to edit, or `{ "state": "closed" }` to close. Include `Content-Type: application/json`. The [API contract](https://github.com/ricsam/issue-tracker/blob/main/docs/api-contract.md) documents all data routes and existing permissions. Lists currently return all accessible results; filtering/pagination of these lists is client-side.
+The response resolves display number 12 inside the selected workspace. Use the returned stable `issue.id` in `PATCH /api/issues/:id`, with the same `X-Workspace-Slug` header, with JSON `{ "body": "# Updated issue\n\nDetails" }` to edit, or `{ "state": "closed" }` to close. Include `Content-Type: application/json`. The [API contract](https://github.com/ricsam/issue-tracker/blob/main/docs/api-contract.md) documents all data routes and existing permissions. Lists currently return all accessible results; filtering/pagination of these lists is client-side.
+
+All data requests are scoped by `X-Workspace-Slug` (omitted means `default`), including internal-ID endpoints. `Issue.id` is globally stable; `Issue.number` is local to a workspace. Browser links use `/w/:workspaceSlug/issues/:number`. Do not substitute display numbers into internal-ID mutation routes. `GET /api/workspaces` returns `{workspaces}` for discovery, including read-only keys; a listed workspace with `role: null` grants no content access. Hidden workspaces are visible only to members/instance administrators. Workspace management and invitations are browser-session only.
 
 ### Permissions and lifecycle
 
 - `read` permits reading projects, issues, comments, boards, history, attachments, the workspace user directory, and personal pins.
-- `read` plus `write` also permits data mutations, but never more than the owning user's current permissions. These scopes are workspace-wide, **not restricted to particular projects**. An administrator's key retains the administrator's access to data; use a less-privileged account where appropriate.
-- Keys cannot administer accounts/SSO, create/list/revoke other keys, use browser login endpoints, or approve device requests. They may revoke themselves.
+- `read` plus `write` also permits data mutations, but never more than the owning user's current permissions. The key inherits current workspace memberships and project permissions, **not a fixed single-project or single-workspace grant**. Selecting a workspace does not grant access. Read-only membership/project access remains read-only even with a write key. An administrator's key retains the administrator's access to data; use a less-privileged account where appropriate.
+- Keys cannot manage workspaces/invitations, administer accounts/SSO, create/list/revoke other keys, use browser login endpoints, or approve device requests. They may revoke themselves.
 - Private-project access, draft privacy, archived-project restrictions, and comment authorship checks apply on every request. Removing project sharing immediately restricts existing tokens too.
 - Revocation and expiry cause `401`. Insufficient scope causes `403`. Inaccessible resources remain `404`. An invalid explicit Authorization header never falls back to a session cookie.
 - Bearer requests may omit `Origin`. If an unsafe request supplies `Origin`, it must match `BASE_URL`. Cookie-authenticated writes still require the matching header; don't use browser cookies for integrations.

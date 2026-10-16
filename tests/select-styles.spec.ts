@@ -44,7 +44,7 @@ for (const width of [1440, 390]) {
     const { issue } = await issueResponse.json();
 
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(`/projects/${project.slug}/board`);
+    await page.goto(`/w/default/projects/${project.slug}/board`);
     // Exercise the real multi-value popover, not the retired board picker.
     await page.getByRole("button", { name: "Edit filter: State is Open", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Edit filter", exact: true });
@@ -87,7 +87,7 @@ for (const width of [1440, 390]) {
     await menu.getByRole("menuitem", { name: "Done", exact: true }).click();
     await expect(page.locator(".board-column").filter({ has: page.getByRole("heading", { name: /^Done/ }) }).locator(".board-card")).toHaveCount(1);
 
-    await page.goto(`/projects/${project.slug}`);
+    await page.goto(`/w/default/projects/${project.slug}`);
     await openTableFilter(page, "tagged");
     const tagged = page.getByRole("combobox", { name: "Filter by tagged user", exact: true });
     await expectChevron(tagged);
@@ -99,7 +99,7 @@ for (const width of [1440, 390]) {
     await page.emulateMedia({ forcedColors: "active" });
     await expect(tagged).toHaveCSS("appearance", "auto");
     await expect(tagged).toHaveCSS("background-image", "none");
-    await page.goto(`/issues/${issue.id}`);
+    await page.goto(`/w/default/issues/${issue.number}`);
     await expect(page.getByRole("combobox", { name: "Assignee", exact: true })).toHaveCount(0);
   });
 }

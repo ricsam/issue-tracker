@@ -17,7 +17,7 @@ for (const failure of [false, true]) {
     const headers = { Origin: baseURL! };
     const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Validate lane ${randomUUID()}` } })).json();
     const endpoint = `/api/projects/${project.slug}/board`;
-    await page.goto("/projects");
+    await page.goto("/w/default/projects");
     const open = page.getByRole("button", { name: "Create issue (Alt+N)", exact: true });
     const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
     await open.click();
@@ -58,7 +58,7 @@ for (const failure of [false, true]) {
 test("post-Done toast protects drafts edited after the dialog closes and clears on navigation", async ({ page, baseURL }) => {
   const headers = { Origin: baseURL! };
   const { issue } = await (await page.request.post("/api/issues", { headers, data: { body: "Original issue" } })).json();
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
   await dialog.getByRole("textbox", { name: "Issue", exact: true }).fill("New toast destination");
@@ -71,7 +71,7 @@ test("post-Done toast protects drafts edited after the dialog closes and clears 
   await form.getByLabel("Markdown source").fill("Draft edited after Done");
   page.once("dialog", (confirm) => confirm.dismiss());
   await toast.getByRole("link", { name: "View issue" }).click();
-  await expect(page).toHaveURL(`/issues/${issue.id}`);
+  await expect(page).toHaveURL(`/w/default/issues/${issue.number}`);
   await expect(form.getByLabel("Markdown source")).toHaveValue("Draft edited after Done");
   await page.getByRole("link", { name: "All projects", exact: true }).click();
   await expect(toast.getByRole("link", { name: "View issue" })).toHaveCount(0);
@@ -84,7 +84,7 @@ for (const width of [1440, 390, 320]) {
     const headers = { Origin: baseURL! };
     const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Toast geometry ${randomUUID()}` } })).json();
     await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
-    await page.goto(`/projects/${project.slug}`);
+    await page.goto(`/w/default/projects/${project.slug}`);
     await page.getByRole("button", { name: "Create issue", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
     const editor = dialog.getByRole("textbox", { name: "Issue", exact: true });

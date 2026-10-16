@@ -6,7 +6,7 @@ import { text } from "node:stream/consumers";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DeviceAuthorization, ApiKeyInfo } from "../shared/api-access";
 import type { Issue, IssueDetail, Project, User } from "../shared/types";
-import { Api, CliError, Store, clean, hostUrl, issueId, table } from "./core";
+import { Api, CliError, Store, clean, hostUrl, issueTarget, workspaceSlug, table } from "./core";
 
 const HELP = `threadline — non-interactive issue tracking
 
@@ -17,6 +17,7 @@ Authenticate with auth login or THREADLINE_TOKEN. All commands support --json (o
   auth login [--no-browser | --with-token] [--name NAME]
   auth status
   auth logout
+  workspace list
   project list
   project view SLUG
   issue list [--project SLUG] [--state open|closed|draft|all]
@@ -30,6 +31,9 @@ Authenticate with auth login or THREADLINE_TOKEN. All commands support --json (o
   issue close NUMBER|!NUMBER|URL
   issue reopen NUMBER|!NUMBER|URL
 
+Data commands accept --workspace SLUG (overrides THREADLINE_WORKSPACE; default: default).
+Issue URLs infer their workspace and must agree with an explicit workspace setting.
+
 Body is Markdown; --title is server-compatible heading input, not a separate
 stored title. Edit --project moves the issue. List defaults: open, limit 30.
 Repeat --label to require every label. --help shows this help.
@@ -40,6 +44,7 @@ const specs: Record<string, { values?: string[]; booleans?: string[]; args: numb
   "auth config": { values: ["host"], booleans: ["clear"], args: 0 },
   "auth login": { values: ["name"], booleans: ["no-browser", "with-token"], args: 0 },
   "auth status": { args: 0 }, "auth logout": { args: 0 },
+  "workspace list": { args: 0 },
   "project list": { args: 0 }, "project view": { args: 1 },
   "issue list": { values: ["project", "state", "label", "search", "limit"], args: 0 },
   "issue view": { args: 1 },
@@ -50,7 +55,7 @@ const specs: Record<string, { values?: string[]; booleans?: string[]; args: numb
 };
 export function parse(argv: string[]) {
   if (!argv.length || argv.length === 1 && ["--help", "-h", "help"].includes(argv[0]!)) return { command: "help", args: [], flags: {} as Record<string, string[]> };
-  if (argv.length === 2 && ["auth", "project", "issue"].includes(argv[0]!) && ["--help", "-h"].includes(argv[1]!)) return { command: "help", args: [], flags: {} as Record<string, string[]> };
+  if (argv.length === 2 && ["auth", "workspace", "project", "issue"].includes(argv[0]!) && ["--help", "-h"].includes(argv[1]!)) return { command: "help", args: [], flags: {} as Record<string, string[]> };
   const command = argv.slice(0, 2).join(" ");
   const spec = specs[command];
   if (!spec) throw new CliError("Unknown command. Run threadline --help.", 2);
@@ -64,7 +69,7 @@ export function parse(argv: string[]) {
     if (!match) throw new CliError(`Unsupported option: ${clean(value)}`, 2);
     const key = match[1]!;
     const boolean = ["json", "help", ...(spec.booleans || [])].includes(key);
-    if (!boolean && !spec.values?.includes(key)) throw new CliError(`Unsupported option: --${key}`, 2);
+    if (!boolean && !spec.values?.includes(key) && !(key === "workspace" && !command.startsWith("auth ")))  throw new CliError(`Unsupported option: --${key}`, 2);
     if (flags[key] && key !== "label") throw new CliError(`Duplicate option: --${key}`, 2);
     let input = match[2];
     if (boolean) {
@@ -80,6 +85,7 @@ export function parse(argv: string[]) {
   if (args.length !== spec.args) throw new CliError(`${command} expects ${spec.args} positional argument(s).`, 2);
   if (flags.host && flags.clear) throw new CliError("Use only one of --host and --clear.", 2);
   if (flags.host) hostUrl(flags.host[0]);
+  if (flags.workspace) workspaceSlug(flags.workspace[0]!);
   if (flags.body && flags["body-file"]) throw new CliError("Use only one of --body and --body-file.", 2);
   if (flags["with-token"] && (flags["no-browser"] || flags.name)) throw new CliError("--with-token cannot be combined with --no-browser or --name.", 2);
   if (flags.project && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flags.project[0]!)) throw new CliError("--project requires a project slug.", 2);
@@ -202,7 +208,12 @@ export async function run(argv = process.argv.slice(2)) {
   const savedToken = envToken ? undefined : (await store.read())[host]?.token;
   const token = envToken || savedToken;
   if (token && /\s/.test(token)) throw new CliError("Token contains whitespace.", 2);
-  const api = new Api(host, token);
+  const isData = !command.startsWith("auth ");
+  const selectedWorkspace = flags.workspace?.[0] ?? (process.env.THREADLINE_WORKSPACE || undefined);
+  const target = command.startsWith("issue ") && args[0] ? issueTarget(args[0], host, selectedWorkspace) : undefined;
+  const workspace = isData ? target?.workspace ?? workspaceSlug(selectedWorkspace ?? "default") : undefined;
+  const api = new Api(host, token, 15000, workspace);
+  const issueUrl = (issue: Issue) => `${host}/w/${encodeURIComponent(issue.workspaceSlug || workspace!)}/issues/${issue.number}`;
   if (command === "auth status") {
     const data = await api.request<Identity>("/api/me");
     out({ host, source: envToken ? "environment" : "saved", ...data }, `${host}\nUser: ${clean(data.user.email)}\nSource: ${envToken ? "THREADLINE_TOKEN" : "saved token"}\nScopes: ${data.key.scopes.join(", ")}\nExpires: ${clean(data.key.expiresAt)}`);
@@ -212,6 +223,9 @@ export async function run(argv = process.argv.slice(2)) {
     await api.request("/api/me/token", "DELETE");
     if (saved[host]?.token === token) await store.save(host);
     out({ host, revoked: true, savedTokenRemoved: saved[host]?.token === token }, `Revoked current token for ${host}.${envToken ? " Unset THREADLINE_TOKEN in your shell." : " Removed saved token."}`);
+  } else if (command === "workspace list") {
+    const data = await api.request<{ workspaces: { slug: string; name: string; role: string | null }[] }>("/api/workspaces");
+    out(data, table(["SLUG", "NAME", "ROLE"], data.workspaces.map(w => [w.slug, w.name, w.role ?? "not a member"])));
   } else if (command === "project list") {
     const data = await api.request<{ projects: Project[] }>("/api/projects");
     out(data, table(["SLUG", "NAME", "OPEN", "ARCHIVED"], data.projects.map(p => [p.slug, p.name, p.openCount, p.archivedAt ? "yes" : "no"])));
@@ -226,10 +240,11 @@ export async function run(argv = process.argv.slice(2)) {
       .sort((a, b) => b.number - a.number).slice(0, Number(flags.limit?.[0] || 30));
     out({ issues }, table(["NUMBER", "STATE", "TITLE", "LABELS"], issues.map(i => [`!${i.number}`, i.state, i.title, i.labels.join(", ")])));
   } else {
-    const id = command === "issue create" ? undefined : issueId(args[0]!, host);
+    const detail = target ? await api.request<IssueDetail>(`/api/issues/by-number/${target.number}`) : undefined;
+    const id = detail?.issue.id;
     if (command === "issue view") {
-      const data = await api.request<IssueDetail>(`/api/issues/${id}`);
-      out(data, `!${data.issue.number} ${clean(data.issue.title)} [${data.issue.state}]\n${host}/issues/${id}\n\n${safeBody(data.issue.body)}\n\n${data.comments.map(c => `Comment ${clean(c.id)}:\n${safeBody(c.body)}`).join("\n\n")}`);
+      const data = detail!;
+      out(data, `!${data.issue.number} ${clean(data.issue.title)} [${data.issue.state}]\n${issueUrl(data.issue)}\n\n${safeBody(data.issue.body)}\n\n${data.comments.map(c => `Comment ${clean(c.id)}:\n${safeBody(c.body)}`).join("\n\n")}`);
       return;
     }
     const payload: Record<string, unknown> = {};
@@ -256,7 +271,7 @@ export async function run(argv = process.argv.slice(2)) {
     else if (command === "issue close") payload.state = "closed";
     else if (command === "issue reopen") payload.state = "open";
     const data = await api.request(path, method, payload);
-    out(data, command === "issue comment" ? `Comment added to !${id}.` : `!${data.issue.number} ${clean(data.issue.title)} [${data.issue.state}]\n${host}/issues/${data.issue.number}`);
+    out(data, command === "issue comment" ? `Comment added to !${detail!.issue.number}.\n${issueUrl(detail!.issue)}` : `!${data.issue.number} ${clean(data.issue.title)} [${data.issue.state}]\n${issueUrl(data.issue)}`);
   }
 }
 function safeBody(body: string) { return body.replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, ""); }

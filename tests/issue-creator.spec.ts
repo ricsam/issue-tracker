@@ -36,7 +36,7 @@ for (const all of [false, true]) {
     issues[1].authorId = alex.id;
     issues[2].authorId = "missing-creator";
     await page.route(all ? "**/api/issues" : `**/api/projects/${project.slug}/issues`, (route) => route.fulfill({ json: { issues, boards: {} } }));
-    await page.goto(all ? "/issues" : `/projects/${project.slug}`);
+    await page.goto(all ? "/w/default/issues" : `/w/default/projects/${project.slug}`);
     const table = page.getByRole("table");
     const titles = table.locator("tbody .issue-link");
     await expect(table.locator(".issue-creator")).toHaveText(["Bea", "Alex Morgan", "Unknown user"]);

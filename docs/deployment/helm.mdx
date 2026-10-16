@@ -3,7 +3,23 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.27.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.28.0**. A chart version and an application image tag are separate choices.
+
+## Migration 22: choose the initial workspace before upgrade
+
+Release 0.28.0 introduces [workspaces](/guides/workspaces). Read the [migration guide packaged in the chart](https://github.com/ricsam/issue-tracker/blob/main/charts/issue-tracker/README.md) before starting a new image. From migration 19, startup runs migrations 20 (sub-issues), 21 (close reasons), and 22 (workspaces), preserving existing content.
+
+Set these values in the existing production values file **before migration 22 first runs**:
+
+```yaml
+migration:
+  workspaceName: "richie's workspace"
+  workspaceSlug: richies-workspace
+```
+
+Defaults are `Default` and `default`; the internal workspace ID remains `default` even with custom naming. These initialize the first migrated workspace only: restarting or changing values afterward does not rename it. Keep the original PVC/PV binding, UID/GID/fsGroup, encryption-key Secret, ingress and BASE_URL unchanged. Stop writes and take a consistent complete data/key backup using [operations](/deployment/operations) before upgrading. Do not use `--atomic` or old-image-only rollback.
+
+Canonical links become `/w/SLUG/...`; `/new` has a workspace selector. Update integrations to send `X-Workspace-Slug` and distinguish stable issue IDs from workspace-local display numbers. Existing private-project restrictions require explicit legacy conversion to remove; unchanged saves preserve them. Pending initial-workspace invitations take precedence over compatibility onboarding.
 
 ## Prerequisites
 
@@ -15,11 +31,11 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.27.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.27.0 adds completed, not-planned and duplicate close reasons, an atomic **Close with comment** action beside Post comment, and board-card progress for accessible direct sub-issues. Closing/reopening preserves unsaved issue-body edits and board placement. The release retains nested sub-issues, [first-party plugins and r5d](/guides/plugins), the [MCP endpoint](/guides/mcp), and scoped API keys for the [Threadline CLI](/guides/cli). The npm CLI remains independently versioned.
+Verify `0.28.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.27.0 adds completed, not-planned and duplicate close reasons, an atomic **Close with comment** action beside Post comment, and board-card progress for accessible direct sub-issues. Closing/reopening preserves unsaved issue-body edits and board placement. The release retains nested sub-issues, [first-party plugins and r5d](/guides/plugins), the [MCP endpoint](/guides/mcp), and scoped API keys for the [Threadline CLI](/guides/cli). The npm CLI remains independently versioned.
 
 Migration v21 adds nullable close-reason and duplicate-target columns, backfilling existing closures as completed without changing content, boards, timestamps or historical entries. Upgrades from before 0.26.0 also run v20 (sub-issues); older upgrades run the intervening privacy, credential and plugin migrations. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Never use `--atomic`/`helm rollback` alone or run an older image against migrated data:** restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately. No new deployment values are required. Keep the PVC binding, Secrets, OIDC settings and ingress host unchanged. Route `/mcp` and the JSON device endpoints unchanged, preserving Authorization; do not disable CSRF or TLS checks.
 
-**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.27.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.27.0), preferably pinned by digest; retaining an old image leaves the new endpoints unavailable even with the latest chart. Publishing the chart does not upgrade any running deployment.
+**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.28.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.28.0), explicitly pinned to its verified published digest after CI; retaining an old image leaves the new endpoints unavailable even with the latest chart. Publishing the chart does not upgrade any running deployment.
 
 Version 0.23.0 adds creator-only personal draft issues, including protection against other administrators. Choose **Personal draft** on creation, use **State is Draft** in tables, and **Publish issue** to share the saved issue, comments, history, and attachments. Drafts remain off shared boards and still require project access.
 
@@ -56,7 +72,7 @@ export IMAGE_TAG='<published-sha-tag-matching-the-release>'
 docker manifest inspect "ghcr.io/ricsam/issue-tracker:$IMAGE_TAG" >/dev/null
 ```
 
-Pin the confirmed SHA tag for a repeatable deployment. For a private replacement image, configure `imagePullSecrets` separately.
+After CI publishes the image, resolve and record its registry digest, then set `image.tag` to `sha-<commit>@sha256:<verified-digest>` for a byte-pinned production deployment. Do not invent a digest or assume the release image is already published. For a private replacement image, configure `imagePullSecrets` separately.
 
 ## Create the encryption-key Secret
 
@@ -73,7 +89,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.27.0 --namespace issue-tracker \
+  --version 0.28.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -91,7 +107,7 @@ Keep all deployment-specific values in one non-secret file, for example `product
 
 ```yaml
 image:
-  tag: "<published-sha-tag-matching-the-release>" # Use the same tag as IMAGE_TAG.
+  tag: "sha-<published-commit>@sha256:<verified-registry-digest>" # Pin after successful CI.
 baseUrl: https://issues.example.com
 existingSecret: issue-tracker-settings
 persistence:
@@ -113,9 +129,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.27.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.28.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.27.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.28.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

@@ -11,6 +11,13 @@ fullnameOverride: ""
 # Public origin used for same-origin checks and OIDC callback URLs.
 baseUrl: ""
 
+# Used only when migration 22 first places existing content into a workspace.
+# Existing workspace names/slugs are never overwritten on later restarts.
+# Read the chart README before upgrading; back up data and the settings Secret.
+migration:
+  workspaceName: Default
+  workspaceSlug: default
+
 # Name of a pre-created Secret. It must contain existingSecretKey and the value
 # must be base64 text that decodes to exactly 32 bytes.
 existingSecret: ""

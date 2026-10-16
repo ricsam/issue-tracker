@@ -25,7 +25,7 @@ async function visibleToast(page: Page, text: string) {
 for (const embedded of [false, true]) {
   test(`${embedded ? "sidebar" : "full page"}: clean saves are no-ops, repeated dirty saves visibly notify, discard preserves comment and lifecycle`, async ({ page, baseURL }) => {
     const { issue, project } = await seed(page, baseURL!);
-    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+    await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
     if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
     const detail = page.locator(".detail-container");
     const form = detail.locator(".detail-form");
@@ -71,7 +71,7 @@ test(`${embedded ? "sidebar" : "full page"}: move preserves identity and drafts,
   const { project: target } = await (await page.request.post("/api/projects", { headers, data: { name: `Target ${randomUUID()}` } })).json();
   const { board } = await (await page.request.get(`/api/projects/${project.slug}/board`)).json();
   expect((await page.request.put(`/api/projects/${project.slug}/board/issues`, { headers, data: { issueIds: [issue.id], lane: board.lanes[0] } })).ok()).toBeTruthy();
-  await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+  await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
   if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const form = page.locator(".detail-form");
   await form.getByRole("button", { name: "Markdown", exact: true }).click();
@@ -90,7 +90,7 @@ test(`${embedded ? "sidebar" : "full page"}: move preserves identity and drafts,
   await visibleToast(page, "Issue moved");
   await expect(source).toHaveValue("Unsaved moved draft");
   await expect(comment).toContainText("Unsaved discussion");
-  await expect(page).toHaveURL(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+  await expect(page).toHaveURL(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
   const moved = (await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue;
   expect(moved.number).toBe(issue.number);
   expect(moved.projectId).toBe(target.id);

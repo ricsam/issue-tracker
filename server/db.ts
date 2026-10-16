@@ -14,7 +14,24 @@ export function syncIssueTaggedUsers(db: Database, issueId: string) {
     db.query("INSERT INTO issue_tagged_users (issueId,userId) SELECT ?,id FROM users WHERE id=?").run(issueId, userId);
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 = 21) {
+export interface MigrationWorkspaceOptions {
+  workspaceName?: string;
+  workspaceSlug?: string;
+}
+
+/** Validate before opening SQLite (or creating any application data files). */
+export function migrationWorkspaceOptions(options: MigrationWorkspaceOptions = {}) {
+  const workspaceName = options.workspaceName === undefined ? "Default" : options.workspaceName.trim();
+  const workspaceSlug = options.workspaceSlug ?? "default";
+  if (!workspaceName || workspaceName.length > 100)
+    throw new Error("MIGRATION_WORKSPACE_NAME must contain 1 to 100 characters after trimming");
+  if (workspaceSlug.length > 70 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(workspaceSlug))
+    throw new Error("MIGRATION_WORKSPACE_SLUG must be 1 to 70 lowercase letters/digits with single hyphen separators");
+  return { workspaceName, workspaceSlug };
+}
+
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 = 22, options: MigrationWorkspaceOptions = {}) {
+  const migrationWorkspace = migrationWorkspaceOptions(options);
   const db = new Database(path, { create: true, strict: true });
   db.exec(
     "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
@@ -444,5 +461,94 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
       INSERT INTO migrations VALUES (21);
     `);
   }).immediate();
+  if (targetVersion < 22) return db;
+  // Rebuild only the projects table to remove global slug uniqueness. FK actions
+  // must be off outside the transaction, otherwise replacing it deletes children.
+  db.exec("PRAGMA foreign_keys=OFF");
+  try {
+    db.transaction(() => {
+      if (db.query("SELECT version FROM migrations WHERE version=22").get()) return;
+      db.exec(`
+        CREATE TABLE workspaces (
+          id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+          visibility TEXT NOT NULL CHECK(visibility IN ('public','hidden')),
+          createdAt TEXT NOT NULL, nextIssueNumber INTEGER NOT NULL DEFAULT 1
+        );
+      `);
+      // Names are bound values, never SQL interpolation. Configuration applies
+      // only when version 22 first runs; reopening never renames a workspace.
+      db.query(`INSERT INTO workspaces VALUES ('default',?,?,'public',strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+        (SELECT COALESCE(MAX(number),0)+1 FROM issues))`).run(migrationWorkspace.workspaceSlug, migrationWorkspace.workspaceName);
+      db.exec(`
+        CREATE TABLE workspace_settings (id INTEGER PRIMARY KEY CHECK(id=1), allowUserWorkspaceCreation INTEGER NOT NULL CHECK(allowUserWorkspaceCreation IN (0,1)));
+        INSERT INTO workspace_settings VALUES (1,1);
+        CREATE TABLE workspace_members (
+          workspaceId TEXT NOT NULL REFERENCES workspaces(id), userId TEXT NOT NULL REFERENCES users(id),
+          role TEXT NOT NULL CHECK(role IN ('admin','member')),
+          defaultAccess TEXT NOT NULL CHECK(defaultAccess IN ('none','read','full')),
+          legacyAccess INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY(workspaceId,userId)
+        );
+        INSERT INTO workspace_members SELECT 'default',id,role,'full',1 FROM users;
+        -- Compatibility onboarding applies ONLY to the migrated public Default.
+        -- Hidden Default and all other workspaces require explicit invitations.
+        CREATE TRIGGER users_default_workspace AFTER INSERT ON users
+        WHEN (NEW.role='admin' OR EXISTS(SELECT 1 FROM workspaces WHERE id='default' AND visibility='public'))
+          AND NOT EXISTS(SELECT 1 FROM workspace_invitations WHERE workspaceId='default' AND email=NEW.email) BEGIN
+          INSERT INTO workspace_members VALUES ('default',NEW.id,NEW.role,'full',1);
+        END;
+        CREATE TABLE workspace_project_access (
+          workspaceId TEXT NOT NULL, userId TEXT NOT NULL, projectId TEXT NOT NULL REFERENCES projects(id),
+          access TEXT NOT NULL CHECK(access IN ('read','full')),
+          FOREIGN KEY(workspaceId,userId) REFERENCES workspace_members(workspaceId,userId) ON DELETE CASCADE,
+          PRIMARY KEY(workspaceId,userId,projectId)
+        );
+        CREATE TABLE verified_account_emails (userId TEXT PRIMARY KEY REFERENCES users(id), email TEXT NOT NULL COLLATE NOCASE);
+        INSERT INTO verified_account_emails SELECT id,email FROM users WHERE password IS NOT NULL;
+        CREATE TRIGGER local_account_email AFTER INSERT ON users WHEN NEW.password IS NOT NULL BEGIN
+          INSERT INTO verified_account_emails VALUES (NEW.id,NEW.email);
+        END;
+        CREATE TABLE workspace_invitations (
+          id TEXT PRIMARY KEY, workspaceId TEXT NOT NULL REFERENCES workspaces(id),
+          email TEXT NOT NULL COLLATE NOCASE, defaultAccess TEXT NOT NULL CHECK(defaultAccess IN ('none','read','full')),
+          projectAccess TEXT NOT NULL, createdAt TEXT NOT NULL, UNIQUE(workspaceId,email)
+        );
+        ALTER TABLE projects ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES workspaces(id);
+        ALTER TABLE issues ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES workspaces(id);
+        ALTER TABLE attachments ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'default' REFERENCES workspaces(id);
+        DROP INDEX IF EXISTS issues_unlinked_number;
+        CREATE UNIQUE INDEX issues_workspace_number ON issues(workspaceId,number);
+      `);
+      const { sql } = db.query("SELECT sql FROM sqlite_schema WHERE type='table' AND name='projects'").get() as { sql: string };
+      const objects = db.query("SELECT sql FROM sqlite_schema WHERE tbl_name='projects' AND type IN ('index','trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+      db.exec(sql.replace(/^CREATE TABLE\s+(?:"projects"|projects)/i, 'CREATE TABLE projects_workspace')
+        .replace(/slug TEXT NOT NULL UNIQUE/i, 'slug TEXT NOT NULL'));
+      db.exec(`INSERT INTO projects_workspace SELECT * FROM projects;
+        DROP TABLE projects;
+        ALTER TABLE projects_workspace RENAME TO projects;`);
+      for (const object of objects) db.exec(object.sql);
+      db.exec(`
+        CREATE UNIQUE INDEX projects_workspace_slug ON projects(workspaceId,slug);
+        CREATE TRIGGER issues_workspace_insert BEFORE INSERT ON issues WHEN NEW.projectId IS NOT NULL BEGIN
+          SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.projectId AND workspaceId=NEW.workspaceId)
+            THEN RAISE(ABORT,'Cross-workspace project') END;
+        END;
+        CREATE TRIGGER issues_workspace_update BEFORE UPDATE OF projectId,workspaceId ON issues BEGIN
+          SELECT CASE WHEN NEW.workspaceId!=OLD.workspaceId OR (NEW.projectId IS NOT NULL AND NOT EXISTS(
+            SELECT 1 FROM projects WHERE id=NEW.projectId AND workspaceId=NEW.workspaceId))
+            THEN RAISE(ABORT,'Cross-workspace project') END;
+        END;
+        CREATE TRIGGER projects_workspace_immutable BEFORE UPDATE OF workspaceId ON projects WHEN NEW.workspaceId!=OLD.workspaceId BEGIN
+          SELECT RAISE(ABORT,'Workspace is immutable');
+        END;
+        INSERT INTO migrations VALUES (22);
+      `);
+      if (db.query("PRAGMA foreign_key_check").all().length) throw new Error("Foreign key violation during workspace migration");
+    }).immediate();
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  db.exec("PRAGMA foreign_keys=ON");
   return db;
 }

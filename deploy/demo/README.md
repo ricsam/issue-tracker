@@ -4,18 +4,20 @@ Live URL: **https://issue-tracker.r5d.app**. Namespace `issue-tracker-demo`, Hel
 
 ## Reproducible deployment
 
-`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.25.0 and the verified published SHA image documented below after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
+`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.28.0 and a verified published SHA image after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
 
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
 helm repo update issue-tracker
 export IMAGE_TAG='<published-sha-tag>@sha256:<verified-image-digest>'
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --kube-context ricsam --namespace issue-tracker-demo --version 0.25.0 \
+  --kube-context ricsam --namespace issue-tracker-demo --version 0.28.0 \
   -f deploy/demo/values.yaml --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 
-**Upgrading from the previous 0.22.0 deployment (migration 16):** stop writes and take a consistent full-data backup, including the settings-encryption Secret, Helm values/manifest and deployment/PVC state, on both backup hosts before upgrading. Verify SQLite integrity and matching checksums. Version 0.25.0 runs v17 (creator-only drafts), v18 (API credentials) and v19 (plugins); plugins begin disabled. Never use `--atomic` or `helm rollback` alone, or run an older image against migrated data: older applications cannot enforce draft privacy. Recovery requires restoring the pre-upgrade backup with chart 0.22.0 and image `sha-11a1967@sha256:6bed99aff8a9b53938cc8014bb109d336a7cf273316c86937779bd3716e45d36`, preserving any newer writes separately. Preserve the exact PVC binding, Secrets, OIDC configuration and ingress host.
+**Workspace upgrade (0.28.0):** see the [packaged chart migration guide](../../charts/issue-tracker/README.md). This deployment sets `migration.workspaceName: "richie's workspace"` and `migration.workspaceSlug: richies-workspace` **before** migration 22 first runs. Existing content stays on the same PVC and retains its internal identifiers, issue numbers, history and private-project protections. Canonical URLs become `/w/richies-workspace/projects` and `/w/richies-workspace/issues/<number>`; CLI/MCP callers must select `richies-workspace`. These migration values do not rename an already-migrated workspace. The rollout from the current 0.25.0/migration-19 deployment runs migrations 20–22. A database backup and matching old image/chart are mandatory for rollback; never roll back only the application.
+
+**Historical upgrade from 0.22.0 (migration 16) to 0.25.0:** stop writes and take a consistent full-data backup, including the settings-encryption Secret, Helm values/manifest and deployment/PVC state, on both backup hosts before upgrading. Verify SQLite integrity and matching checksums. Version 0.25.0 runs v17 (creator-only drafts), v18 (API credentials) and v19 (plugins); plugins begin disabled. Never use `--atomic` or `helm rollback` alone, or run an older image against migrated data: older applications cannot enforce draft privacy. Recovery requires restoring the pre-upgrade backup with chart 0.22.0 and image `sha-11a1967@sha256:6bed99aff8a9b53938cc8014bb109d336a7cf273316c86937779bd3716e45d36`, preserving any newer writes separately. Preserve the exact PVC binding, Secrets, OIDC configuration and ingress host.
 
 **Fresh database:** override `--set ingress.enabled=false`, then claim the administrator privately following [the deployment guide](../../docs/deployment.md). Only enable ingress once setup is complete. Do not reset the database during ordinary upgrades. Preserve the existing PVC, encryption-key Secret and registry credentials. This single-instance SQLite deployment uses Recreate.
 

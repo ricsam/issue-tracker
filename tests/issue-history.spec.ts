@@ -18,7 +18,7 @@ async function seed(page: Page, baseURL: string) {
 for (const embedded of [false, true]) {
   test(`${embedded ? "sidebar" : "full page"} history shows saved changes and refreshes without losing drafts`, async ({ page, baseURL }) => {
     const { project, issue, headers } = await seed(page, baseURL!);
-    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+    await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
     if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
     const history = page.locator(".issue-history");
     await history.locator(":scope > summary").click();
@@ -51,7 +51,7 @@ for (const embedded of [false, true]) {
     await expect(source).toHaveValue("Unsaved draft stays out of history");
     await form.getByRole("button", { name: "Discard changes", exact: true }).click();
     expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
-    await page.goto(`/issues/${issue.id}`);
+    await page.goto(`/w/default/issues/${issue.number}`);
     await page.locator(".issue-history > summary").click();
     await expect(page.locator(".issue-history-list > li")).toHaveCount(6);
     await expect(page.locator(".issue-history")).toContainText("Alex Morgan deleted a comment");
@@ -66,7 +66,7 @@ test("history paginates, retries failures and renders historical text safely on 
   }
   await page.setViewportSize({ width: 390, height: 900 });
   await page.route(`**/api/issues/${issue.id}/history?*`, (route) => route.fulfill({ status: 503, json: { error: "History offline" } }));
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const history = page.locator(".issue-history");
   await history.locator(":scope > summary").click();
   await expect(history.getByRole("alert")).toContainText("History offline");

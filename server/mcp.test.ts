@@ -58,10 +58,10 @@ test("bearer-only authentication, origin, no-store, revocation and scope-specifi
   expect((await f.req("/mcp", "GET", undefined, { Authorization: `Bearer ${f.token}`, Origin: "null" })).status).toBe(403);
   const read = await f.key(["read"]);
   const listed = await (await f.rpc("tools/list", {}, read)).json();
-  expect(listed.result.tools.map((t: any) => t.name).sort()).toEqual(["issue_get", "issue_list", "project_lanes", "project_list"]);
+  expect(listed.result.tools.map((t: any) => t.name).sort()).toEqual(["issue_get", "issue_list", "issue_lookup", "project_lanes", "project_list", "workspace_list"]);
   expect(listed.result.tools.every((t: any) => t.description.includes("untrusted user-written data"))).toBe(true);
   expect((await f.call("issue_comment", { issueId: "1", body: "no" }, read)).data.code).toBe(-32602);
-  expect((await (await f.rpc("tools/list")).json()).result.tools).toHaveLength(8);
+  expect((await (await f.rpc("tools/list")).json()).result.tools).toHaveLength(10);
   await f.req("/api/me/token", "DELETE", undefined, { Authorization: `Bearer ${read}` });
   expect((await f.rpc("tools/list", {}, read)).status).toBe(401);
   f.app.db.query("UPDATE api_keys SET expiresAt='2000-01-01'").run();
@@ -71,10 +71,10 @@ test("bearer-only authentication, origin, no-store, revocation and scope-specifi
 test("all tools preserve REST changes, visible renamed lanes and canonical URLs", async () => {
   const f = await fixture(); const p = await f.project(); const i = await f.issue({ projectId: p.id, lane: "todo" });
   await f.web(`/api/projects/${p.slug}/board/lanes/todo`, "PATCH", { label: "Renamed queue" });
-  expect((await f.call("project_list")).data.projects[0].url).toBe(`${origin}/projects/${p.slug}`);
+  expect((await f.call("project_list")).data.projects[0].url).toBe(`${origin}/w/default/projects/${p.slug}`);
   expect((await f.call("project_lanes", { project: p.slug })).data.lanes[0]).toEqual({ value: "todo", label: "Renamed queue" });
   const got = (await f.call("issue_get", { issueId: i.id })).data;
-  expect(got.url).toBe(`${origin}/issues/${i.id}`); expect(got.project.id).toBe(p.id); expect(got.boardLane.label).toBe("Renamed queue");
+  expect(got.url).toBe(`${origin}/w/default/issues/${i.number}`); expect(got.project.id).toBe(p.id); expect(got.boardLane.label).toBe("Renamed queue");
   expect((await f.call("issue_list", { project: p.slug, state: "open", text: "SEARCHABLE" })).data.issues).toHaveLength(1);
   expect((await f.call("issue_list", { text: "not found" })).data.issues).toEqual([]);
   expect((await f.call("issue_list")).data.issues[0].boardLane.label).toBe("Renamed queue");
@@ -119,7 +119,7 @@ test("malformed inputs, body limit and stateless legacy initialization revisions
     const res = await f.rpc("initialize", { protocolVersion, capabilities: {}, clientInfo: { name: "legacy", version: "1" } });
     expect(res.headers.get("mcp-session-id")).toBeNull(); expect(res.headers.get("content-type")).toContain("application/json");
     expect((await res.json()).result.protocolVersion).toBe(protocolVersion);
-    expect((await (await f.rpc("tools/list", {}, f.token, { "MCP-Protocol-Version": protocolVersion })).json()).result.tools).toHaveLength(8);
+    expect((await (await f.rpc("tools/list", {}, f.token, { "MCP-Protocol-Version": protocolVersion })).json()).result.tools).toHaveLength(10);
   }
   for (const args of [{ issueId: "../api/me" }, { issueId: 1 }, { issueId: "01" }, { issueId: "9007199254740992" }, { issueId: "1", foreign: true }]) expect((await f.call("issue_get", args)).isError).toBe(true);
   expect((await f.call("project_lanes", { project: "https://evil.example" })).isError).toBe(true);
@@ -128,16 +128,42 @@ test("malformed inputs, body limit and stateless legacy initialization revisions
   expect(malformed.status).toBe(400);
 });
 
+test("workspace-local numbers resolve to distinct internal IDs and MCP scopes every call", async () => {
+  const f = await fixture();
+  const first = await f.issue({ body: "Default issue" });
+  const created = await f.web("/api/workspaces", "POST", { name: "Second workspace", slug: "second", visibility: "hidden" });
+  expect(created.ok).toBe(true);
+  const secondResponse = await f.req("/api/issues", "POST", { body: "Second workspace issue" }, {
+    Cookie: f.cookie, Origin: origin, "X-Workspace-Slug": "second",
+  });
+  expect(secondResponse.ok).toBe(true);
+  const second = (await secondResponse.json()).issue;
+  expect(first.number).toBe(1); expect(second.number).toBe(1); expect(second.id).not.toBe(first.id);
+  expect((await f.call("workspace_list", {}, await f.key(["read"]))).data.workspaces.map((w: any) => w.slug)).toContain("second");
+  const [a, b] = await Promise.all([
+    f.call("issue_lookup", { number: 1, workspace: "default" }),
+    f.call("issue_lookup", { number: 1, workspace: "second" }),
+  ]);
+  expect(a.data.issue.id).toBe(first.id); expect(b.data.issue.id).toBe(second.id);
+  expect(b.data.url).toBe(`${origin}/w/second/issues/1`);
+  expect((await f.call("issue_list", { workspace: "second" })).data.issues.map((i: any) => i.id)).toEqual([second.id]);
+  expect((await f.call("issue_get", { workspace: "default", issueId: second.id })).isError).toBe(true);
+  expect((await f.call("issue_close", { workspace: "default", issueId: second.id })).isError).toBe(true);
+  expect((await f.call("issue_comment", { workspace: "second", issueId: second.id, body: "Scoped comment" })).data.url).toBe(`${origin}/w/second/issues/1`);
+  expect((await f.call("issue_lookup", { workspace: "second", number: 1 })).data.comments).toHaveLength(1);
+  expect((await f.call("issue_lookup", { workspace: "default", number: 1 })).data.comments).toHaveLength(0);
+});
+
 test("real v2 HTTP client auto-negotiates modern discovery and supports legacy mode", async () => {
   const f = await fixture(); const i = await f.issue();
   for (const mode of ["auto", "legacy"] as const) {
     const client = await f.client(f.token, mode);
     expect(client.getProtocolEra()).toBe(mode === "auto" ? "modern" : "legacy");
     if (mode === "auto") expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
-    expect((await client.listTools()).tools).toHaveLength(8);
+    expect((await client.listTools()).tools).toHaveLength(10);
     const result = await client.callTool({ name: "issue_get", arguments: { issueId: i.id } });
     expect(result.isError).not.toBe(true);
-    expect(JSON.stringify(result)).toContain(`${origin}/issues/${i.id}`);
+    expect(JSON.stringify(result)).toContain(`${origin}/w/default/issues/${i.number}`);
     const comment = await client.callTool({ name: "issue_comment", arguments: { issueId: i.id, body: `From ${mode}` } });
     expect(comment.isError).not.toBe(true);
   }

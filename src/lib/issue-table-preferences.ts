@@ -29,7 +29,7 @@ function load(key: string | null, includeProject: boolean) {
 /** A synchronous scope switch avoids showing or storing a different account/project's filters. */
 export function useIssueTablePreferences(userId: string, scope: string | null) {
   const key = scope ? issueTablePreferencesKey(userId, scope) : null;
-  const includeProject = scope === "all";
+  const includeProject = scope === "all" || scope?.startsWith("workspace:") === true;
   const [stored, setStored] = useState(() => ({ key, value: load(key, includeProject) }));
   const value = stored.key === key ? stored.value : load(key, includeProject);
   if (stored.key !== key) setStored({ key, value });

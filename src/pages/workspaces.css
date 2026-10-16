@@ -1,0 +1,9 @@
+.workspace-selector { display: grid; gap: 6px; margin: 4px 12px 12px; font-size: 12px; font-weight: 600; }
+.workspace-selector select { width: 100%; min-width: 0; }
+.workspace-card { border: 1px solid var(--border, #dedee5); border-radius: 12px; padding: 20px; background: var(--surface, #fff); margin-bottom: 16px; }
+.workspace-card h2 { margin-top: 0; }
+.workspace-settings { max-width: 1000px; }
+.workspace-member { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-top: 1px solid var(--border, #dedee5); flex-wrap: wrap; }
+.workspace-member p { margin: 4px 0; }
+.workspace-project-grants { display: grid; gap: 12px; max-height: 260px; overflow: auto; }
+.workspace-project-grants label { display: grid; grid-template-columns: 1fr minmax(140px, 1fr); align-items: center; gap: 12px; }

@@ -3,12 +3,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Archive, ArrowUpRight, FolderKanban, Plus } from "lucide-react";
 import type { Project } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { useWorkspace } from "../lib/workspace";
+import { useWorkspace, workspacePath, projectPath, canCreateInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
 import { PinProjectButton } from "../components/pinned-projects";
 import { ProjectAccessFields, ProjectAccessSummary } from "../components/project-access";
 export function ProjectsPage() {
-  const { projects, refresh, user } = useWorkspace();
+  const { projects, refresh, user, workspace } = useWorkspace();
+  const canCreate = canCreateInWorkspace(workspace);
   const [visibility, setVisibility] = useState<Project["visibility"]>("public");
   const [sharedUserIds, setSharedUserIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -21,18 +22,19 @@ export function ProjectsPage() {
   const shown = archivedView ? archived : active;
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!canCreate) return;
     setBusy(true);
     setError("");
     try {
       const { project } = await api<{ project: Project }>("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ ...Object.fromEntries(new FormData(e.currentTarget)), visibility, sharedUserIds }),
+        body: JSON.stringify({ ...Object.fromEntries(new FormData(e.currentTarget)), ...(workspace?.id === "default" ? { visibility, sharedUserIds } : {}) }),
       });
       await refresh();
       setOpen(false);
       setVisibility("public");
       setSharedUserIds([]);
-      navigate(`/projects/${project.slug}`);
+      navigate(projectPath(project));
     } catch (e) {
       setError(message(e));
     } finally {
@@ -54,7 +56,7 @@ export function ProjectsPage() {
               : "Big ideas, organized into the next small steps."}
           </p>
         </div>
-        <Button
+        <Button disabled={!canCreate}
           onClick={() => {
             setError("");
             setOpen(true);
@@ -70,7 +72,7 @@ export function ProjectsPage() {
             <Link
               className={!archivedView ? "active" : ""}
               aria-current={!archivedView ? "page" : undefined}
-              to="/projects"
+              to={workspacePath(workspace!.slug)}
             >
               <FolderKanban size={15} />
               Active <span className="toggle-count">{active.length}</span>
@@ -78,7 +80,7 @@ export function ProjectsPage() {
             <Link
               className={archivedView ? "active" : ""}
               aria-current={archivedView ? "page" : undefined}
-              to="/projects?view=archived"
+              to={workspacePath(workspace!.slug, "/projects?view=archived")}
             >
               <Archive size={15} />
               Archived <span className="toggle-count">{archived.length}</span>
@@ -91,7 +93,7 @@ export function ProjectsPage() {
           {shown.map((p, i) => (
             <div className="project-card-wrapper" key={p.id}>
             <Link
-              to={`/projects/${p.slug}`}
+              to={projectPath(p)}
               className={`project-card${p.archivedAt ? " is-archived" : ""}`}
             >
               <div className="card-top">
@@ -153,7 +155,7 @@ export function ProjectsPage() {
               </>
             )}
           </p>
-          <Button onClick={() => setOpen(true)}>
+          <Button disabled={!canCreate} onClick={() => setOpen(true)}>
             <Plus size={16} />
             {archived.length ? "Create project" : "Create your first project"}
           </Button>
@@ -184,9 +186,9 @@ export function ProjectsPage() {
               maxLength={10000}
             />
           </label>
-          <fieldset className="form-stack" disabled={busy}>
+          {workspace?.id === "default" && <fieldset className="form-stack" disabled={busy}>
             <ProjectAccessFields visibility={visibility} onVisibilityChange={setVisibility} sharedUserIds={sharedUserIds} onSharedChange={setSharedUserIds} ownerId={user.id} />
-          </fieldset>
+          </fieldset>}
           <ErrorNotice error={error} />
           <div className="form-actions">
             <Button

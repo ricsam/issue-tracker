@@ -22,7 +22,7 @@ async function seed(page: Page, baseURL: string) {
 for (const embedded of [false, true]) {
   test(`${embedded ? "sidebar" : "full page"}: create, attach, progress, detach and parent navigation preserve unsaved drafts`, async ({ page, baseURL }) => {
     const { project, parent, child, headers } = await seed(page, baseURL!);
-    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${parent.id}`);
+    await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${parent.number}`);
     if (embedded) await page.locator(`a[data-issue-id="${parent.id}"]`).click();
     const detail = page.locator(".detail-container");
     const section = detail.getByRole("region", { name: "Issue relationships" });
@@ -84,7 +84,7 @@ for (const embedded of [false, true]) {
     await expect(body).toHaveValue("Unsaved parent body");
     page.once("dialog", (dialog) => void dialog.accept());
     await link.click();
-    await expect(page).toHaveURL(`/issues/${child.id}`);
+    await expect(page).toHaveURL(`/w/default/issues/${child.number}`);
     const childSection = page.getByRole("region", { name: "Issue relationships" });
     await expect(childSection.getByText("Sub-issue of", { exact: true })).toBeVisible();
     await expect(childSection.getByRole("link", { name: `!${parent.number} ${parent.title}`, exact: true })).toBeVisible();
@@ -100,7 +100,7 @@ test("nested cycles and already-parented issues explain failures without closing
   const grandchild = await create("Grandchild work");
   expect((await page.request.post(`/api/issues/${parent.id}/sub-issues`, { headers, data: { issueId: child.id } })).ok()).toBeTruthy();
   expect((await page.request.post(`/api/issues/${child.id}/sub-issues`, { headers, data: { issueId: grandchild.id } })).ok()).toBeTruthy();
-  await page.goto(`/issues/${grandchild.id}`);
+  await page.goto(`/w/default/issues/${grandchild.number}`);
   const section = page.getByRole("region", { name: "Issue relationships" });
   await section.getByRole("button", { name: "Add existing issue" }).click();
   const picker = page.getByRole("dialog", { name: "Add existing sub-issue" });
@@ -118,7 +118,7 @@ test("mobile relationships, read-only archive, drafts and unlinked parent creati
   const { project, parent, child, headers } = await seed(page, baseURL!);
   expect((await page.request.post(`/api/issues/${parent.id}/sub-issues`, { headers, data: { issueId: child.id } })).ok()).toBeTruthy();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/issues/${parent.id}`);
+  await page.goto(`/w/default/issues/${parent.number}`);
   const section = page.getByRole("region", { name: "Issue relationships" });
   await expect(section.getByRole("link", { name: `!${child.number} ${child.title}`, exact: true })).toBeVisible();
   expect(await section.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBeTruthy();
@@ -133,11 +133,11 @@ test("mobile relationships, read-only archive, drafts and unlinked parent creati
   await expect(section.getByRole("button", { name: /Remove sub-issue/ })).toHaveCount(0);
 
   const { issue: draft } = await (await page.request.post("/api/issues", { headers, data: { body: "Personal draft", state: "draft" } })).json();
-  await page.goto(`/issues/${draft.id}`);
+  await page.goto(`/w/default/issues/${draft.number}`);
   await expect(page.getByRole("button", { name: "Publish issue", exact: true })).toBeVisible();
   await expect(section).toHaveCount(0);
   const { issue: unlinked } = await (await page.request.post("/api/issues", { headers, data: { body: "No project parent" } })).json();
-  await page.goto(`/issues/${unlinked.id}`);
+  await page.goto(`/w/default/issues/${unlinked.number}`);
   await section.getByRole("button", { name: "Create sub-issue", exact: true }).click();
   await expect(composer.getByRole("combobox", { name: "Project", exact: true })).toHaveValue("");
 });

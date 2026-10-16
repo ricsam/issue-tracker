@@ -27,13 +27,14 @@ import {
 import { appendIssueLabels, extractIssueLabels } from "../shared/labels";
 import { isLabel } from "../shared/hashtag-matches";
 import { moveLaneTo, orderedLanes } from "../shared/board";
-import { openDatabase, syncIssueTaggedUsers } from "./db";
+import { openDatabase, syncIssueTaggedUsers, migrationWorkspaceOptions } from "./db";
 import { appendIssueMentions, extractMentionUserIds } from "../shared/mentions";
 import { withIssueHistory, recordIssueChange, recordHistory, readHistory, issueSnapshot } from "./history";
 import { OidcService } from "./oidc";
 import { securityHeaders } from "./security";
 import { apiAccess, apiKeyAllows, authReturnTo, publicDevicePaths, type AppEnv } from "./api-access";
-import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams, issueAccessParams } from "./project-access";
+import { projectAccess, visibleProjectSql, visibleIssueSql, accessParams, issueAccessParams, workspaceIdFor } from "./project-access";
+import { workspaceService, workspaceSlugField } from "./workspaces";
 import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./attachments";
 import { PluginService, PluginError, type PluginDefinition } from "./plugins";
 import type { PluginEvent } from "../shared/plugins";
@@ -46,6 +47,9 @@ export interface AppOptions {
   production?: boolean;
   allowInsecureOidc?: boolean;
   sessionTtlMs?: number;
+  /** Initial v22 migration only; later starts never rename the legacy workspace. */
+  migrationWorkspaceName?: string;
+  migrationWorkspaceSlug?: string;
   /** Compiled definitions only; test fixtures may supply an isolated registry. */
   pluginDefinitions?: PluginDefinition[];
 }
@@ -122,6 +126,10 @@ const boardFields = z
 const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL AND bi.isDraft=0) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id AND (i.isDraft=0 OR i.authorId=?)`;
 
 export function createApp(options: AppOptions = {}) {
+  const migrationWorkspace = migrationWorkspaceOptions({
+    workspaceName: options.migrationWorkspaceName ?? process.env.MIGRATION_WORKSPACE_NAME,
+    workspaceSlug: options.migrationWorkspaceSlug ?? process.env.MIGRATION_WORKSPACE_SLUG,
+  });
   const production =
     options.production ?? process.env.NODE_ENV === "production";
   const baseUrl = new URL(
@@ -154,8 +162,12 @@ export function createApp(options: AppOptions = {}) {
     key = readFileSync(keyPath);
     if (key.length !== 32) throw new Error("Invalid persistent settings key");
   }
-  const db = openDatabase(resolve(dataDir, "app.sqlite"));
+  const db = openDatabase(resolve(dataDir, "app.sqlite"), 22, migrationWorkspace);
+  // Legacy clients and saved uploads omit scope. Resolve by stable migration ID,
+  // never by a literal slug which an operator may customize before first upgrade.
+  const legacyWorkspaceSlug = () => (db.query("SELECT slug FROM workspaces WHERE id='default'").get() as { slug: string }).slug;
   const access = projectAccess(db);
+  const workspaces = workspaceService(db);
   const tokens = apiAccess(db);
   const plugins = new PluginService(db, {
     plugins: options.pluginDefinitions,
@@ -223,17 +235,19 @@ export function createApp(options: AppOptions = {}) {
   const issue = (issueId: string | number, user: User): Issue => {
     const row = db
       .query(
-        "SELECT id,number,projectId,title,body,labels,authorId,closedAt,closedById,closeReason,duplicateOfId,isDraft,createdAt,updatedAt FROM issues WHERE id=?",
+        "SELECT id,number,workspaceId,projectId,title,body,labels,authorId,closedAt,closedById,closeReason,duplicateOfId,isDraft,createdAt,updatedAt FROM issues WHERE id=?",
       )
       .get(issueId) as any;
-    if (!row || (row.isDraft && row.authorId !== user.id)) return fail(404, "Issue not found");
+    if (!row || row.workspaceId !== workspaceIdFor(user) || (row.isDraft && row.authorId !== user.id)) return fail(404, "Issue not found");
     access.requireRead(row.projectId, user, "Issue");
     const { isDraft, ...fields } = row;
     return {
       ...fields,
       id: String(row.id),
       duplicateOfId: row.duplicateOfId != null && visibleDuplicate(String(row.duplicateOfId), user) ? String(row.duplicateOfId) : null,
-      number: Number(row.id),
+      number: row.number,
+      workspaceSlug: user.workspaceSlug ?? legacyWorkspaceSlug(),
+      access: access.level(row.projectId, user) === "full" ? "full" : "read",
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
       state: isDraft ? "draft" : row.closedAt ? "closed" : "open",
@@ -242,41 +256,44 @@ export function createApp(options: AppOptions = {}) {
   };
   const project = (slug: string, user: User) => {
     const row = db
-      .query(`${projectSql} WHERE p.slug=? GROUP BY p.id`)
-      .get(user.id, slug) as Project | null;
+      .query(`${projectSql} WHERE p.slug=? AND p.workspaceId=? GROUP BY p.id`)
+      .get(user.id, slug, workspaceIdFor(user)) as Project | null;
     if (!row) return fail(404, "Project not found");
     access.requireRead(row.id, user);
-    return access.serialize(row);
+    return access.serialize(row, user);
   };
   // Archived projects stay readable but reject content and board changes until restored.
   const activeProject = (slug: string, user: User) => {
     const p = project(slug, user);
+    access.requireWrite(p.id, user);
     if (p.archivedAt) fail(409, "Project is archived");
     return p;
   };
   const requireActiveProjectId = (projectId: string, user: User) => {
-    access.requireRead(projectId, user);
+    access.requireWrite(projectId, user);
     const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
     if (!p) return fail(404, "Project not found");
     if (p.archivedAt) fail(409, "Project is archived");
   };
   const activeIssue = (issueId: string, user: User) => {
     const i = issue(issueId, user);
+    access.requireWrite(i.projectId, user, "Issue");
     if (i.projectId !== null) requireActiveProjectId(i.projectId, user);
     return i;
   };
   const relationships = (issueId: string, user: User): IssueRelationships => {
     const references = (direction: "parent" | "children") => {
       const join = direction === "parent" ? "r.parentId=i.id WHERE r.childId=?" : "r.childId=i.id WHERE r.parentId=?";
-      const rows = db.query(`SELECT i.id,i.title,i.closedAt FROM issue_relationships r JOIN issues i ON ${join} AND i.isDraft=0 AND ${visibleIssueSql} ORDER BY i.id`)
-        .all(issueId, ...issueAccessParams(user)) as { id: number; title: string; closedAt: string | null }[];
-      return rows.map((row) => ({ id: String(row.id), number: row.id, title: row.title, state: row.closedAt ? "closed" as const : "open" as const }));
+      const rows = db.query(`SELECT i.id,i.number,i.title,i.closedAt FROM issue_relationships r JOIN issues i ON ${join} AND i.isDraft=0 AND ${visibleIssueSql} ORDER BY i.id`)
+        .all(issueId, ...issueAccessParams(user)) as { id: number; number: number; title: string; closedAt: string | null }[];
+      return rows.map((row) => ({ id: String(row.id), number: row.number, title: row.title, state: row.closedAt ? "closed" as const : "open" as const }));
     };
     return { parent: references("parent")[0] ?? null, subIssues: references("children") };
   };
   const relationshipEndpoints = (parentId: string, childId: string, user: User) => {
     // Check both read permissions before revealing either endpoint's lifecycle state.
     const parent = issue(parentId, user), child = issue(childId, user);
+    for (const endpoint of [parent, child]) access.requireWrite(endpoint.projectId, user, "Issue");
     if (parent.state === "draft" || child.state === "draft") fail(409, "Draft issues cannot have relationships");
     for (const endpoint of [parent, child]) if (endpoint.projectId !== null) requireActiveProjectId(endpoint.projectId, user);
   };
@@ -339,15 +356,18 @@ export function createApp(options: AppOptions = {}) {
       fail(400, "Use at most 30 tags, each at most 50 characters");
     return labels;
   };
-  const validateMentions = (body: string) => {
-    for (const userId of extractMentionUserIds(body))
-      if (!publicUser(userId)) fail(400, "Unknown mentioned user");
+  const workspaceUser = (userId: string, user: User) => {
+    if (!db.query("SELECT 1 FROM workspace_members WHERE workspaceId=? AND userId=?").get(workspaceIdFor(user), userId))
+      return fail(400, "Unknown workspace user");
+    return publicUser(userId) ?? fail(400, "Unknown workspace user");
   };
-  const validateSharedUsers = (userIds: string[]) => {
-    if (userIds.some((userId) => !publicUser(userId))) fail(400, "Unknown shared user");
+  const validateMentions = (body: string, user: User) => {
+    for (const userId of extractMentionUserIds(body)) workspaceUser(userId, user);
   };
   const saveSharedUsers = (projectId: string, userIds: string[]) => {
-    validateSharedUsers(userIds);
+    const p = db.query("SELECT workspaceId FROM projects WHERE id=?").get(projectId) as { workspaceId: string };
+    for (const userId of userIds) if (!db.query("SELECT 1 FROM workspace_members WHERE workspaceId=? AND userId=?").get(p.workspaceId, userId))
+      fail(400, "Unknown workspace user");
     db.query("DELETE FROM project_members WHERE projectId=?").run(projectId);
     for (const userId of userIds)
       db.query("INSERT INTO project_members (projectId,userId) VALUES (?,?)").run(projectId, userId);
@@ -436,6 +456,18 @@ export function createApp(options: AppOptions = {}) {
     ].includes(path);
     if (!isPublic && !publicDevice && !user)
       return c.json({ error: "Authentication required" }, 401);
+    if (user && !isPublic && !publicDevice) {
+      workspaces.acceptInvitations(user);
+      const contentRoute = /^\/api\/(projects|issues|comments|uploads|plugins|users)(\/|$)/.test(path)
+        || /^\/api\/me\/(pinned-projects|favorite-projects)(\/|$)/.test(path);
+      if (contentRoute) {
+        // Native attachment images cannot send a custom request header.
+        const attachmentWorkspace = c.req.method === "GET" && path.startsWith("/api/uploads/") ? c.req.query("workspace") : undefined;
+        const slug = workspaceSlugField.parse(c.req.header("X-Workspace-Slug") ?? attachmentWorkspace ?? legacyWorkspaceSlug());
+        const workspace = workspaces.get(slug, user);
+        c.set("user", { ...user, workspaceId: workspace.id, workspaceSlug: workspace.slug });
+      }
+    }
     await next();
   });
   app.use(
@@ -446,6 +478,7 @@ export function createApp(options: AppOptions = {}) {
     }),
   );
   tokens.register(app, baseUrl);
+  workspaces.register(app);
   registerMcp(app, { tokens, baseUrl, publicUser });
   app.get("/healthz", (c) => c.json({ ok: true }));
   app.get("/readyz", (c) => {
@@ -549,7 +582,14 @@ export function createApp(options: AppOptions = {}) {
             .get(identity.issuer, identity.subject) as {
             userId: string;
           } | null;
-          if (existing) return existing.userId;
+          if (existing) {
+            const current = publicUser(existing.userId)!;
+            // Existing identity never silently links a different email account.
+            if (current.email.toLowerCase() === identity.email.toLowerCase())
+              db.query("INSERT INTO verified_account_emails VALUES (?,?) ON CONFLICT(userId) DO UPDATE SET email=excluded.email").run(current.id, identity.email);
+            else db.query("DELETE FROM verified_account_emails WHERE userId=?").run(current.id);
+            return existing.userId;
+          }
           if (
             !oidc.settings().allowSignup ||
             !db.query("SELECT 1 FROM users LIMIT 1").get()
@@ -569,6 +609,7 @@ export function createApp(options: AppOptions = {}) {
             identity.subject,
             uid,
           );
+          db.query("INSERT INTO verified_account_emails VALUES (?,?)").run(uid, identity.email);
           return uid;
         })
         .immediate();
@@ -578,13 +619,17 @@ export function createApp(options: AppOptions = {}) {
       return c.json({ error: "OIDC login failed" }, 400);
     }
   });
-  app.get("/api/users", (c) =>
-    c.json({
-      users: db
-        .query("SELECT id,name,email,role,createdAt FROM users ORDER BY name")
-        .all() as User[],
-    }),
-  );
+  app.get("/api/users", (c) => {
+    const user = c.get("user");
+    const member = user.role === "admin" || db.query("SELECT 1 FROM workspace_members WHERE workspaceId=? AND userId=?").get(workspaceIdFor(user), user.id);
+    if (!member) return fail(404, "Workspace not found");
+    return c.json({ users: db.query(`SELECT u.id,u.name,u.email,u.role,u.createdAt FROM users u
+      JOIN workspace_members m ON m.userId=u.id WHERE m.workspaceId=? ORDER BY u.name`).all(workspaceIdFor(user)) as User[] });
+  });
+  app.get("/api/admin/users", (c) => {
+    requireAdmin(c);
+    return c.json({ users: db.query("SELECT id,name,email,role,createdAt FROM users ORDER BY name").all() as User[] });
+  });
   app.post("/api/admin/users", async (c) => {
     requireAdmin(c);
     const input = account.parse(await json(c));
@@ -636,20 +681,21 @@ export function createApp(options: AppOptions = {}) {
     c.json({
       projects: db
         .query(`${projectSql} WHERE ${visibleProjectSql} GROUP BY p.id ORDER BY p.createdAt,p.id`)
-        .all(c.get("user").id, ...accessParams(c.get("user"))).map((row) => access.serialize(row as Project)),
+        .all(c.get("user").id, ...accessParams(c.get("user"))).map((row) => access.serialize(row as Project, c.get("user"))),
     }),
   );
   app.post("/api/projects", async (c) => {
     const input = z
       .object({
         name: text(100),
+        slug: workspaceSlugField.optional(),
         description: z.string().max(10000).default(""),
         visibility: z.enum(["public", "private"]).default("public"),
         sharedUserIds: sharedUsersField.default([]),
       })
       .strict()
       .parse(await json(c));
-    const slug =
+    const slug = input.slug ?? (
       (input.name
         .toLowerCase()
         .normalize("NFKD")
@@ -657,12 +703,13 @@ export function createApp(options: AppOptions = {}) {
         .replace(/^-|-$/g, "")
         .slice(0, 70) || "project") +
       "-" +
-      randomBytes(4).toString("hex");
+      randomBytes(4).toString("hex"));
     db.transaction(() => {
+      access.requireWrite(null, c.get("user"));
       const projectId = id();
       db.query(
-        "INSERT INTO projects (id,slug,name,description,createdAt,visibility,ownerId) VALUES (?,?,?,?,?,?,?)",
-      ).run(projectId, slug, input.name, input.description, now(), input.visibility, c.get("user").id);
+        "INSERT INTO projects (id,slug,name,description,createdAt,visibility,ownerId,workspaceId) VALUES (?,?,?,?,?,?,?,?)",
+      ).run(projectId, slug, input.name, input.description, now(), input.visibility, c.get("user").id, workspaceIdFor(c.get("user")));
       saveSharedUsers(projectId, input.sharedUserIds);
     }).immediate();
     return c.json({ project: project(slug, c.get("user")) });
@@ -676,7 +723,7 @@ export function createApp(options: AppOptions = {}) {
       const p = project(c.req.param("slug"), c.get("user"));
       access.requireManage(p, c.get("user"));
       if (input.ownerId !== undefined) {
-        if (!publicUser(input.ownerId)) fail(400, "Unknown project owner");
+        workspaceUser(input.ownerId, c.get("user"));
         db.query("UPDATE projects SET ownerId=? WHERE id=?").run(input.ownerId, p.id);
       }
       if (input.visibility !== undefined)
@@ -685,7 +732,7 @@ export function createApp(options: AppOptions = {}) {
       // A transfer may revoke the caller's access, but still return the committed
       // settings for this authorized operation. Subsequent reads use the new ACL.
       const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(c.get("user").id, p.id) as Project;
-      return access.serialize(row);
+      return access.serialize(row, c.get("user"));
     }).immediate();
     return c.json({ project: updated });
   });
@@ -693,7 +740,7 @@ export function createApp(options: AppOptions = {}) {
     const p = project(c.req.param("slug"), c.get("user"));
     const input = projectUpdateFields.parse(await json(c));
     db.transaction(() => {
-      access.requireRead(p.id, c.get("user"));
+      access.requireWrite(p.id, c.get("user"));
       if ("archived" in input) {
         // Conditional writes keep repeated archive requests idempotent.
         if (input.archived)
@@ -892,7 +939,7 @@ export function createApp(options: AppOptions = {}) {
     const issues = historyTransaction(c, input.issueIds, () => {
       const slug = c.req.param("slug");
       const p = slug ? activeProject(slug, c.get("user")) : null;
-      const users = input.userIds.map((userId) => publicUser(userId) ?? fail(400, "Unknown mentioned user"));
+      const users = input.userIds.map((userId) => workspaceUser(userId, c.get("user")));
       return input.issueIds.map((issueId) => {
         const current = activeIssue(issueId, c.get("user"));
         if (p && current.projectId !== p.id) fail(400, "Unknown project issue");
@@ -1081,17 +1128,24 @@ export function createApp(options: AppOptions = {}) {
     const time = now();
     const result = db.transaction(() => {
       const projectId = slug ? activeProject(slug, c.get("user")).id : input.projectId ?? null;
+      access.requireWrite(projectId, c.get("user"), "Issue");
       if (projectId !== null) requireActiveProjectId(projectId, c.get("user"));
       if (input.lane != null) {
         if (input.state === "draft") return fail(400, "Draft issues cannot be placed on a board");
         if (projectId === null) return fail(400, "Lane requires a project");
         requireVisibleLane(projectId, input.lane);
       }
-      validateMentions(body);
+      validateMentions(body, c.get("user"));
       validateAttachments(body, c.get("user"));
+      const workspaceId = workspaceIdFor(c.get("user"));
+      // Counter increments and issue insertion share the same immediate transaction.
+      const { number } = db.query("UPDATE workspaces SET nextIssueNumber=MAX(nextIssueNumber,(SELECT COALESCE(MAX(number),0)+1 FROM issues WHERE workspaceId=?))+1 WHERE id=? RETURNING nextIssueNumber-1 AS number")
+        .get(workspaceId, workspaceId) as { number: number };
       const inserted = db.query(
-        "INSERT INTO issues (number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt,isDraft) VALUES (0,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+        "INSERT INTO issues (workspaceId,number,projectId,title,body,status,priority,labels,authorId,createdAt,updatedAt,isDraft) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
       ).get(
+        workspaceId,
+        number,
         projectId,
         deriveIssueTitle(originalBody),
         body,
@@ -1104,7 +1158,6 @@ export function createApp(options: AppOptions = {}) {
         input.state === "draft" ? 1 : 0,
       ) as { id: number };
       const uid = String(inserted.id);
-      db.query("UPDATE issues SET number=id WHERE id=?").run(uid);
       if (input.parentId !== undefined) attachSubIssue(input.parentId, uid, c.get("user"));
       syncIssueTaggedUsers(db, uid);
       retainAttachmentReferences(db, uid, [body]);
@@ -1128,12 +1181,12 @@ export function createApp(options: AppOptions = {}) {
     const numeric = query.replace(/^!/, "");
     const exactId = issueIdField.safeParse(numeric);
     const rows = exactId.success
-      ? db.query(`SELECT i.id,i.title,i.closedAt,i.isDraft FROM issues i WHERE i.id=? AND ${visibleIssueSql} LIMIT 20`)
+      ? db.query(`SELECT i.id,i.number,i.title,i.closedAt,i.isDraft FROM issues i WHERE i.number=? AND ${visibleIssueSql} LIMIT 20`)
         .all(exactId.data, ...issueAccessParams(c.get("user")))
-      : db.query(`SELECT i.id,i.title,i.closedAt,i.isDraft FROM issues i WHERE instr(lower(i.title),lower(?))>0 AND ${visibleIssueSql} ORDER BY i.id DESC LIMIT 20`)
+      : db.query(`SELECT i.id,i.number,i.title,i.closedAt,i.isDraft FROM issues i WHERE instr(lower(i.title),lower(?))>0 AND ${visibleIssueSql} ORDER BY i.number DESC LIMIT 20`)
         .all(query, ...issueAccessParams(c.get("user")));
-    return c.json({ issues: (rows as { id: number; title: string; closedAt: string | null; isDraft: number }[]).map((row) => ({
-      id: String(row.id), number: row.id, title: row.title, state: row.isDraft ? "draft" as const : row.closedAt ? "closed" as const : "open" as const,
+    return c.json({ issues: (rows as { id: number; number: number; title: string; closedAt: string | null; isDraft: number }[]).map((row) => ({
+      id: String(row.id), number: row.number, title: row.title, state: row.isDraft ? "draft" as const : row.closedAt ? "closed" as const : "open" as const,
     })) });
   });
   app.get("/api/issues/:id/relationships", (c) => {
@@ -1171,6 +1224,14 @@ export function createApp(options: AppOptions = {}) {
     if (size > 100) fail(400, "Limit must be between 1 and 100");
     return c.json(readHistory(db, current.id, cursor, size));
   });
+  app.get("/api/issues/by-number/:number", (c) => {
+    const number = issueIdField.safeParse(c.req.param("number"));
+    if (!number.success) return fail(404, "Issue not found");
+    const row = db.query("SELECT id FROM issues WHERE workspaceId=? AND number=?").get(workspaceIdFor(c.get("user")), number.data) as { id: number } | null;
+    if (!row) return fail(404, "Issue not found");
+    const current = issue(row.id, c.get("user"));
+    return c.json({ issue: current, comments: db.query("SELECT *,CAST(issueId AS TEXT) AS issueId FROM comments WHERE issueId=? ORDER BY createdAt,id").all(current.id) as Comment[] });
+  });
   app.get("/api/issues/:id", (c) => {
     const canonical = issueIdField.safeParse(c.req.param("id"));
     if (!canonical.success) return fail(404, "Issue not found");
@@ -1196,7 +1257,7 @@ export function createApp(options: AppOptions = {}) {
       db.query("UPDATE issues SET closedAt=?,closedById=?,closeReason=?,duplicateOfId=?,updatedAt=? WHERE id=?")
         .run(time, user.id, input.reason, input.duplicateOfId ?? null, time, issueId);
       if (input.comment !== undefined) {
-        validateMentions(input.comment);
+        validateMentions(input.comment, user);
         validateAttachments(input.comment, user);
         comment = { id: id(), issueId, authorId: user.id, body: input.comment, createdAt: time, updatedAt: time };
         db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)")
@@ -1244,14 +1305,15 @@ export function createApp(options: AppOptions = {}) {
       const latest = activeIssue(current.id, c.get("user"));
       if (input.state === "draft" && latest.state !== "draft") fail(409, "Published issues cannot become drafts");
       if (input.state === "closed" && latest.state === "draft") fail(409, "Publish draft issue before closing it");
+      if (input.projectId !== undefined) access.requireWrite(input.projectId, c.get("user"), "Project");
       if (input.projectId != null) requireActiveProjectId(input.projectId, c.get("user"));
       if (body !== current.body) validateAttachments(body, c.get("user"));
       if (input.projectId !== undefined && input.projectId !== current.projectId) {
         db.query("DELETE FROM board_issues WHERE issueId=?").run(current.id);
         db.query("UPDATE issues SET projectId=? WHERE id=?").run(input.projectId, current.id);
       }
-      if (input.body !== undefined) validateMentions(body);
-      else if (input.title !== undefined) validateMentions(input.title);
+      if (input.body !== undefined) validateMentions(body, c.get("user"));
+      else if (input.title !== undefined) validateMentions(input.title, c.get("user"));
       db.query(
         "UPDATE issues SET title=?,body=?,labels=?,updatedAt=? WHERE id=?",
       ).run(
@@ -1286,7 +1348,7 @@ export function createApp(options: AppOptions = {}) {
       time = now();
     db.transaction(() => {
       activeIssue(i.id, c.get("user"));
-      validateMentions(body);
+      validateMentions(body, c.get("user"));
       validateAttachments(body, c.get("user"));
       db.query("INSERT INTO comments VALUES (?,?,?,?,?,?)").run(
         uid, i.id, c.get("user").id, body, time, time,
@@ -1309,7 +1371,7 @@ export function createApp(options: AppOptions = {}) {
       .get(c.req.param("id")) as Comment | null;
     if (!row) return fail(404, "Comment not found");
     issue(row.issueId, c.get("user"));
-    if (row.authorId !== c.get("user").id && c.get("user").role !== "admin")
+    if (row.authorId !== c.get("user").id && !access.canManageWorkspace(c.get("user")))
       fail(403, "Not permitted");
     return row;
   };
@@ -1322,7 +1384,7 @@ export function createApp(options: AppOptions = {}) {
       .parse(await json(c));
     db.transaction(() => {
       activeIssue(row.issueId, c.get("user"));
-      validateMentions(body);
+      validateMentions(body, c.get("user"));
       validateAttachments(body, c.get("user"));
       const previous = ownedComment(c);
       retainAttachmentReferences(db, row.issueId, [previous.body, body]);
@@ -1351,6 +1413,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ ok: true, issue: issue(row.issueId, c.get("user")) });
   });
   app.post("/api/uploads", async (c) => {
+    if (!access.canWriteAny(c.get("user"))) fail(403, "Full access required");
     let form: FormData;
     try {
       form = await c.req.formData();
@@ -1368,12 +1431,13 @@ export function createApp(options: AppOptions = {}) {
     const path = resolve(uploads, uid);
     try {
       await Bun.write(path, bytes);
-      db.query("INSERT INTO attachments (id,name,mime,size,uploaderId) VALUES (?,?,?,?,?)").run(
+      db.query("INSERT INTO attachments (id,name,mime,size,uploaderId,workspaceId) VALUES (?,?,?,?,?,?)").run(
         uid,
         name,
         mime,
         file.size,
         c.get("user").id,
+        workspaceIdFor(c.get("user")),
       );
     } catch (e) {
       await unlink(path).catch(() => {});
@@ -1383,7 +1447,7 @@ export function createApp(options: AppOptions = {}) {
       attachment: {
         id: uid,
         name,
-        url: `/api/uploads/${uid}/${encodeURIComponent(name)}`,
+        url: `/api/uploads/${uid}/${encodeURIComponent(name)}${c.get("user").workspaceSlug !== "default" ? `?workspace=${c.get("user").workspaceSlug}` : ""}`,
         mime,
         size: file.size,
       },

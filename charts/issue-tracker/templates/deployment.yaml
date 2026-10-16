@@ -51,6 +51,10 @@ spec:
               value: /data
             - name: BASE_URL
               value: {{ $baseUrl | quote }}
+            - name: MIGRATION_WORKSPACE_NAME
+              value: {{ .Values.migration.workspaceName | quote }}
+            - name: MIGRATION_WORKSPACE_SLUG
+              value: {{ .Values.migration.workspaceSlug | quote }}
             - name: SETTINGS_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:

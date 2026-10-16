@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type DragEvent } from "react";
 import { Archive, ArrowDown, ArrowUp, FolderKanban, PencilLine, Pin, PinOff } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import type { Project } from "../../shared/types";
+import { projectPath } from "../lib/workspace";
 import { usePinnedProjects } from "../lib/pinned-projects";
 import { projectNavigation } from "../lib/project-navigation";
 import { Tooltip } from "./ui/tooltip";
@@ -54,7 +55,7 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
   /** These dialogs have no Radix trigger, so return focus to the project's menu explicitly. */
   function restoreFocus(event: Event, id: string) {
     // An archived row leaves the sidebar; its project is then under All projects.
-    const target = menuTrigger(id) ?? document.querySelector<HTMLElement>('#workspace-navigation nav a.nav-item[href="/projects"]');
+    const target = menuTrigger(id) ?? document.querySelector<HTMLElement>('#workspace-navigation nav a.nav-item[href$="/projects"]');
     if (!target) return;
     event.preventDefault();
     target.focus({ preventScroll: true });
@@ -111,8 +112,8 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
         { id: "down", label: "Move down", icon: <ArrowDown size={15} />, disabled: !enabled || index === pinned.length - 1,
           onSelect: () => updatePins(project.id, () => pin(project.id, pinned[index + 2]?.id ?? null)) },
       ] : []),
-      { id: "rename", label: "Rename project", icon: <PencilLine size={15} />, separated: true, onSelect: () => setRenaming(project) },
-      { id: "archive", label: "Archive project", icon: <Archive size={15} />, onSelect: () => setArchiving(project) },
+      { id: "rename", label: "Rename project", icon: <PencilLine size={15} />, separated: true, disabled: project.access !== "full", onSelect: () => setRenaming(project) },
+      { id: "archive", label: "Archive project", icon: <Archive size={15} />, disabled: project.access !== "full", onSelect: () => setArchiving(project) },
     ];
   }
   const links = (items: Project[], isPinned: boolean) => items.map((project) => {
@@ -130,7 +131,7 @@ export function SidebarProjects({ projects }: { projects: Project[] }) {
       onDragEnd={finishDrag}
       onDragOver={isPinned ? (event) => over(event, rowTarget(event, project)) : undefined}
       onDrop={isPinned ? (event) => drop(event, rowTarget(event, project)) : undefined}>
-      <NavLink to={`/projects/${project.slug}`} className="nav-item" draggable={false} title={project.name}>
+      <NavLink to={projectPath(project)} className="nav-item" draggable={false} title={project.name}>
         <FolderKanban size={17} /><span>{project.name}</span>
       </NavLink>
       <ActionMenu label={`Actions for ${project.name}`} items={menuItems(project, isPinned)} triggerClassName="sidebar-project-menu" />

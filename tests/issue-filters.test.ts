@@ -3,6 +3,7 @@ import type { Issue, User } from "../shared/types";
 import { defaultIssueFilters, emptyIssueFilters, isActiveIssueFilter, issueDateKey, matchesIssueFilters, normalizeIssueFilters, type IssueFilter, type IssueFilterGroup } from "../src/lib/issue-filters";
 
 const issue: Issue = {
+  workspaceId: "default", workspaceSlug: "default", access: "full",
   id: "123", number: 123, title: "Fix the Login Flow", body: "", labels: ["bug", "urgent"],
   taggedUserIds: ["alice", "bob"], authorId: "alice", projectId: "project-a", state: "open",
   closedAt: null, closedById: null, createdAt: "2026-05-10T12:00:00Z", updatedAt: "2026-05-10T12:00:00Z",

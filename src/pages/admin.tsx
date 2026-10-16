@@ -1,13 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { ShieldCheck, UserPlus } from "lucide-react";
-import type { OidcSettings } from "../../shared/types";
+import type { OidcSettings, User } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
 import { PluginSettings } from "../components/plugin-settings";
 export function AdminPage() {
-  const { user, refresh, users } = useWorkspace();
+  const { user } = useWorkspace();
+  const [users, setUsers] = useState<User[]>([]);
+  async function refresh() { setUsers((await api<{ users: User[] }>("/api/admin/users")).users); }
   const [settings, setSettings] = useState<OidcSettings | null>(null);
   const [secret, setSecret] = useState("");
   const [error, setError] = useState("");
@@ -17,6 +20,7 @@ export function AdminPage() {
   useEffect(() => {
     if (user.role !== "admin") return;
     setError("");
+    void refresh().catch(cause => setError(message(cause)));
     api<OidcSettings>("/api/admin/oidc")
       .then(setSettings)
       .catch((e) => setError(message(e)));
@@ -85,6 +89,7 @@ export function AdminPage() {
           <p className="muted">A secure workspace. A connected team.</p>
         </div>
       </header>
+      <p><Link className="btn btn-secondary" to="/admin/workspaces">All workspaces & creation policy</Link></p>
       <ErrorNotice error={error} />
       <div className="admin-grid">
         <section className="settings-card">

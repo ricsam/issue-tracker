@@ -19,7 +19,7 @@ async function seed(page: Page, baseURL: string) {
     expect((await page.request.post(`${endpoint}/issues`, { headers, data: { lane, issueIds: group.map((i) => i.id) } })).ok()).toBeTruthy();
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card")).toHaveCount(7);
   return { project, issues, endpoint, headers };
 }
@@ -106,7 +106,7 @@ test("plain board arrows open adjacent sidebar issues, respect boundaries/search
   await expect(preview).toContainText(issues[2].title);
   await page.keyboard.press("ArrowUp");
   await expect(preview).toContainText(issues[1].title);
-  await expect(page).toHaveURL(`/projects/${project.slug}/board`);
+  await expect(page).toHaveURL(`/w/default/projects/${project.slug}/board`);
   await expect(selected(page)).toHaveCount(0);
 
   // Search and editors must not switch issues or turn cursor movement into navigation.
@@ -172,7 +172,7 @@ test("board arrows use the existing full-page detail fallback on narrow screens"
   await page.setViewportSize({ width: 390, height: 844 });
   await cardLink(page, issues[0]).focus();
   await page.keyboard.press("ArrowDown");
-  await expect(page).toHaveURL(`/issues/${issues[1].id}`);
+  await expect(page).toHaveURL(`/w/default/issues/${issues[1].number}`);
   await expect(page.locator(".detail-form .editor-preview")).toContainText(issues[1].title);
 });
 

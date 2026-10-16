@@ -19,7 +19,7 @@ test("personal key creation reveals once, persists metadata, and revokes after c
   const member = { email: `key-owner-${randomUUID()}@example.test`, password: account.password };
   expect((await page.request.post("/api/admin/users", { headers: { Origin: baseURL! }, data: { ...member, name: "API key owner" } })).ok()).toBeTruthy();
   expect((await page.request.post("/api/auth/login", { headers: { Origin: baseURL! }, data: member })).ok()).toBeTruthy();
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await expect(page.getByRole("link", { name: "Administration", exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "API access", exact: true }).click();
   const name = `Browser key ${randomUUID()}`;

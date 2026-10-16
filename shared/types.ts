@@ -1,6 +1,35 @@
 import type { ExternalLink } from "./plugins";
 
 export type Role = "admin" | "member";
+export type WorkspaceAccess = "none" | "read" | "full";
+export interface Workspace {
+  id: string;
+  slug: string;
+  name: string;
+  visibility: "public" | "hidden";
+  role: Role | null;
+  defaultAccess: WorkspaceAccess;
+  canManage: boolean;
+}
+export interface WorkspaceProjectAccess { projectId: string; access: "read" | "full" }
+export interface WorkspaceMember {
+  userId: string;
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  defaultAccess: WorkspaceAccess;
+  /** Migrated private-project protections remain until explicitly converted. */
+  legacyAccess: boolean;
+  projectAccess: WorkspaceProjectAccess[];
+}
+export interface WorkspaceInvitation {
+  id: string;
+  email: string;
+  defaultAccess: WorkspaceAccess;
+  projectAccess: WorkspaceProjectAccess[];
+  createdAt: string;
+}
 export type Lane = string;
 export type IssueCloseReason = "completed" | "not_planned" | "duplicate";
 export type IssueState = "open" | "closed" | "draft";
@@ -14,13 +43,20 @@ export interface User {
   email: string;
   role: Role;
   createdAt: string;
+  /** Request-local scope, never a persisted account attribute. */
+  workspaceId?: string;
+  workspaceSlug?: string;
 }
 export interface Project {
   id: string;
+  workspaceId: string;
+  workspaceSlug: string;
+  /** Null only in a successful ACL update that revoked the caller's access. */
+  access: "read" | "full" | null;
   slug: string;
   name: string;
   description: string;
-  /** Public projects are visible to all authenticated users, never anonymous visitors. */
+  /** Legacy project protection within a workspace; never grants nonmember access. */
   visibility: "public" | "private";
   /** Legacy projects without any accounts may have no owner until an admin assigns one. */
   ownerId: string | null;
@@ -56,10 +92,13 @@ export interface IssueRelationships {
   subIssues: IssueReference[];
 }
 export interface Issue {
-  /** Global sequential integer key serialized as a canonical decimal string. */
+  /** Stable internal key, not a display number or canonical URL segment. */
   id: string;
-  /** Numeric alias of id for display and sorting; unique across all projects. */
+  /** Independent sequential number within the workspace. */
   number: number;
+  workspaceId: string;
+  workspaceSlug: string;
+  access: "read" | "full";
   projectId: string | null;
   title: string;
   body: string;

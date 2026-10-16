@@ -29,7 +29,7 @@ test("copy uses current Markdown, excludes comments, never saves, and works arch
   const body = "## Canonical body\n\n**Bold** and `code` #tag\n\n- [ ] Task";
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body } })).json();
   await page.request.post(`/api/issues/${issue.id}/comments`, { headers, data: { body: "Do not copy this comment" } });
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const copy = page.getByRole("button", { name: "Copy issue body", exact: true });
   await expect(page.locator(".detail-form .editor-topbar").getByRole("button", { name: "Copy issue body", exact: true })).toBeVisible();
   await expect(copy).toHaveCount(1);
@@ -47,7 +47,7 @@ test("copy uses current Markdown, excludes comments, never saves, and works arch
   expect(writes).toBe(0);
   expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.body).toBe(body);
 
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
   await sidebar.getByRole("button", { name: "Copy issue body" }).click();
@@ -59,7 +59,7 @@ test("copy uses current Markdown, excludes comments, never saves, and works arch
   await expect(sidebar.getByText(/belongs to an archived project/)).toBeVisible();
   await sidebar.getByRole("button", { name: "Copy issue body" }).click();
   await expect(sidebar.getByRole("button", { name: "Copy issue body" })).toHaveText("Copied!");
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await expect(page.getByText(/belongs to an archived project/)).toBeVisible();
   await expect(copy).toBeEnabled();
   await copy.click();
@@ -69,7 +69,7 @@ test("copy uses current Markdown, excludes comments, never saves, and works arch
 });
 
 test("copy failures are actionable and retryable; creation never shows a copy action", async ({ page }) => {
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await expect(page.getByRole("heading", { name: "All issues", exact: true })).toBeVisible();
   await page.keyboard.press("Alt+n");
   const dialog = page.getByRole("dialog", { name: "Create issue", exact: true });
@@ -77,11 +77,11 @@ test("copy failures are actionable and retryable; creation never shows a copy ac
   await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
   await expect(dialog.getByRole("link", { name: "View issue" })).toBeVisible();
   const href = await dialog.getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue } = await (await page.request.get(`/api${href}`)).json();
+  const { issue } = await (await page.request.get(`/api/issues/by-number/${href!.split("/").at(-1)}`)).json();
   await dialog.getByRole("textbox", { name: "Issue", exact: true }).fill("Next unsaved draft");
   await expect(dialog.getByRole("button", { name: "Copy issue body" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done", exact: true }).click();
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const copy = page.locator(".editor-topbar").getByRole("button", { name: "Copy issue body" });
   await page.evaluate(() => { (window as any).denyCopy = true; });
   await copy.click();
@@ -96,7 +96,7 @@ test("copy failures are actionable and retryable; creation never shows a copy ac
 });
 
 test("styled button tooltips support hover, keyboard focus and Escape without changing focus or modal state", async ({ page }) => {
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   const create = page.getByRole("button", { name: "Create issue (Alt+N)", exact: true });
   await create.hover();
   await expect(page.getByRole("tooltip")).toContainText("Create issue");
@@ -128,7 +128,7 @@ test("styled button tooltips support hover, keyboard focus and Escape without ch
 test("copy writes to the real browser clipboard and the mobile toolbar stays within the viewport", async ({ page, context, baseURL }, testInfo) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   // Remove this file's own clipboard stub to exercise Chromium's real implementation.
   await page.evaluate(() => { delete (navigator as any).clipboard; });
   await expect(page.getByRole("heading", { name: "All issues", exact: true })).toBeVisible();
@@ -139,7 +139,7 @@ test("copy writes to the real browser clipboard and the mobile toolbar stays wit
   await expect(dialog.getByRole("link", { name: "View issue" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Copy issue body", exact: true })).toHaveCount(0);
   const href = await dialog.getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue } = await (await page.request.get(`/api${href}`)).json();
+  const { issue } = await (await page.request.get(`/api/issues/by-number/${href!.split("/").at(-1)}`)).json();
   await dialog.getByRole("link", { name: "View issue" }).click();
   const copy = page.locator(".editor-topbar").getByRole("button", { name: "Copy issue body", exact: true });
   await copy.click();

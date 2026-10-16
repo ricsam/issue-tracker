@@ -36,11 +36,11 @@ test("CLI against real server: manual login, project/issue lifecycle, read scope
     expect((await cli(["project", "view", project.slug])).data.project.id).toBe(project.id);
     const created = await cli(["issue", "create", "--project", project.slug, "--title", "Title-only compatibility"]);
     expect(created.code).toBe(0); expect(created.data.issue.title).toBe("Title-only compatibility");
-    const id = created.data.issue.id;
+    const id = String(created.data.issue.number);
     const edit = await cli(["issue", "edit", id, "--body-file", "-"], "# Updated\n\nDetails #bug");
     expect(edit.code).toBe(0); expect(edit.data.issue.labels).toContain("bug");
     expect((await cli(["issue", "comment", id, "--body", "Verified"])).code).toBe(0);
-    expect((await cli(["issue", "view", host + "/issues/" + id])).data.comments[0].body).toBe("Verified");
+    expect((await cli(["issue", "view", host + "/w/default/issues/" + id])).data.comments[0].body).toBe("Verified");
     expect((await cli(["issue", "close", id])).data.issue.state).toBe("closed");
     expect((await cli(["issue", "list", "--state", "closed", "--label", "bug"])).data.issues.length).toBe(1);
     expect((await cli(["issue", "reopen", id])).data.issue.state).toBe("open");

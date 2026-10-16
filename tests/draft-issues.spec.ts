@@ -18,7 +18,7 @@ test("personal draft creation, persisted table filtering and publishing", async 
   const { project } = await (await page.request.post("/api/projects", {
     headers: { Origin: baseURL! }, data: { name: `Drafts ${randomUUID()}` },
   })).json();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "Create issue", exact: true });
   await expect(modal.getByLabel("Visibility", { exact: true })).toHaveValue("open");
@@ -63,7 +63,7 @@ test("personal draft creation, persisted table filtering and publishing", async 
   await expect(detail.getByRole("button", { name: "Share issue", exact: true })).toBeVisible();
   expect((await (await page.request.get(`/api/issues/${issue.id}`)).json()).issue.state).toBe("open");
   expect((await (await page.request.get(`/api/projects/${project.slug}/board`)).json()).board.cards).toEqual([]);
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await setTableState(page, "open");
   await expect(row).toContainText("Private planning note");
 });
@@ -119,7 +119,7 @@ test("member drafts are hidden from an admin's lists, reference picker and detai
     const { issue } = await response.json();
 
     // All issues preferences are independent of the project table's preferences.
-    await member.goto("/issues");
+    await member.goto("/w/default/issues");
     await setTableState(member, "draft");
     await member.getByRole("textbox", { name: "Search issues", exact: true }).fill(title);
     const ownerRow = member.locator(".issue-row").filter({ has: member.locator(`a[data-issue-id="${issue.id}"]`) });
@@ -129,12 +129,12 @@ test("member drafts are hidden from an admin's lists, reference picker and detai
     await member.getByRole("textbox", { name: "Search issues", exact: true }).fill(title);
     await expect(ownerRow).toContainText(title);
 
-    await admin.goto("/issues");
+    await admin.goto("/w/default/issues");
     await setTableState(admin, "draft");
     await admin.getByRole("textbox", { name: "Search issues", exact: true }).fill(title);
     await expect(admin.locator(".issue-row")).toHaveCount(0);
     await expect(admin.locator(".table-empty")).toContainText(/No matching issues|No issues in this view/);
-    await admin.goto(`/issues/${issue.id}`);
+    await admin.goto(`/w/default/issues/${issue.number}`);
     await expect(admin.getByRole("alert")).toContainText("Issue not found");
     await expect(admin.locator(".detail-form")).toHaveCount(0);
     await admin.goto("/new");
@@ -144,15 +144,15 @@ test("member drafts are hidden from an admin's lists, reference picker and detai
     // Clear the unsaved composer before navigating (no unload prompt).
     await admin.getByRole("textbox", { name: "Issue", exact: true }).fill("");
 
-    await member.goto(`/issues/${issue.id}`);
+    await member.goto(`/w/default/issues/${issue.number}`);
     await member.getByRole("button", { name: "Publish issue", exact: true }).click();
     await expect(member.getByRole("button", { name: "Close as completed", exact: true })).toBeVisible();
-    await admin.goto("/issues");
+    await admin.goto("/w/default/issues");
     await setTableState(admin, "open");
     await admin.getByRole("textbox", { name: "Search issues", exact: true }).fill(title);
     const sharedRow = admin.locator(".issue-row").filter({ has: admin.locator(`a[data-issue-id="${issue.id}"]`) });
     await expect(sharedRow).toContainText(title);
-    await admin.goto(`/issues/${issue.id}`);
+    await admin.goto(`/w/default/issues/${issue.number}`);
     await expect(admin.locator(".detail-form .editor-preview")).toContainText(title);
     await expect(admin.getByRole("button", { name: "Share issue", exact: true })).toBeVisible();
     await admin.goto("/new");
@@ -170,7 +170,7 @@ for (const layout of [
   { name: "tray", width: 640, height: 800, standalone: true },
 ]) test(`${layout.name} draft creation controls remain usable`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: layout.width, height: layout.height });
-  await page.goto(layout.standalone ? "/new" : "/issues");
+  await page.goto(layout.standalone ? "/new" : "/w/default/issues");
   if (!layout.standalone) await page.getByRole("button", { name: "Create issue", exact: true }).click();
   const composer = layout.standalone ? page.locator(".standalone-create") : page.getByRole("dialog", { name: "Create issue", exact: true });
   await composer.getByLabel("Project", { exact: true }).selectOption("");

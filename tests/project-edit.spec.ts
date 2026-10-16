@@ -16,7 +16,7 @@ async function seed(page: Page, baseURL: string) {
   const response = await page.request.post("/api/projects", { headers, data: { name: `Edit ${randomUUID()}`, description: "Original description" } });
   expect(response.ok()).toBeTruthy();
   const { project } = await response.json();
-  return { project, headers, path: `/projects/${project.slug}` };
+  return { project, headers, path: `/w/default/projects/${project.slug}` };
 }
 
 for (const width of [1440, 390]) {
@@ -55,7 +55,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("Every step forward starts here.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
-    expect((await (await page.request.get(`/api${path}`)).json()).project).toMatchObject({ id: project.id, slug: project.slug, name, description: "" });
+    expect((await (await page.request.get(`/api${path.replace("/w/default", "")}`)).json()).project).toMatchObject({ id: project.id, slug: project.slug, name, description: "" });
   });
 }
 
@@ -76,15 +76,15 @@ test("project edits retain failed drafts, prevent blank names/duplicate saves an
   await page.getByRole("button", { name: "Edit project", exact: true }).click();
   await expect(name).toHaveValue(project.name);
   await name.fill("Retry name");
-  await page.route(`**/api${path}`, (route) => route.request().method() === "PATCH" ? route.fulfill({ status: 500, json: { error: "Edit failed" } }) : route.continue());
+  await page.route(`**/api${path.replace("/w/default", "")}`, (route) => route.request().method() === "PATCH" ? route.fulfill({ status: 500, json: { error: "Edit failed" } }) : route.continue());
   await modal(page).getByRole("button", { name: "Save changes" }).click();
   await expect(modal(page).getByRole("alert")).toContainText("Edit failed");
   await expect(name).toHaveValue("Retry name");
-  await page.unroute(`**/api${path}`);
+  await page.unroute(`**/api${path.replace("/w/default", "")}`);
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let writes = 0;
-  await page.route(`**/api${path}`, async (route) => { if (route.request().method() === "PATCH") { writes++; await gate; } await route.continue(); });
+  await page.route(`**/api${path.replace("/w/default", "")}`, async (route) => { if (route.request().method() === "PATCH") { writes++; await gate; } await route.continue(); });
   // The successful PATCH is enough to update the workspace, even if a later GET would fail.
   await page.route("**/api/projects", (route) => route.fulfill({ status: 500, json: { error: "Refresh unavailable" } }));
   try {
@@ -105,7 +105,7 @@ test("project edits retain failed drafts, prevent blank names/duplicate saves an
 
 test("editing project keeps sidebar issue drafts and archived projects require restore", async ({ page, baseURL }) => {
   const { project, path, headers } = await seed(page, baseURL!);
-  const { issue } = await (await page.request.post(`/api${path}/issues`, { headers, data: { body: "Persisted issue" } })).json();
+  const { issue } = await (await page.request.post(`/api${path.replace("/w/default", "")}/issues`, { headers, data: { body: "Persisted issue" } })).json();
   await page.goto(path);
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const editor = page.getByRole("complementary", { name: "Issue details", exact: true }).getByRole("textbox", { name: "Issue", exact: true });
@@ -120,7 +120,7 @@ test("editing project keeps sidebar issue drafts and archived projects require r
   // Archive from another tab while the edit form is open: server rejects the stale edit.
   await page.getByRole("button", { name: "Edit project", exact: true }).click();
   await modal(page).getByRole("textbox", { name: "Description" }).fill("Must not edit archived");
-  await page.request.patch(`/api${path}`, { headers, data: { archived: true } });
+  await page.request.patch(`/api${path.replace("/w/default", "")}`, { headers, data: { archived: true } });
   await modal(page).getByRole("button", { name: "Save changes" }).click();
   await expect(modal(page).getByRole("alert")).toContainText("Project is archived");
   await page.goto(path);
@@ -128,5 +128,5 @@ test("editing project keeps sidebar issue drafts and archived projects require r
   await expect(page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Restore project", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit project", exact: true })).toBeVisible();
-  expect((await (await page.request.get(`/api${path}`)).json()).project).toMatchObject({ id: project.id, description: "Original description" });
+  expect((await (await page.request.get(`/api${path.replace("/w/default", "")}`)).json()).project).toMatchObject({ id: project.id, description: "Original description" });
 });

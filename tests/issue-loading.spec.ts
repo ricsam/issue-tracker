@@ -17,7 +17,7 @@ async function seed(page: Page, baseURL: string) {
     const { issue } = await response.json(); ids.push(issue.id); numbers.push(issue.number);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   return { project, ids, numbers, headers };
 }
 const sidebar = (page: Page) => page.getByRole("complementary", { name: "Issue details", exact: true });
@@ -80,7 +80,7 @@ test("failed loads keep previous content inert, retry successfully, and late res
   release();
   await page.waitForTimeout(150);
   await expect(preview(page)).toContainText("Gamma");
-  await expect(sidebar(page).getByRole("link", { name: /^ISSUE !\d+$/ })).toHaveAttribute("href", `/issues/${ids[2]}`);
+  await expect(sidebar(page).getByRole("link", { name: /^ISSUE !\d+$/ })).toHaveAttribute("href", `/w/default/issues/${numbers[2]}`);
 });
 
 test("bulk close confirms pending drafts and keeps board membership", async ({ page, baseURL }) => {

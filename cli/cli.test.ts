@@ -14,7 +14,7 @@ function server(fetch: (request: Request) => Response | Promise<Response>) {
 }
 async function cli(host: string, config: string, args: string[], input?: string, token = "test-secret") {
   const child = Bun.spawn([process.execPath, "cli/index.ts", ...args], {
-    cwd: join(import.meta.dir, ".."), env: { ...process.env, THREADLINE_HOST: host, THREADLINE_CONFIG_DIR: config, THREADLINE_TOKEN: token },
+    cwd: join(import.meta.dir, ".."), env: { ...process.env, THREADLINE_HOST: host, THREADLINE_CONFIG_DIR: config, THREADLINE_TOKEN: token, THREADLINE_WORKSPACE: "" },
     stdin: input === undefined ? "ignore" : new Blob([input]), stdout: "pipe", stderr: "pipe",
   });
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
@@ -48,7 +48,7 @@ describe("host and credential security", () => {
     expect(hostUrl("https://example.com/")).toBe("https://example.com");
     expect(hostUrl("http://[::1]:123")).toBe("http://[::1]:123");
     for (const value of [undefined, "example.com", "http://example.com", "https://a:b@example.com", "https://example.com/path", "https://example.com?x", "https://example.com#x"]) expect(() => hostUrl(value)).toThrow();
-    for (const value of ["12", "!12", "https://example.com/issues/12"]) expect(issueId(value, "https://example.com")).toBe("12");
+    for (const value of ["12", "!12", "https://example.com/w/default/issues/12"]) expect(issueId(value, "https://example.com")).toBe("12");
     for (const value of ["0", "-1", "01", "#12", "9007199254740992", "https://other.com/issues/12", "https://u@example.com/issues/12", "https://example.com/issues/12?x"]) expect(() => issueId(value, "https://example.com")).toThrow();
   });
   test("private host-bound storage and deletion preserves other hosts", async () => {
@@ -104,7 +104,7 @@ describe("real subprocess against HTTP fixture", () => {
       return Response.json({ issue, comments: [] });
     });
     const config = await temp();
-    for (const args of [["project", "list"], ["project", "view", "demo"], ["issue", "view", "!12"], ["issue", "view", host + "/issues/12"]]) {
+    for (const args of [["project", "list"], ["project", "view", "demo"], ["issue", "view", "!12"], ["issue", "view", host + "/w/default/issues/12"]]) {
       const result = await cli(host, config, [...args, "--json"]); expect(result.code).toBe(0); expect(result.stderr).toBe(""); expect(() => JSON.parse(result.stdout)).not.toThrow();
     }
     const list = await cli(host, config, ["issue", "list", "--project", "demo", "--state", "all", "--label", "bug", "--search", "hello", "--limit", "1", "--json"]);

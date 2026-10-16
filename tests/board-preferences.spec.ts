@@ -14,7 +14,7 @@ async function fixture(page: Page, baseURL: string) {
     expect((await page.request.post(`${endpoint}/issues`, { headers, data: { lane, issueIds: [issue.id] } })).ok()).toBeTruthy();
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
   return { project, endpoint, headers };
 }
@@ -59,11 +59,11 @@ test("filters stay visible and remember independent conditions per board", async
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
 
   const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other filters ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${other.slug}/board`);
+  await page.goto(`/w/default/projects/${other.slug}/board`);
   await expect(builder).toBeVisible();
   await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(1);
   await addFilter(page, "lane", "done");
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(builder).toBeVisible();
   await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Todo", exact: true })).toBeVisible();
   await expect(page.locator(".board-card:visible")).toHaveCount(1);
@@ -72,7 +72,7 @@ test("filters stay visible and remember independent conditions per board", async
   await expect(builder).toBeVisible();
   await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(0);
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
-  await page.goto(`/projects/${other.slug}/board`);
+  await page.goto(`/w/default/projects/${other.slug}/board`);
   await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Lane is Done", exact: true })).toBeVisible();
 });
 
@@ -115,11 +115,11 @@ test("filter chips and search survive reload and stay board-scoped", async ({ pa
   await expect(boardFilters(page).getByRole("button", { name: "Edit filter: Tags is #bug", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("preference");
   const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${other.slug}/board`);
+  await page.goto(`/w/default/projects/${other.slug}/board`);
   await expect(page.getByRole("textbox", { name: "Search issues", exact: true })).toHaveValue("");
   await expect(boardFilters(page)).toBeVisible();
   await expect(boardFilters(page).getByRole("button", { name: /^Edit filter:/ })).toHaveCount(1);
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(2);
   await clearBoardFilters(page);
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("");

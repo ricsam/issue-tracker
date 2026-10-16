@@ -34,7 +34,7 @@ for (const width of [1440, 390]) test(`private creation, sharing, collaboration,
     const outsider = await member("Outsider");
     const adminPage = await admin.newPage();
     const name = `Scoped ${randomUUID()}`;
-    await owner.page.goto("/projects");
+    await owner.page.goto("/w/default/projects");
     await owner.page.locator(".page-heading").getByRole("button", { name: "Create project", exact: true }).click();
     const create = owner.page.getByRole("dialog", { name: "Create project", exact: true });
     await create.getByLabel("Project name").fill(name);
@@ -57,7 +57,7 @@ for (const width of [1440, 390]) test(`private creation, sharing, collaboration,
     await edit.getByLabel("Description").fill("Shared users can collaborate");
     await edit.getByRole("button", { name: "Save changes" }).click();
     await expect(edit).toBeHidden();
-    await outsider.page.goto("/projects");
+    await outsider.page.goto("/w/default/projects");
     await expect(outsider.page.getByRole("heading", { name, exact: true })).toHaveCount(0);
     await expect(outsider.page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name, exact: true })).toHaveCount(0);
     await outsider.page.goto(path);
@@ -84,10 +84,10 @@ for (const width of [1440, 390]) test(`private creation, sharing, collaboration,
       await page.reload();
       await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
       await expect(page.getByRole("alert")).toBeVisible();
-      await page.goto("/projects");
+      await page.goto("/w/default/projects");
       await expect(page.locator(".project-card").filter({ hasText: name })).toHaveCount(0);
     }
-    expect((await owner.context.request.patch(`/api${path}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
+    expect((await owner.context.request.patch(`/api${path.replace("/w/default", "")}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
     await owner.page.reload();
     await expect(owner.page.getByText("This project is archived.", { exact: true })).toBeVisible();
     await expect(owner.page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
@@ -95,9 +95,9 @@ for (const width of [1440, 390]) test(`private creation, sharing, collaboration,
     await accessDialog(owner.page).getByLabel("Project owner").selectOption(shared.user.id);
     owner.page.once("dialog", (dialog) => dialog.accept());
     await accessDialog(owner.page).getByRole("button", { name: "Save access" }).click();
-    await expect(owner.page).toHaveURL("/projects");
+    await expect(owner.page).toHaveURL("/w/default/projects");
     await expect(owner.page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name, exact: true })).toHaveCount(0);
-    await owner.page.goto("/projects?view=archived");
+    await owner.page.goto("/w/default/projects?view=archived");
     await expect(owner.page.locator(".project-card").filter({ hasText: name })).toHaveCount(0);
     await shared.page.goto(path);
     await expect(shared.page.getByRole("button", { name: "Manage access", exact: true })).toBeVisible();

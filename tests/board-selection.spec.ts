@@ -17,7 +17,7 @@ async function seed(page: Page, baseURL: string, count = 4) {
   const endpoint = `/api/projects/${project.slug}/board`;
   expect((await page.request.post(`${endpoint}/issues`, { headers, data: { issueIds: issues.map((i) => i.id), lane: "todo" } })).ok()).toBeTruthy();
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   return { project, issues, endpoint, headers };
 }
 const column = (page: Page, label: string) => page.locator(".board-column").filter({ has: page.getByRole("heading", { name: new RegExp(`^${label}`) }) });
@@ -102,7 +102,7 @@ for (const width of [1440, 1060, 390]) {
     await expect(selectAll).toBeDisabled();
     for (const action of actions) await expect(action).toHaveCount(0);
     const { project: empty } = await (await page.request.post("/api/projects", { headers, data: { name: `Empty board ${randomUUID()}` } })).json();
-    await page.goto(`/projects/${empty.slug}/board`);
+    await page.goto(`/w/default/projects/${empty.slug}/board`);
     await expect(bar).toContainText("0 of 0 issues assigned to board · 0 unassigned · 3 lanes");
     await expect(page.getByText("No work on the board yet.", { exact: false })).toBeVisible();
     await expect(selectAll).toBeDisabled();

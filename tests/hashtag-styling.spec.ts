@@ -20,7 +20,7 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   const { project } = await (await page.request.post("/api/projects", {
     headers: { Origin: baseURL! }, data: { name: `Tag styling ${randomUUID()}` },
   })).json();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   const editor = dialog.getByRole("textbox", { name: "Issue", exact: true });
@@ -83,7 +83,7 @@ for (const mobile of [false, true]) test(`colored hashtags remain editable, rend
   await expect(detail.locator(".editor-input .hashtag-chip")).toHaveText(expected);
   await detail.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await expect(detail.locator(".editor-preview .hashtag-chip")).toHaveText(expected);
   for (const token of invalid) await expect(detail.locator(".editor-preview")).toContainText(token);
   expect(errors).toEqual([]);

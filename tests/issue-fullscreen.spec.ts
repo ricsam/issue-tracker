@@ -10,7 +10,7 @@ async function seed(page: Page, baseURL: string, board: boolean) {
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Expand ${randomUUID()}` } })).json();
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Fullscreen issue" } })).json();
   await page.request.put(`/api/projects/${project.slug}/board/issues`, { headers, data: { issueIds: [issue.id], lane: "todo" } });
-  const path = `/projects/${project.slug}${board ? "/board" : ""}`;
+  const path = `/w/default/projects/${project.slug}${board ? "/board" : ""}`;
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(path);
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("Fullscreen");
@@ -84,16 +84,16 @@ test("linked identifier and share use canonical URL, support new tabs and clipbo
   const { issue, path } = await seed(page, baseURL!, false);
   const detail = panel(page);
   const link = detail.getByRole("link", { name: `ISSUE !${issue.number}`, exact: true });
-  await expect(link).toHaveAttribute("href", `/issues/${issue.id}`);
+  await expect(link).toHaveAttribute("href", `/w/default/issues/${issue.number}`);
   const popup = context.waitForEvent("page");
   await link.click({ modifiers: ["ControlOrMeta"] });
   const tab = await popup;
-  await expect(tab).toHaveURL(`/issues/${issue.id}`);
+  await expect(tab).toHaveURL(`/w/default/issues/${issue.number}`);
   await tab.close();
   await expect(page).toHaveURL(path);
   await detail.getByRole("button", { name: "Expand issue", exact: true }).click();
   await detail.getByRole("button", { name: "Share issue", exact: true }).click();
-  const url = `${baseURL}/issues/${issue.id}`;
+  const url = `${baseURL}/w/default/issues/${issue.number}`;
   await expect(page.getByRole("textbox", { name: "Issue link", exact: true })).toHaveValue(url);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.getByRole("button", { name: "Copy link", exact: true }).click();

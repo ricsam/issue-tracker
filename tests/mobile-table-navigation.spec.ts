@@ -11,7 +11,7 @@ async function seed(page: Page, baseURL: string) {
   for (let i = 0; i < 25; i++) {
     expect((await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: `Touch task ${i}`, labels: ["navigation"] } })).ok()).toBeTruthy();
   }
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await expect(page.locator(".issue-row")).toHaveCount(25);
   return project.slug as string;
 }

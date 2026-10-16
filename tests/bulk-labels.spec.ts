@@ -19,7 +19,7 @@ async function seed(page: Page, baseURL: string, count: number) {
     expect(response.ok()).toBeTruthy();
     issues.push((await response.json()).issue);
   }
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   return { project, issues, headers };
 }
 const select = (page: Page, number: number) => page.getByRole("checkbox", { name: `Select issue !${number}`, exact: true });
@@ -152,7 +152,7 @@ test("mobile board and closed-list selection can add hashtags without changing m
   expect((await (await page.request.get(boardEndpoint)).json()).board.cards).toHaveLength(3);
 
   expect((await page.request.patch(`/api/issues/${issues[0].id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await setTableState(page, "closed");
   await select(page, issues[0].number).check();
   await page.getByRole("button", { name: "Tag", exact: true }).click();

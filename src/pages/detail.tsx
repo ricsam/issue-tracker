@@ -18,7 +18,7 @@ import type {
 } from "../../shared/types";
 import { api, message } from "../lib/api";
 import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
-import { useWorkspace } from "../lib/workspace";
+import { useWorkspace, issuePath, projectPath, useWorkspaceDraftGuard } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
 import { IssuePlacementControls } from "../components/issue-placement-controls";
@@ -45,13 +45,24 @@ import {
 import "./issue-loading.css";
 import "./issue-detail.css";
 
+function DuplicateIssueLink({ id }: { id: string }) {
+  const [target, setTarget] = useState<Issue | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<IssueDetail>(`/api/issues/${id}`, { signal: controller.signal }).then(result => setTarget(result.issue)).catch(() => {});
+    return () => controller.abort();
+  }, [id]);
+  return target ? <Link to={issuePath(target)}>!{target.number}</Link> : <span>an unavailable issue</span>;
+}
+
 export function DetailPage() {
-  const { id } = useParams();
-  return <IssueDetails id={id || ""} />;
+  const { number, workspaceSlug } = useParams();
+  return <IssueDetails key={`${workspaceSlug}:${number}`} id={number || ""} byNumber />;
 }
 
 type IssueDetailsProps = {
   id: string;
+  byNumber?: boolean;
   embedded?: boolean;
   panelActions?: ReactNode;
   boards?: Record<string, BoardSettings>;
@@ -72,7 +83,7 @@ export function IssueDetails(props: IssueDetailsProps) {
   const [request, setRequest] = useState<{ id: string; error: string } | null>(null);
   const [retry, setRetry] = useState(0);
   const content = useRef<HTMLDivElement>(null);
-  const current = detail?.issue.id === id;
+  const current = props.byNumber ? String(detail?.issue.number) === id : detail?.issue.id === id;
   const error = request?.id === id ? request.error : "";
   const loading = !current && !error;
   const stale = !!detail && !current;
@@ -82,8 +93,8 @@ export function IssueDetails(props: IssueDetailsProps) {
     const controller = new AbortController();
     setRequest(null);
     // A rapid switch back to the still-mounted issue needs no new request.
-    if (detail?.issue.id === id) return;
-    api<IssueDetail>(`/api/issues/${id}`, { signal: controller.signal })
+    if (current) return;
+    api<IssueDetail>(`/api/issues/${props.byNumber ? "by-number/" : ""}${id}`, { signal: controller.signal })
       .then((result) => {
         if (active) {
           setDetail(result);
@@ -175,7 +186,7 @@ function IssueDetailForm({
   const [creating, setCreating] = useState(false);
   const [newTags, setNewTags] = useState<string[]>([]);
   const project = projects.find((p) => p.id === issue.projectId);
-  const archived = !!project?.archivedAt;
+  const archived = !!project?.archivedAt || issue.access !== "full";
   const catalog = useProjectTags(project?.slug, issue.projectId === initialDetail.issue.projectId ? existingTags : undefined);
   const tags = [...new Set([...catalog, ...persisted.labels, ...newTags])];
   const dirty = issue.body !== persisted.body;
@@ -188,6 +199,7 @@ function IssueDetailForm({
     return () => setBreadcrumb(null);
   }, [embedded, persisted, setBreadcrumb]);
   const pending = dirty || !!comment.trim() || busy || posting || changingState || moving || relating;
+  useWorkspaceDraftGuard(pending);
   // The post-creation toast can outlive its dialog; always guard the latest draft.
   const currentPending = useRef(pending);
   currentPending.current = pending;
@@ -318,9 +330,9 @@ function IssueDetailForm({
         <p className="read-only-note">
           <Archive size={15} />
           <span>
-            This issue belongs to an archived project and is read-only.{" "}
-            {!embedded && project && (
-              <Link to={`/projects/${project.slug}`}>
+            {project?.archivedAt ? "This issue belongs to an archived project and is read-only." : "You have read-only access to this issue."}{" "}
+            {!embedded && project?.archivedAt && project.access === "full" && (
+              <Link to={projectPath(project)}>
                 Restore the project to make changes.
               </Link>
             )}
@@ -331,13 +343,13 @@ function IssueDetailForm({
       <form ref={form} onSubmit={save} className="detail-form">
         <header className="issue-detail-header">
           <div className="detail-title">
-            <h2><Link className="issue-permalink" to={`/issues/${id}`} onClick={(event) => {
+            <h2><Link className="issue-permalink" to={issuePath(issue)} onClick={(event) => {
               if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
                 && currentPending.current && !window.confirm("Discard unsaved issue changes or comment?")) event.preventDefault();
             }}>ISSUE !{issue.number}</Link></h2>
             <IssueStateBadge state={issue.state} closeReason={issue.closeReason} />
             <IssuePlacementControls issue={persisted} board={issue.projectId ? boards?.[issue.projectId] : undefined}
-              disabled={busy || changingState || posting || relating} onBusyChange={setMoving}
+              disabled={archived || busy || changingState || posting || relating} onBusyChange={setMoving}
               onMoved={(updated) => {
                 setIssue((current) => ({ ...updated, body: current.body }));
                 setPersisted(updated);
@@ -348,9 +360,9 @@ function IssueDetailForm({
               }}
               onBoardChanged={(projectId, board) => { refreshHistory(); onBoardChanged?.(projectId, board); notify("Board placement updated"); }} />
           </div>
-          <div className="issue-window-actions">{!draft && <ShareIssue id={id} />}{panelActions}</div>
+          <div className="issue-window-actions">{!draft && <ShareIssue issue={issue} />}{panelActions}</div>
         </header>
-        <PluginIssueActions issue={persisted} comments={comments} />
+        {!archived && <PluginIssueActions issue={persisted} comments={comments} />}
         <ExternalLinks issue={persisted} />
         {draft && <p className="read-only-note">Only you can see this draft, while you have access to its project. Publishing shares the saved issue, comments and history with everyone who has access and cannot be undone. Save any changes before publishing.</p>}
         <fieldset
@@ -363,10 +375,7 @@ function IssueDetailForm({
                 Created <time dateTime={issue.createdAt}>{new Date(issue.createdAt).toLocaleDateString()}</time>
                 {" · by "}{users.find((u) => u.id === issue.authorId)?.name || "a teammate"}
                 {issue.closedAt && <> · Closed as {closeReasonLabels[issue.closeReason ?? "completed"].toLowerCase()} {new Date(issue.closedAt).toLocaleDateString()}{closer && ` by ${closer}`}
-                  {issue.duplicateOfId && <> · Duplicate of <Link to={`/issues/${issue.duplicateOfId}`} onClick={(event) => {
-                    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
-                      && currentPending.current && !window.confirm("Discard unsaved issue changes or comment?")) event.preventDefault();
-                  }}>!{issue.duplicateOfId}</Link></>}
+                  {issue.duplicateOfId && <> · Duplicate of <DuplicateIssueLink id={issue.duplicateOfId} /></>}
                 </>}
               </small>
             {!archived && (

@@ -13,6 +13,15 @@
       }
     },
     "baseUrl": { "type": "string", "format": "uri", "pattern": "^https://", "minLength": 1 },
+    "migration": {
+      "type": "object",
+      "required": ["workspaceName", "workspaceSlug"],
+      "additionalProperties": false,
+      "properties": {
+        "workspaceName": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" },
+        "workspaceSlug": { "type": "string", "minLength": 1, "maxLength": 70, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+      }
+    },
     "existingSecret": { "type": "string", "minLength": 1 },
     "existingSecretKey": { "type": "string", "minLength": 1 },
     "persistence": {

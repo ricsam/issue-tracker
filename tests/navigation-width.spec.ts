@@ -35,13 +35,13 @@ async function dragBy(page: Page, delta: number) {
 }
 
 test("navigation drag resizes the layout and persists across routes and reloads", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await expectWidth(page, 240);
   await dragBy(page, 120);
   await expectWidth(page, 360);
   expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe("360");
   await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "All issues", exact: true }).click();
-  await expect(page).toHaveURL("/issues");
+  await expect(page).toHaveURL("/w/default/issues");
   await expectWidth(page, 360);
   await page.reload();
   await expectWidth(page, 360);
@@ -54,7 +54,7 @@ test("navigation drag resizes the layout and persists across routes and reloads"
 });
 
 test("navigation supports keyboard resizing and double-click reset", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await expect(resizer(page)).toHaveAttribute("aria-controls", "workspace-navigation");
   await expect(resizer(page)).toHaveAttribute("aria-orientation", "vertical");
   await resizer(page).focus();
@@ -82,7 +82,7 @@ test("navigation supports keyboard resizing and double-click reset", async ({ pa
 });
 
 test("narrow viewports clamp without losing the saved width and keep the mobile drawer unchanged", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await resizer(page).focus();
   await page.keyboard.press("End");
   await expectWidth(page, 480);
@@ -119,7 +119,7 @@ test("narrow viewports clamp without losing the saved width and keep the mobile 
 });
 
 test("invalid widths and unavailable localStorage do not break navigation resizing", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   for (const value of ["not-a-width", "Infinity", "", "-10", "209", "481"]) {
     await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: storageKey, value });
     await page.reload();
@@ -145,9 +145,9 @@ test("resizing navigation leaves issue details and the collection usable", async
   });
   expect(created.ok()).toBeTruthy();
   const { issue } = await created.json();
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await page.getByRole("textbox", { name: "Search issues", exact: true }).fill("Navigation resize integration");
-  await page.locator(`.issue-link[href="/issues/${issue.id}"]`).click();
+  await page.locator(`.issue-link[href="/w/default/issues/${issue.number}"]`).click();
   const details = page.getByRole("complementary", { name: "Issue details", exact: true });
   await expect(details).toBeVisible();
   await dragBy(page, 240);

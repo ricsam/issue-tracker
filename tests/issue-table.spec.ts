@@ -24,7 +24,7 @@ test("table keyboard navigation and reversible ranges cross pages without confla
     expect(response.ok()).toBeTruthy();
     numbers.push((await response.json()).issue.number);
   }
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   const table = page.getByRole("table");
   const links = table.locator("tbody .issue-link");
   const sidebar = page.getByRole("complementary", { name: "Issue details", exact: true });
@@ -130,7 +130,7 @@ for (const width of [1440, 390]) {
       created.push((await response.json()).issue);
     }
     await page.setViewportSize({ width, height: 1000 });
-    await page.goto(`/projects/${project.slug}`);
+    await page.goto(`/w/default/projects/${project.slug}`);
     const table = page.getByRole("table");
     const titles = table.locator("tbody .issue-link");
     await expect(titles).toHaveText(["Zebra", "Alpha", "Beta"]);

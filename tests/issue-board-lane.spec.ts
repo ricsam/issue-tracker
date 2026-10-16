@@ -40,7 +40,7 @@ for (const width of [1440, 390]) {
   test(`project list displays, sorts and filters actual board lanes including hidden lanes at ${width}px`, async ({ page, baseURL }) => {
     await page.setViewportSize({ width, height: 1000 });
     const { a, issues, review, headers } = await seed(page, baseURL!);
-    await page.goto(`/projects/${a.slug}`);
+    await page.goto(`/w/default/projects/${a.slug}`);
     await expect(row(page, issues[0]).locator(".issue-board-lane")).toHaveText("Todo");
     await expect(row(page, issues[1]).locator(".issue-board-lane")).toHaveText("Review (hidden)");
     await expect(row(page, issues[2]).locator(".issue-board-lane")).toHaveText("Not on board");
@@ -61,7 +61,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".issue-row")).toHaveCount(3);
     // Closed issues retain placement, so the column does not infer it from lifecycle state.
     await page.request.patch(`/api/issues/${issues[1].id}`, { headers, data: { state: "closed" } });
-    await page.goto(`/projects/${a.slug}`);
+    await page.goto(`/w/default/projects/${a.slug}`);
     await setTableState(page, "closed");
     await expect(row(page, issues[1]).locator(".issue-board-lane")).toHaveText("Review (hidden)");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -73,7 +73,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
   await page.request.patch(`/api/projects/${b.slug}`, { headers, data: { archived: true } });
   const boardRequests: string[] = [];
   page.on("request", (request) => { if (request.method() === "GET" && /\/api\/projects\/[^/]+\/board$/.test(new URL(request.url()).pathname)) boardRequests.push(request.url()); });
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await expect(page.locator(".issue-row")).toHaveCount(5);
   await expect(row(page, issues[3]).locator(".issue-board-lane")).toHaveText("Review");
@@ -114,7 +114,7 @@ test("All Issues distinguishes same-named project lanes and updates its active f
 
 test("project list lane reflects board add, move and removal when switching views", async ({ page, baseURL }) => {
   const { a, issues } = await seed(page, baseURL!);
-  await page.goto(`/projects/${a.slug}/board`);
+  await page.goto(`/w/default/projects/${a.slug}/board`);
   await page.getByRole("button", { name: `Board actions for issue !${issues[0].number}`, exact: true }).click();
   await page.getByRole("menuitem", { name: "Done", exact: true }).click();
   await expect(page.locator(".snackbar").getByRole("status")).toHaveText("1 of 1 issues moved.");

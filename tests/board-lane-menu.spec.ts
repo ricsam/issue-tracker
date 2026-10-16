@@ -13,7 +13,7 @@ async function fixture(page: Page, baseURL: string) {
     expect((await page.request.post(`${endpoint}/issues`, { headers, data: { lane, issueIds: [issue.id] } })).ok()).toBeTruthy();
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
   const getBoard = async () => (await (await page.request.get(endpoint)).json()).board;
   return { project, endpoint, headers, getBoard };
@@ -73,13 +73,13 @@ test("hide is personal, persistent, prunes selection and keyboard targets, and c
   const other = await browser.newContext({ storageState: { cookies: await page.context().cookies(), origins: [] } });
   try {
     const tab = await other.newPage();
-    await tab.goto(`${baseURL}/projects/${project.slug}/board`);
+    await tab.goto(`${baseURL}/w/default/projects/${project.slug}/board`);
     await expect(headings(tab)).toHaveText(["Todo", "In progress", "Done"]);
   } finally { await other.close(); }
   const { project: second } = await (await page.request.post("/api/projects", { headers, data: { name: `Other board ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${second.slug}/board`);
+  await page.goto(`/w/default/projects/${second.slug}/board`);
   await expect(headings(page)).toHaveText(["Todo", "In progress", "Done"]);
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await laneAction(page, "Todo", "Collapse");
   await laneAction(page, "Todo", "Hide");
   await laneAction(page, "Done", "Hide");

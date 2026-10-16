@@ -18,7 +18,7 @@ for (const mobile of [false, true]) test(`explicit mentions survive creation, so
   const response = await page.request.post("/api/projects", { headers: { Origin: baseURL! }, data: { name: `Mentions ${randomUUID()}` } });
   expect(response.ok()).toBeTruthy();
   const { project } = await response.json();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   const editor = dialog.getByRole("textbox", { name: "Issue", exact: true });
@@ -70,7 +70,7 @@ test("comment UI adds, edits and deletes associations without replacing the unsa
   const headers = { Origin: baseURL! };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Comment mentions ${randomUUID()}` } })).json();
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Comment association test" } })).json();
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const input = page.getByRole("textbox", { name: "Issue", exact: true });
   const draft = "Unsaved issue draft must survive every comment mutation #unsaved-label";
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();

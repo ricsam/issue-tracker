@@ -36,7 +36,7 @@ test("list selection spans pages, adds and moves work to visible custom lanes, a
   await post(page, baseURL!, `${boardPath(p)}/issues`, { issueIds: [issues[0].id], lane: "todo" });
   const review = `custom_${randomUUID()}`;
   await post(page, baseURL!, boardPath(p), { lanes: ["in_progress", review, "done"], customLanes: [{ value: review, label: "Review" }] }, "PATCH");
-  await page.goto(`/projects/${p.slug}`);
+  await page.goto(`/w/default/projects/${p.slug}`);
   const send = actions(page).getByRole("button", { name: "Send to board", exact: true });
   await expect(actions(page)).toContainText("0 selected");
   await expect(send).toHaveCount(0);
@@ -86,7 +86,7 @@ test("All issues sends to each corresponding project, leaves unlinked issues sel
   const unlinked = await createIssue(page, baseURL!, null, `${marker} unlinked`);
   const custom = `custom_${randomUUID()}`;
   await post(page, baseURL!, boardPath(b), { lanes: [custom], customLanes: [{ value: custom, label: "Ready for QA" }] }, "PATCH");
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await page.getByRole("checkbox", { name: "Select all issues on this page" }).check();
   await actions(page).getByRole("button", { name: "Send to board", exact: true }).click();
@@ -117,7 +117,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 950 });
     const p = await createProject(page, baseURL!, `Details ${randomUUID()}`);
     const issue = await createIssue(page, baseURL!, p.id, "Persisted body #keep");
-    await page.goto(`/issues/${issue.id}`);
+    await page.goto(`/w/default/issues/${issue.number}`);
     const editor = page.getByRole("textbox", { name: "Issue", exact: true });
     await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
     await editor.fill("Unsaved detail draft");
@@ -148,7 +148,7 @@ test("closed off-board and unlinked issues explain why they cannot be sent; arch
   const unlinked = await createIssue(page, baseURL!, null, "No board available");
   await post(page, baseURL!, `${boardPath(p)}/issues`, { issueIds: [member.id], lane: "todo" });
   for (const issue of [member, backlog]) await post(page, baseURL!, `/api/issues/${issue.id}`, { state: "closed" }, "PATCH");
-  await page.goto(`/projects/${p.slug}`);
+  await page.goto(`/w/default/projects/${p.slug}`);
   await page.getByRole("button", { name: "Edit filter: State is Open", exact: true }).click();
   const filter = page.getByRole("dialog", { name: "Edit filter", exact: true });
   await filter.getByLabel("Value", { exact: true }).selectOption("closed");
@@ -162,15 +162,15 @@ test("closed off-board and unlinked issues explain why they cannot be sent; arch
   await modal(page).getByRole("button", { name: "Done", exact: true }).click();
   await expect(actions(page)).toContainText("1 selected");
   expect((await board(page, p)).cards).toEqual([{ issueId: member.id, lane: "done" }]);
-  await page.goto(`/issues/${backlog.id}`);
+  await page.goto(`/w/default/issues/${backlog.number}`);
   await page.getByRole("button", { name: "Change board lane", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Choose board lane", exact: true })).toContainText("Reopen this closed issue before adding it to the board");
   await expect(page.getByRole("combobox", { name: "Board lane", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await page.goto(`/issues/${unlinked.id}`);
+  await page.goto(`/w/default/issues/${unlinked.number}`);
   await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
   await post(page, baseURL!, `/api/projects/${p.slug}`, { archived: true }, "PATCH");
-  await page.goto(`/issues/${member.id}`);
+  await page.goto(`/w/default/issues/${member.number}`);
   await expect(page.getByText(/belongs to an archived project/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Change board lane", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Change project", exact: true })).toBeDisabled();
@@ -180,7 +180,7 @@ test("embedded detail placement updates the board immediately and stale destinat
   const p = await createProject(page, baseURL!, `Live board ${randomUUID()}`);
   const issue = await createIssue(page, baseURL!, p.id, "Move from detail");
   await post(page, baseURL!, `${boardPath(p)}/issues`, { issueIds: [issue.id], lane: "todo" });
-  await page.goto(`/projects/${p.slug}/board`);
+  await page.goto(`/w/default/projects/${p.slug}/board`);
   await page.locator(".board-card").getByRole("link", { name: issue.title, exact: true }).click();
   const editor = sidebar(page).getByRole("textbox", { name: "Issue", exact: true });
   await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
@@ -209,7 +209,7 @@ test("lane loading can retry, pending placement is locked, and counts failures n
   const p = await createProject(page, baseURL!, `Retry ${randomUUID()}`);
   const issue = await createIssue(page, baseURL!, p.id, "Retry placement");
   await page.route(`**${boardPath(p)}`, (route) => route.fulfill({ status: 500, json: { error: "Lane load failed" } }));
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await page.getByRole("button", { name: "Change board lane", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Choose board lane", exact: true });
   await expect(picker.getByRole("alert")).toContainText("Lane load failed");

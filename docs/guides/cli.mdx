@@ -62,7 +62,7 @@ On supported servers, JSON requests to `/api/auth/device/code` and `/api/auth/de
 
 For CI or AI agents, inject `THREADLINE_TOKEN` using your runner's secret store. It overrides any saved token for the selected host and is never saved by ordinary commands. Do not put tokens in command arguments, URLs, source files, or logs. An explicitly selected host is a trust decision: automation must not let untrusted input choose `THREADLINE_HOST`.
 
-Keys have `read`, or `read` plus `write`. Read permits viewing/listing data; write also permits mutations allowed by the user's project access. Browser CLI login requests both scopes. Use a manually created read-only key for read-only agents. Tokens do not grant access to other users' personal drafts or bypass archived projects/access rules. Token authentication cannot manage accounts, SSO, or mint other keys. Cookie-only authentication endpoints are intentionally not exposed by this CLI.
+Keys have `read`, or `read` plus `write`. Read permits viewing/listing data; write also permits mutations allowed by the user's current workspace and project access; a write key cannot override read-only membership. Browser CLI login requests both scopes. Use a manually created read-only key for read-only agents. Tokens do not grant access to other users' personal drafts or bypass archived projects/access rules. Token authentication cannot manage accounts, SSO, or mint other keys. Cookie-only authentication endpoints are intentionally not exposed by this CLI.
 
 ```sh
 threadline project list --json
@@ -72,6 +72,21 @@ printf '# Investigate login failure\n\nReproduction steps…\n' |
 threadline issue comment 12 --body 'Verified the fix in staging.' --json
 threadline issue close 12 --json
 ```
+
+## Select a workspace
+
+Run `threadline workspace list --json` to discover accessible or publicly listed workspaces. `role: null` means discovery only, not membership or content access. Hidden workspaces appear only to members and instance administrators.
+
+All data commands accept `--workspace SLUG`; this overrides `THREADLINE_WORKSPACE`. If neither is set, `default` is used. For example:
+
+```sh
+export THREADLINE_WORKSPACE=team
+threadline issue view 12
+threadline project list --workspace another-team
+threadline issue view https://issue-tracker.r5d.app/w/team/issues/12
+```
+
+A URL infers the workspace when no setting is supplied. It must agree with an explicit flag or the effective environment setting; conflicts fail before requests. Data calls send `X-Workspace-Slug`, and numeric targets resolve through `/api/issues/by-number/:number` before stable-ID mutations. Workspace management/invitations remain browser-session operations. This CLI requires a workspace-capable server; successful device login alone does not establish that compatibility.
 
 ## Commands
 
@@ -85,6 +100,7 @@ All commands accept `--json` for one JSON result on stdout (not a gh-style field
 | `auth login` | `--no-browser`, `--name NAME`; alternatively `--with-token` reads stdin |
 | `auth status` | Validates current token; shows user, source, scopes and expiry, never the token |
 | `auth logout` | Revokes the current token on the server, then removes a matching saved token |
+| `workspace list` | Lists accessible/discoverable workspaces and membership role |
 | `project list` | Lists accessible projects, including archived projects |
 | `project view SLUG` | Shows an accessible project |
 | `issue list` | `--project SLUG`, `--state open\|closed\|draft\|all`, repeated `--label LABEL`, `--search TEXT`, `--limit N` |
@@ -95,7 +111,7 @@ All commands accept `--json` for one JSON result on stdout (not a gh-style field
 | `issue close TARGET` | Closes a published issue |
 | `issue reopen TARGET` | Reopens a closed issue; publishes a personal draft |
 
-`TARGET` is a positive global issue number (`12`), quoted `!` number (`'!12'`), or same-origin URL (`https://issue-tracker.r5d.app/issues/12`). Cross-host URLs are rejected before any request. Query strings and fragments are not accepted. Numeric IDs are not scoped to a project.
+`TARGET` is a positive workspace-local issue number (`12`), quoted `!` number (`'!12'`), or canonical same-origin URL (`https://issue-tracker.r5d.app/w/team/issues/12`). Cross-host URLs are rejected before any request. Query strings, fragments and old unscoped URLs are not accepted. CLI targets are display numbers, not internal `issue.id` keys; two workspaces can both have `!12`. Output links are canonical workspace-prefixed URLs.
 
 List defaults are `--state open --limit 30`, newest issue number first. Labels match exactly, with repeated labels requiring all matches. Search is case-insensitive text search over title and body. Current list APIs return all accessible issues; these filters and the limit are applied locally, so `--limit` does not bound the API response size. `--state all` includes accessible drafts and closed issues. There is no pagination cursor.
 

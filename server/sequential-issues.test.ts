@@ -49,7 +49,7 @@ test("v11 atomically renumbers globally, preserves children, archives, lifecycle
   const mapping = new Map([[ids[1], '1'], [ids[0], '2'], [ids[2], '3']]);
   for (let attempt = 0; attempt < 2; attempt++) {
     const db = openDatabase(path);
-    expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(oldRows.map((row, index) => ({ ...row, id: index + 1, number: index + 1, isDraft: 0, closeReason: row.closedAt === null ? null : "completed", duplicateOfId: null })));
+    expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(oldRows.map((row, index) => ({ ...row, id: index + 1, number: index + 1, workspaceId: "default", isDraft: 0, closeReason: row.closedAt === null ? null : "completed", duplicateOfId: null })));
     expect(db.query("SELECT * FROM comments ORDER BY id").all()).toEqual(comments.map((row) => ({ ...row, issueId: mapping.get(row.issueId) })));
     expect(db.query("SELECT * FROM legacy_project_boards").all()).toEqual(archive);
     expect(db.query("SELECT * FROM issue_tagged_users ORDER BY issueId").all()).toEqual(['1','2','3'].map((issueId) => ({ issueId, userId: 'u' })));
@@ -60,7 +60,7 @@ test("v11 atomically renumbers globally, preserves children, archives, lifecycle
     expect(db.query("SELECT name FROM sqlite_temp_schema WHERE name='issue_id_migration'").all()).toEqual([]);
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
-    expect(db.query("SELECT name FROM sqlite_schema WHERE name IN ('issues_project','issues_project_id','issues_unlinked_number','custom_issue_index','retained_trigger','comments_issue','board_issues_order')").all()).toHaveLength(7);
+    expect(db.query("SELECT name FROM sqlite_schema WHERE name IN ('issues_project','issues_project_id','issues_workspace_number','custom_issue_index','retained_trigger','comments_issue','board_issues_order')").all()).toHaveLength(7);
     expect((db.query("SELECT sql FROM sqlite_schema WHERE name='issues'").get() as any).sql).toContain('INTEGER PRIMARY KEY AUTOINCREMENT');
     expect(() => db.exec("UPDATE issues SET priority='low'")).toThrow();
     db.close();

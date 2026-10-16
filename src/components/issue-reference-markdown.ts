@@ -4,7 +4,7 @@ const excluded = new Set(["link", "linkReference", "image", "imageReference", "c
 type Node = { type: string; value?: string; url?: string; children?: Node[] };
 
 /** Turn standalone !123 in prose into internal links, never into tags. */
-export function remarkIssueReferences() {
+export function remarkIssueReferences(options: { workspaceSlug?: string } = {}) {
   return (tree: Node) => {
     const walk = (node: Node) => {
       if (excluded.has(node.type) || !node.children) return;
@@ -15,7 +15,7 @@ export function remarkIssueReferences() {
         let offset = 0;
         for (const match of matchIssueReferences(text)) {
           if (match.start > offset) parts.push({ type: "text", value: text.slice(offset, match.start) });
-          parts.push({ type: "link", url: `/issues/${match.id}`, children: [{ type: "text", value: `!${match.id}` }] });
+          parts.push({ type: "link", url: `/w/${encodeURIComponent(options.workspaceSlug ?? "default")}/issues/${match.id}`, children: [{ type: "text", value: `!${match.id}` }] });
           offset = match.end;
         }
         if (!offset) return [child];

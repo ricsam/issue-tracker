@@ -13,7 +13,7 @@ async function seed(page: Page, baseURL: string, count = 31) {
     const response = await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: `Task ${String(i).padStart(2, "0")}`, labels: i <= 2 ? ["keep"] : [] } });
     expect(response.ok()).toBeTruthy(); const { issue } = await response.json(); ids.push(issue.id); numbers.push(issue.number);
   }
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   return { project, ids, numbers, headers };
 }
 

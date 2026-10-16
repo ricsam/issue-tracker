@@ -5,11 +5,12 @@ import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import "./project-access.css";
 
-export const accessExplanation = "Public projects are available to everyone signed in to this workspace. Private projects are available only to their owner, shared users, and admins.";
+export const accessExplanation = "Legacy project visibility applies to migrated Default workspace memberships. Members with workspace permissions use their default access and project overrides instead.";
 
 export function ProjectAccessSummary({ project }: { project: Project }) {
   const { users } = useWorkspace();
   const owner = users.find((user) => user.id === project.ownerId);
+  if (project.workspaceId !== "default") return <div className="project-access-summary" aria-label="Project access"><span className="tag">{project.access === "full" ? "Full access" : "Read-only"}</span><span>Managed by workspace permissions</span></div>;
   return <div className="project-access-summary" aria-label="Project access">
     <span className="tag" title={accessExplanation}>{project.visibility === "private" ? "Private" : "Public"}</span>
     <span>Owner: {owner?.name || "Unassigned"}</span>

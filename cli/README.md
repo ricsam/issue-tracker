@@ -37,6 +37,8 @@ If login returns `403 Invalid origin` or rejects the device-auth endpoint, the d
 ## Work with issues
 
 ```sh
+threadline workspace list --json
+export THREADLINE_WORKSPACE=default
 threadline project list --json
 threadline project view PROJECT-SLUG
 threadline issue list --project PROJECT-SLUG --state open --label bug --limit 20 --json
@@ -48,7 +50,7 @@ threadline issue close 12
 threadline issue reopen 12
 ```
 
-Use a project **slug** from `project list`, not its name. Issue targets accept a global number, quoted `'!12'`, or same-origin issue URL. `issue view` includes comments. `--body-file -` reads Markdown from stdin; `--body` supplies it directly. Issue titles and labels are derived from Markdown headings and hashtags. `--title` is an optional compatibility shortcut for editing a heading.
+Use a project **slug** from `project list`, not its name. Issue targets accept a workspace-local number, quoted `'!12'`, or same-origin canonical URL such as `https://your-threadline.example.com/w/team/issues/12`. Data commands accept `--workspace team`, overriding `THREADLINE_WORKSPACE`; without either, they use `default`. URLs infer their workspace and must agree with the selected flag/environment workspace. `workspace list` includes accessible/discoverable workspaces (`role: null` means you are not a member). Numeric targets are resolved inside the selected workspace before mutations; internal IDs are not CLI targets. These commands require a workspace-capable server. `issue view` includes comments. `--body-file -` reads Markdown from stdin; `--body` supplies it directly. Issue titles and labels are derived from Markdown headings and hashtags. `--title` is an optional compatibility shortcut for editing a heading.
 
 Lists default to open issues and 30 results, newest first. `--state` accepts `open`, `closed`, `draft`, or `all`. Repeat `--label` to match all labels; `--search` matches title/body text. Filters and limits are currently applied locally after retrieving accessible issues, not server-side pagination. `issue reopen` publishes a personal draft if used on one.
 

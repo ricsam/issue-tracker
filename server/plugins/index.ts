@@ -19,6 +19,8 @@ export type PluginContext = {
   allowInsecureLocalhost: boolean;
   get(key: string): unknown;
   set(key: string, value: unknown): void;
+  /** Resolve an explicit workspace-local reference without conflating equal numbers. */
+  resolveIssue(workspaceSlug: string, number: string): string | null;
   putLink(issueId: string, link: Omit<ExternalLink, "pluginId">): void;
   removeLinks(externalId?: string): void;
   transaction(fn: () => void): void;
@@ -372,6 +374,12 @@ export class PluginService {
             "INSERT INTO plugin_state VALUES (?,?,?) ON CONFLICT(pluginId,key) DO UPDATE SET value=excluded.value",
           )
           .run(plugin.id, key, JSON.stringify(value));
+      },
+      resolveIssue: (workspaceSlug, number) => {
+        active();
+        const row = this.db.query("SELECT CAST(i.id AS TEXT) AS id FROM issues i JOIN workspaces w ON w.id=i.workspaceId WHERE w.slug=? AND i.number=?")
+          .get(workspaceSlug, number) as { id: string } | null;
+        return row?.id ?? null;
       },
       putLink: (issueId, link) => {
         writable();

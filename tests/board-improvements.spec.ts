@@ -25,7 +25,7 @@ async function fixture(page: Page, baseURL: string) {
   }
   await page.request.post(`${endpoint}/issues`, { headers, data: { issueIds: issues.slice(0, 5).map((issue) => issue.id), lane: "todo" } });
   await page.request.post(`${endpoint}/issues`, { headers, data: { issueIds: [issues[5].id], lane: "done" } });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card")).toHaveCount(6);
   return { issues, endpoint, headers };
 }

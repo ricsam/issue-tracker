@@ -7,11 +7,11 @@ Threadline is a small, self-hosted issue tracker for a trusted, authenticated te
 Review these boundaries before inviting users or storing sensitive information.
 They describe current behavior, not a roadmap or a promise of future features.
 
-## Project access within one workspace
+## Workspace and project access
 
-Public projects are readable by every signed-in user. Private projects are readable only by the owner, explicitly shared users, and administrators. Only owners and administrators manage access; readers retain collaborative writes. **No project** issues remain workspace-wide.
-Tagging a user does not grant access or assign a role. Moving an issue changes its audience and requires access to both projects. Attachments follow readable saved issue/comment/history references; unsaved uploads are uploader-only, with administrator access to all files.
-The workspace user directory, including names and email addresses, remains visible to all authenticated users. Anonymous visitors cannot access application data.
+[Workspace membership](/guides/workspaces) defaults (None/Read/Full) and specific project Read/Full overrides control access. A specific override wins, including Read overriding default Full. Public listing grants no membership; hidden workspaces are visible only to members/instance administrators. Read is read-only, not collaboration permission. Unlinked issues use default access. Migrated Default memberships retain legacy private-project restrictions until explicitly converted with `convertLegacyAccess:true` (unchanged saves preserve legacy restrictions).
+Tagging a user does not grant access or assign a role. Moving an issue changes its audience and requires access to both projects. Attachments follow readable saved issue/comment/history references; unsaved uploads are uploader-only, with administrator recovery access to unsaved files; saved references still enforce draft privacy.
+The available workspace user directory includes names and email addresses; review membership before inviting users. Anonymous visitors cannot access application data.
 
 <Warning>
   Administrators and infrastructure operators remain trusted. Access controls cannot retract previously downloaded or copied data. This is not separate tenant isolation or encryption.
@@ -20,7 +20,7 @@ The workspace user directory, including names and email addresses, remains visib
 ## Limited account management
 
 The first local account is an administrator; local accounts created through Administration are members.
-The current interface and API do not provide user deletion, role changes, or password resets.
+The current interface and API do not provide user deletion, instance-role changes, or password resets. Workspace administrators can manage workspace roles and invitations separately.
 There is no built-in local self-registration after initial setup.
 There is also no self-service password editor or forced first-login password change.
 
@@ -50,7 +50,7 @@ Plan storage capacity for retained files, and include uploads in backups rather 
 
 ## Projects, boards and bulk actions
 
-Issues can move between active projects or become unlinked without changing their global number or URL. A changed project removes the old board placement; it does not transfer the lane or add the issue to the destination board. Archived source and destination projects must be restored first. Unlinked issues cannot join project boards.
+Issues can move between active projects or become unlinked without changing their workspace-local number or URL. Cross-workspace moves and relationships are not supported. A changed project removes the old board placement; it does not transfer the lane or add the issue to the destination board. Archived source and destination projects must be restored first. Unlinked issues cannot join project boards.
 
 Creation defaults to **Not on board**. Explicit lane-on-create requires a visible lane in the selected active project; hidden lanes and another project's custom lanes are not valid destinations. Issue creation and that initial placement are atomic.
 

@@ -25,14 +25,17 @@ async function seed(page: Page, baseURL: string) {
   expect(response.ok()).toBeTruthy();
   const { project } = await response.json();
   const issueIds: string[] = [];
+  const issueNumbers: number[] = [];
   for (const content of [body, "# Another issue\n\nAnother body"]) {
     const created = await page.request.post(`/api/projects/${project.slug}/issues`, {
       headers, data: { body: content },
     });
     expect(created.ok()).toBeTruthy();
-    issueIds.push((await created.json()).issue.id);
+    const { issue } = await created.json();
+    issueIds.push(issue.id);
+    issueNumbers.push(issue.number);
   }
-  return { project, issueIds, headers };
+  return { project, issueIds, issueNumbers, headers };
 }
 
 async function expectPreview(editor: Locator, title: string) {
@@ -47,10 +50,10 @@ async function expectPreview(editor: Locator, title: string) {
 
 for (const width of [1440, 390]) {
   test(`full-page issues open in Preview and preserve Markdown when read and saved at ${width}px`, async ({ page, baseURL }) => {
-    const { issueIds } = await seed(page, baseURL!);
+    const { issueIds, issueNumbers } = await seed(page, baseURL!);
     const endpoint = `/api/issues/${issueIds[0]}`;
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(`/issues/${issueIds[0]}`);
+    await page.goto(`/w/default/issues/${issueNumbers[0]}`);
     const editor = detail(page);
     await expectPreview(editor, "Preview first");
     await expect(editor.getByRole("table")).toContainText("Preserved");
@@ -80,7 +83,7 @@ for (const width of [1440, 390]) {
 
 for (const board of [false, true]) {
   test(`${board ? "board" : "list"} sidebar resets to Preview for each newly opened issue`, async ({ page, baseURL }) => {
-    const { project, issueIds, headers } = await seed(page, baseURL!);
+    const { project, issueIds, issueNumbers, headers } = await seed(page, baseURL!);
     if (board) {
       const placed = await page.request.post(`/api/projects/${project.slug}/board/issues`, {
         headers, data: { issueIds, lane: "todo" },
@@ -88,9 +91,9 @@ for (const board of [false, true]) {
       expect(placed.ok()).toBeTruthy();
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    const path = `/projects/${project.slug}${board ? "/board" : ""}`;
+    const path = `/w/default/projects/${project.slug}${board ? "/board" : ""}`;
     await page.goto(path);
-    const link = (index: number) => page.locator(`.project-issues-content .issue-link[href="/issues/${issueIds[index]}"]`);
+    const link = (index: number) => page.locator(`.project-issues-content .issue-link[href="/w/default/issues/${issueNumbers[index]}"]`);
     const prompts: string[] = [];
     page.on("dialog", async (dialog) => { prompts.push(dialog.message()); await dialog.dismiss(); });
     await link(0).click();
@@ -114,8 +117,8 @@ for (const board of [false, true]) {
 
 for (const embedded of [false, true]) {
   test(`${embedded ? "sidebar" : "full page"} double-click preview enters focused Write without saving or losing drafts`, async ({ page, baseURL }) => {
-    const { project, issueIds } = await seed(page, baseURL!);
-    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issueIds[1]}`);
+    const { project, issueIds, issueNumbers } = await seed(page, baseURL!);
+    await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issueNumbers[1]}`);
     if (embedded) await page.locator(`a[data-issue-id="${issueIds[1]}"]`).click();
     const editor = detail(page);
     const comment = page.locator(".comments [contenteditable=true]");
@@ -141,17 +144,17 @@ for (const embedded of [false, true]) {
 }
 
 test("double-clicking archived issue content does not enable editing", async ({ page, baseURL }) => {
-  const { project, issueIds, headers } = await seed(page, baseURL!);
+  const { project, issueIds, issueNumbers, headers } = await seed(page, baseURL!);
   expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
-  await page.goto(`/issues/${issueIds[1]}`);
+  await page.goto(`/w/default/issues/${issueNumbers[1]}`);
   await page.locator(".issue-read-only").dblclick();
   await expect(detail(page).getByRole("button", { name: "Write", exact: true })).toHaveCount(0);
   await expect(detail(page).getByRole("textbox")).toHaveCount(0);
 });
 
 test("Write still edits existing issues while new issues and comments start in Write", async ({ page, baseURL }) => {
-  const { issueIds } = await seed(page, baseURL!);
-  await page.goto(`/issues/${issueIds[1]}`);
+  const { issueIds, issueNumbers } = await seed(page, baseURL!);
+  await page.goto(`/w/default/issues/${issueNumbers[1]}`);
   const editor = detail(page);
   await expectPreview(editor, "Another issue");
   await mode(editor, "Write").click();

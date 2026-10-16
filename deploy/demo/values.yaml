@@ -1,4 +1,4 @@
-# Operator values for the personal demo. Install chart version 0.25.0 explicitly.
+# Operator values for the personal demo. Install chart version 0.28.0 explicitly.
 # On a fresh database, override ingress.enabled=false until admin setup succeeds.
 image:
   repository: ghcr.io/ricsam/issue-tracker
@@ -7,6 +7,9 @@ image:
 imagePullSecrets:
   - name: ghcr-registry
 baseUrl: https://issue-tracker.r5d.app
+migration:
+  workspaceName: "richie's workspace"
+  workspaceSlug: richies-workspace
 existingSecret: issue-tracker-settings
 persistence:
   storageClass: rook-ceph-block

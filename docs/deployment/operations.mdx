@@ -38,20 +38,24 @@ Record recovery time and the last included write. A backup that has never been r
 
 ## Upgrade deliberately
 
-Pin the chart version and image tag independently. Back up first, inspect release notes, then render the intended manifests:
+Pin the chart version and published image digest independently after successful release CI. Back up first, inspect release notes, then render the intended manifests. For 0.28.0, set `migration.workspaceName`/`migration.workspaceSlug` before migration 22 first runs; defaults are `Default`/`default`. See the [migration guide shipped in the chart](https://github.com/ricsam/issue-tracker/blob/main/charts/issue-tracker/README.md). An upgrade from migration 19 applies 20, 21 and 22. Existing IDs, content and initial display numbers are retained; the canonical URL namespace changes to `/w/SLUG/...`.
+
+Keep writers stopped between the pre-upgrade backup and upgrade. Preserve PVC/PV binding, UID/GID/fsGroup, settings Secret, ingress and BASE_URL. The backup procedure above restarts the app for an ordinary backup; **omit that restart when immediately upgrading**.
 
 ```sh
 helm repo update
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.28.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.1.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.28.0 --namespace issue-tracker -f production-values.yaml --wait --timeout 5m
 kubectl -n issue-tracker rollout status deployment/issue-tracker
 ```
 
-Update `image.tag` in your values file to the confirmed published tag before running the upgrade. `Recreate` stops the old pod before starting the replacement, so expect downtime. Do not add replicas or change the strategy to avoid that downtime.
+Update `image.tag` in your values file to `sha-<published-commit>@sha256:<verified-registry-digest>` before running the upgrade; resolve the digest from the registry after CI publishes it, rather than guessing. `Recreate` stops the old pod before starting the replacement, so expect downtime. Do not add replicas or change the strategy to avoid that downtime.
 
-Database migrations run during application startup. An image or Helm rollback does not undo database changes; confirm compatibility or restore the pre-upgrade backup before running an older image.
+Database migrations run during application startup. Do not use `--atomic`, automatic Helm rollback, or old-image-only rollback across this upgrade. If recovery is needed, stop the new application, retain any newer data separately, restore the complete matching pre-upgrade `DATA_DIR` and settings-Secret backup, then start its matching old image/chart. Never start an old image against the migrated database.
+
+Before reopening writes, verify migration version, initial workspace name/slug, known issue IDs/numbers and record counts, comments, attachments and boards. Check private-project denial, creator-only drafts, read-only member restrictions, local login and OIDC. Pending initial-workspace invitations must retain their configured grants rather than fallback Full onboarding. Unchanged legacy member saves preserve private restrictions; conversion requires explicit confirmation.
 
 A retained PVC can outlive its release. To reuse it in a new release, supply `persistence.existingClaim` and the matching settings key rather than creating an empty data volume.
 

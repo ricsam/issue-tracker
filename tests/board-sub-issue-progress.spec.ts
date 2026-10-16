@@ -30,7 +30,7 @@ test("card progress counts closed direct children, refreshes after close/reopen 
   const { project, parent, first, second, leaf, headers } = await seed(page, baseURL!);
   let individualRelationshipReads = 0;
   page.on("request", (request) => { if (/\/api\/issues\/\d+\/relationships$/.test(request.url())) individualRelationshipReads++; });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   const parentCard = card(page, parent.id);
   const progress = parentCard.getByRole("progressbar", { name: `Sub-issues for issue !${parent.number}` });
   await expect(progress).toHaveAttribute("aria-valuetext", "0 of 2 sub-issues closed (0%)");
@@ -71,7 +71,7 @@ test("card progress counts closed direct children, refreshes after close/reopen 
 
 test("linking, creating and unlinking from the parent panel refreshes its card without losing edits", async ({ page, baseURL }) => {
   const { project, parent, first, second, leaf } = await seed(page, baseURL!);
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   const progress = card(page, parent.id).getByRole("progressbar");
   await expect(progress).toHaveAttribute("aria-valuemax", "2");
   await card(page, parent.id).getByRole("link", { name: parent.title, exact: true }).click();
@@ -106,7 +106,7 @@ test("linking, creating and unlinking from the parent panel refreshes its card w
 test("focus refresh picks up external changes; failed refresh hides stale counts and can retry", async ({ page, baseURL }) => {
   const { project, parent, second, headers } = await seed(page, baseURL!);
   const endpoint = `/api/projects/${project.slug}/board/sub-issue-progress`;
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   const progress = card(page, parent.id).getByRole("progressbar");
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
   expect((await page.request.patch(`/api/issues/${second.id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
@@ -128,7 +128,7 @@ test("segmented progress fits mobile cards and scales to large counts without on
     contentType: "application/json", body: JSON.stringify({ progress: { [parent.id]: { total: 1000, closed: 999 } } }),
   }));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   const progress = card(page, parent.id).getByRole("progressbar");
   await expect(progress).toHaveAttribute("aria-valuetext", "999 of 1000 sub-issues closed (99%)");
   await expect(progress.locator(".board-sub-issue-track")).toHaveCSS("--sub-issue-segments", "20");

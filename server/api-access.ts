@@ -37,6 +37,7 @@ export function apiKeyAllows(key: ApiKeyInfo, path: string, method: string) {
   if (path === "/api/me/token" && method === "DELETE") return true;
   const dataRoute = /^\/api\/(projects|issues|comments|uploads)(\/|$)/.test(path)
     || (path === "/api/users" && method === "GET")
+    || (method === "GET" && /^\/api\/workspaces(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(path))
     || /^\/api\/me\/(pinned-projects|favorite-projects)(\/|$)/.test(path);
   return dataRoute && key.scopes.includes(["GET", "HEAD"].includes(method) ? "read" : "write");
 }
@@ -44,6 +45,7 @@ export function apiKeyAllows(key: ApiKeyInfo, path: string, method: string) {
 /** Exact internal destinations only; never accept a URL or arbitrary query string. */
 export function authReturnTo(value: string | undefined) {
   if (value === "/new" || value === "/cli/authorize") return value;
+  if (value && /^\/w\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/(?:new|issues\/[1-9][0-9]*))?$/.test(value)) return value;
   if (value && /^\/cli\/authorize\?user_code=[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(value)) return value;
   return "/";
 }

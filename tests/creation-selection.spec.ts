@@ -20,7 +20,7 @@ test("creation chooses a visible custom lane, repeats placement and resets when 
   const custom = `custom_${randomUUID()}`;
   const endpoint = `/api/projects/${project.slug}/board`;
   expect((await page.request.patch(endpoint, { headers, data: { lanes: ["todo", custom], customLanes: [{ value: custom, label: "Review" }] } })).ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await page.getByRole("button", { name: "Create issue", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "Create issue" });
   const lane = modal.getByRole("combobox", { name: "Board lane", exact: true });
@@ -61,7 +61,7 @@ test("global creation remembers project and per-project lane across reopen/reloa
     await page.getByRole("button", { name: "Create issue (Alt+N)", exact: true }).click();
     await expect(dialog).toBeVisible();
   };
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await open();
   await projectField.selectOption(project.id);
   await lane.selectOption("done");
@@ -73,7 +73,7 @@ test("global creation remembers project and per-project lane across reopen/reloa
   await open();
   await expect(projectField).toHaveValue(project.id);
   await expect(lane).toHaveValue("done");
-  await page.goto(`/projects/${other.slug}`);
+  await page.goto(`/w/default/projects/${other.slug}`);
   await expect(page.getByRole("button", { name: "Create issue", exact: true })).toBeVisible();
   await open();
   await expect(projectField).toHaveValue(other.id);
@@ -84,7 +84,7 @@ test("global creation remembers project and per-project lane across reopen/reloa
   await expect(lane).toHaveValue("done");
   await projectField.selectOption(other.id);
   await expect(lane).toHaveValue("todo");
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await open();
   await expect(projectField).toHaveValue(project.id);
   await expect(lane).toHaveValue("done");
@@ -104,7 +104,7 @@ test("a now-hidden creation lane fails atomically and retains the draft for corr
   const headers = { Origin: baseURL! };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Stale lane ${randomUUID()}` } })).json();
   const path = `/api/projects/${project.slug}`;
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "Create issue" });
   const lane = modal.getByRole("combobox", { name: "Board lane", exact: true });
@@ -138,7 +138,7 @@ test("global lane creation survives a stale load, then moving updates All issues
     await held;
     await route.fulfill({ response: stale });
   });
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await started;
   let id = "";
   try {
@@ -183,7 +183,7 @@ test("add-to-board uses a tri-state matching checkbox and shift ranges without c
   for (const body of ["Apple one", "Banana two", "Banana three", "Banana four", "Cherry five"]) {
     issues.push((await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body } })).json()).issue);
   }
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "Add issues to board" });
   const header = modal.getByRole("checkbox", { name: "Select all matching issues", exact: true });

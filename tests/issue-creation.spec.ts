@@ -28,7 +28,7 @@ async function setup(page: Page, baseURL: string, board = false) {
   });
   expect(response.ok()).toBeTruthy();
   const { project } = await response.json();
-  const path = `/projects/${project.slug}`;
+  const path = `/w/default/projects/${project.slug}`;
   await page.goto(path + (board ? "/board" : ""));
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   await expect(editor(page)).toBeFocused();
@@ -42,7 +42,7 @@ async function setup(page: Page, baseURL: string, board = false) {
 async function expectCreated(page: Page) {
   await expect(editor(page)).toBeEmpty();
   const href = await modal(page).getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue } = await (await page.request.get(`/api${href}`)).json();
+  const { issue } = await (await page.request.get(`/api/issues/by-number/${href!.split("/").at(-1)}`)).json();
   await expect(status(page)).toContainText(`Issue !${issue.number} created.`);
   return issue;
 }

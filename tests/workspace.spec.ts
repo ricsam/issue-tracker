@@ -11,7 +11,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   const { setupRequired } = await (
     await page.request.get("/api/auth/status")
   ).json();
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   if (setupRequired) {
     await expect(
       page.getByRole("heading", { name: "Make this workspace yours" }),
@@ -89,7 +89,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(modal.getByRole("status")).toContainText(/Issue !\d+ created\./);
   await expect(page).toHaveURL(projectUrl);
   const createdHref = await modal.getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue: createdIssue } = await (await page.request.get(`/api${createdHref}`)).json();
+  const { issue: createdIssue } = await (await page.request.get(`/api/issues/by-number/${createdHref!.split("/").at(-1)}`)).json();
   await expect(editor).toBeEmpty();
   await expect(editor).toBeFocused();
   await expect(modal.getByRole("list", { name: "Labels", exact: true })).toHaveCount(0);
@@ -260,7 +260,7 @@ test("protected workspace, projects, rich issues, uploads, board, comments and a
   await expect(
     page.getByRole("link", { name: "Administration", exact: true }),
   ).toHaveCount(0);
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await page
     .getByRole("button", { name: "Create project", exact: true })
     .click();

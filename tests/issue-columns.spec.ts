@@ -22,7 +22,7 @@ for (const width of [320, 390, 1440]) {
     const headers = { Origin: baseURL! };
     const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Columns ${randomUUID()}` } })).json();
     const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Column test #bug" } })).json();
-    await page.goto(`/projects/${project.slug}`);
+    await page.goto(`/w/default/projects/${project.slug}`);
     const table = page.getByRole("table");
     const headings = table.locator(".column-sort");
     const initial = ["Number", "Issue", "State", "Board lane", "Tags", "Tagged users", "Creator", "Created"];
@@ -87,18 +87,18 @@ for (const width of [320, 390, 1440]) {
     expect(await table.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThanOrEqual(Math.max(322, width - 40));
     await table.locator(".issue-link").click();
     if (width < 1024) {
-      await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}$`));
+      await expect(page).toHaveURL(new RegExp(`/issues/${issue.number}$`));
       await page.goBack();
     } else await page.getByRole("button", { name: "Close issue details", exact: true }).click();
     await expect(headings).toHaveText(["Issue"]);
-    await page.goto("/issues");
+    await page.goto("/w/default/issues");
     await expect(headings).toHaveText([...initial.slice(0, 3), "Project", ...initial.slice(3)]);
     await configure.click();
     await dialog.getByLabel("Show Project column", { exact: true }).uncheck();
     await dialog.getByRole("button", { name: "Save columns", exact: true }).click();
     await page.reload();
     await expect(headings).toHaveText(initial);
-    await page.goto(`/projects/${project.slug}`);
+    await page.goto(`/w/default/projects/${project.slug}`);
     await expect(headings).toHaveText(["Issue"]);
     await configure.click();
     await dialog.getByRole("button", { name: "Reset to defaults", exact: true }).click();
@@ -112,7 +112,7 @@ for (const width of [320, 390, 1440]) {
 test("invalid or inaccessible storage does not break the table or configuration", async ({ page, baseURL }) => {
   const headers = { Origin: baseURL! };
   const { project } = await (await page.request.post("/api/projects", { headers, data: { name: `Storage ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.evaluate((id) => localStorage.setItem(`threadline:issue-columns:v1:${encodeURIComponent(id)}:project`, "not-json"), userId);
   await page.reload();
   await expect(page.getByRole("table").locator(".column-sort")).toHaveCount(8);

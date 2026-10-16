@@ -8,7 +8,7 @@ import type { JSX } from "react";
 import type { TextMatchTransformer } from "@lexical/markdown";
 
 export function safeImageUrl(url: string) {
-  if (!/^\/api\/uploads\/[a-zA-Z0-9-]+\/[^/?#]+$/.test(url)) return "";
+  if (!/^\/api\/uploads\/[a-zA-Z0-9-]+\/[^/?#]+(?:\?workspace=[a-z0-9-]+)?$/.test(url)) return "";
   try {
     const parsed = new URL(url, "https://workspace.invalid");
     return parsed.pathname.startsWith("/api/uploads/") &&

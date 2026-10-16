@@ -1,3 +1,5 @@
+import { useContext } from "react";
+import { WorkspaceContext } from "../lib/workspace";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import { mentionUserId } from "../../shared/mentions";
 import type { User } from "../../shared/types";
@@ -10,10 +12,11 @@ import "./editor.css";
 
 /** Raw HTML is deliberately not enabled; remote images never track workspace readers. */
 export function Markdown({ children, mentionUsers = [] }: { children: string; mentionUsers?: User[] }) {
+  const workspace = useContext(WorkspaceContext)?.workspace;
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkHashtags, remarkIssueReferences]}
+        remarkPlugins={[remarkGfm, remarkHashtags, [remarkIssueReferences, { workspaceSlug: workspace?.slug }]]}
         urlTransform={(url) => mentionUserId(url) ? url : defaultUrlTransform(url)}
         components={{
           a: ({ children, href }) => {

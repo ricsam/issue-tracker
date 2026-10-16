@@ -1,14 +1,16 @@
 import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Check, Copy, Share2 } from "lucide-react";
+import { issuePath } from "../lib/workspace";
+import type { Issue } from "../../shared/types";
 import { Button } from "./ui/primitives";
 
 /** Share a canonical issue URL, never the collection's current route or a draft. */
-export function ShareIssue({ id }: { id: string }) {
+export function ShareIssue({ issue }: { issue: Issue }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const url = new URL(`/issues/${id}`, window.location.origin).href;
+  const url = new URL(issuePath(issue), window.location.origin).href;
   async function copy() {
     setBusy(true);
     setError("");

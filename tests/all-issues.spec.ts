@@ -22,7 +22,7 @@ async function createDraft(page: Page, body: string) {
   const saved = await response;
   expect(saved.ok()).toBeTruthy();
   const { issue } = await saved.json();
-  const href = `/issues/${issue.id}`;
+  const href = `/w/default/issues/${issue.number}`;
   await expect(dialog(page).getByRole("link", { name: "View issue" })).toHaveAttribute("href", href);
   await expect(dialog(page).getByRole("textbox", { name: "Issue", exact: true })).toBeEmpty();
   return href;
@@ -40,17 +40,17 @@ async function project(page: Page, origin: string, name: string) {
 
 test("sidebar creation works without a project, switches projects, and unlinked details remain editable", async ({ page, baseURL }) => {
   const marker = `Global ${randomUUID()}`;
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await page.getByRole("button", { name: "Create issue (Alt+N)", exact: true }).click();
   await expect(dialog(page).getByRole("combobox", { name: "Project", exact: true })).toHaveValue("");
   await expect(dialog(page).getByRole("textbox", { name: "Issue", exact: true })).toBeFocused();
   const href = await createDraft(page, `${marker} unlinked #global`);
-  const result = await (await page.request.get(`/api${href}`)).json();
+  const result = await (await page.request.get(`/api/issues/by-number/${href!.split("/").at(-1)}`)).json();
   expect(result.issue.projectId).toBeNull();
   await dialog(page).getByRole("link", { name: "View issue" }).click();
   await expect(page).toHaveURL(href);
   await expect(dialog(page)).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "All issues" })).toHaveAttribute("href", "/issues");
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "All issues" })).toHaveAttribute("href", "/w/default/issues");
   const editor = page.getByRole("textbox", { name: "Issue", exact: true });
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill(`${marker} edited #global`);
@@ -64,18 +64,18 @@ test("sidebar creation works without a project, switches projects, and unlinked 
   await expect(page.getByText("Unlinked discussion", { exact: true })).toBeVisible();
 
   const p = await project(page, baseURL!, `${marker} project`);
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await expect(page.getByRole("heading", { name: "All issues", exact: true })).toBeVisible();
   await page.keyboard.press("Alt+n");
   await expect(dialog(page).getByRole("combobox", { name: "Project", exact: true })).toHaveValue("");
   await dialog(page).getByRole("combobox", { name: "Project", exact: true }).selectOption(p.id);
   const linked = await createDraft(page, `${marker} linked`);
-  expect((await (await page.request.get(`/api${linked}`)).json()).issue.projectId).toBe(p.id);
+  expect((await (await page.request.get(`/api/issues/by-number/${linked!.split("/").at(-1)}`)).json()).issue.projectId).toBe(p.id);
   // The selection persists for consecutive drafts, but can be cleared.
   await expect(dialog(page).getByRole("combobox", { name: "Project", exact: true })).toHaveValue(p.id);
   await dialog(page).getByRole("combobox", { name: "Project", exact: true }).selectOption("");
   const second = await createDraft(page, `${marker} second unlinked`);
-  expect((await (await page.request.get(`/api${second}`)).json()).issue.projectId).toBeNull();
+  expect((await (await page.request.get(`/api/issues/by-number/${second!.split("/").at(-1)}`)).json()).issue.projectId).toBeNull();
   await dialog(page).getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await expect(rows(page)).toHaveCount(3);
@@ -93,7 +93,7 @@ test("project creation can become unlinked without leaking into the project list
   const marker = `Local ${randomUUID()}`;
   const p = await project(page, baseURL!, marker);
   const { issue } = await (await page.request.post(`/api/projects/${p.slug}/issues`, { headers: { Origin: baseURL! }, data: { body: `${marker} original` } })).json();
-  await page.goto(`/projects/${p.slug}`);
+  await page.goto(`/w/default/projects/${p.slug}`);
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   await sidebar(page).locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await sidebar(page).getByRole("textbox", { name: "Issue", exact: true }).fill("Unsaved local draft");
@@ -107,7 +107,7 @@ test("project creation can become unlinked without leaking into the project list
   await dialog(page).getByRole("button", { name: "Done", exact: true }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(sidebar(page).getByRole("textbox", { name: "Issue", exact: true })).toContainText("Unsaved local draft");
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await expect(rows(page)).toHaveCount(2);
   await page.locator(`a.issue-link[href="${href}"]`).click();
@@ -126,7 +126,7 @@ test("all issues combines project filtering and bulk actions while archived rows
     seeded.push((await response.json()).issue);
   }
   expect((await page.request.patch(`/api/projects/${archived.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await page.getByRole("textbox", { name: "Search issues" }).fill(marker);
   await expect(rows(page)).toHaveCount(3);
   await expect(rows(page).filter({ hasText: `${marker} archived` }).getByRole("checkbox")).toBeDisabled();
@@ -183,7 +183,7 @@ test("creation during a delayed list load survives a stale response without dupl
   });
   let href = "";
   try {
-    await page.goto("/issues");
+    await page.goto("/w/default/issues");
     await fetched;
     await page.keyboard.press("Alt+n");
     href = await createDraft(page, marker);
@@ -199,7 +199,7 @@ test("creation during a delayed list load survives a stale response without dupl
 
 test("mobile sidebar creation and All issues preserve navigation and keep the table horizontally scrollable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("button", { name: "Create issue (Alt+N)", exact: true }).click();
   const marker = `Mobile ${randomUUID()}`;

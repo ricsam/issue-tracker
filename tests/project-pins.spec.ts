@@ -39,11 +39,11 @@ for (const width of [1440, 390]) {
   test(`pins persist and provide quick access at ${width}px`, async ({ page, baseURL }) => {
     const { project } = await seed(page, baseURL!);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/projects");
+    await page.goto("/w/default/projects");
     const card = page.locator(".project-card-wrapper").filter({ has: page.getByRole("heading", { name: project.name, exact: true }) });
     await card.getByRole("button", { name: `Pin ${project.name}`, exact: true }).click();
     // A card's pin is independent of its navigation link.
-    await expect(page).toHaveURL("/projects");
+    await expect(page).toHaveURL("/w/default/projects");
     await expect(card.getByRole("button", { name: `Unpin ${project.name}`, exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.reload();
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
@@ -51,7 +51,7 @@ for (const width of [1440, 390]) {
     await expect(pins.getByRole("link", { name: project.name, exact: true })).toBeVisible();
     await expect(otherRegion(page).getByRole("link", { name: project.name, exact: true })).toHaveCount(0);
     await pins.getByRole("link", { name: project.name, exact: true }).click();
-    await expect(page).toHaveURL(`/projects/${project.slug}`);
+    await expect(page).toHaveURL(`/w/default/projects/${project.slug}`);
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
     // The sidebar uses row menus, not pin buttons or drag instructions.
     const navigation = page.locator("#workspace-navigation");
@@ -74,17 +74,17 @@ test("pins are personal and archived pins return on restore", async ({ page, bro
   try {
     expect((await other.request.post("/api/auth/login", { headers, data: { email, password: "another-browser-test-password" } })).ok()).toBeTruthy();
     const otherPage = await other.newPage();
-    await otherPage.goto("/projects");
+    await otherPage.goto("/w/default/projects");
     // Without pins of their own, the pinned section is hidden for this member.
     await expect(otherRegion(otherPage).getByRole("link", { name: project.name, exact: true })).toBeVisible();
     await expect(pinnedRegion(otherPage)).toHaveCount(0);
     expect((await (await other.request.get("/api/me/pinned-projects")).json()).projectIds).not.toContain(project.id);
   } finally { await other.close(); }
   expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: true } })).ok()).toBeTruthy();
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   const pins = pinnedRegion(page);
   await expect(pins.getByRole("link", { name: project.name, exact: true })).toHaveCount(0);
-  await page.goto("/projects?view=archived");
+  await page.goto("/w/default/projects?view=archived");
   const card = page.locator(".project-card-wrapper").filter({ has: page.getByRole("heading", { name: project.name, exact: true }) });
   await expect(card.getByRole("button", { name: `Unpin ${project.name}`, exact: true })).toHaveAttribute("aria-pressed", "true");
   expect((await page.request.patch(`/api/projects/${project.slug}`, { headers, data: { archived: false } })).ok()).toBeTruthy();
@@ -95,7 +95,7 @@ test("pins are personal and archived pins return on restore", async ({ page, bro
 test("failed pin writes preserve state and initial load errors are retryable", async ({ page, baseURL }) => {
   const { project } = await seed(page, baseURL!);
   await page.route("**/api/me/pinned-projects", (route) => route.fulfill({ status: 503, json: { error: "Try later" } }));
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   const nav = pinnedRegion(page);
   await expect(nav.getByRole("alert")).toContainText("Could not load pinned projects");
   await page.unroute("**/api/me/pinned-projects");
@@ -116,7 +116,7 @@ test("sidebar drag pins, inserts, reorders both ways, persists and unpins", asyn
   const a = (await seed(page, baseURL!, "Alpha")).project;
   const b = (await seed(page, baseURL!, "Beta")).project;
   const c = (await seed(page, baseURL!, "Gamma")).project;
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   const pins = pinnedRegion(page);
   const others = otherRegion(page);
   await expect(pins).toHaveCount(0);
@@ -131,7 +131,7 @@ test("sidebar drag pins, inserts, reorders both ways, persists and unpins", asyn
   const lastBox = await row(pins, b).boundingBox();
   await row(pins, a).dragTo(row(pins, b), { targetPosition: { x: 70, y: lastBox!.height - 5 } });
   await expectOrder(pins, [c, b, a]);
-  await expect(page).toHaveURL("/projects");
+  await expect(page).toHaveURL("/w/default/projects");
   await page.reload();
   await expectOrder(pins, [c, b, a]);
   await row(pins, c).dragTo(others.locator(".nav-label"));
@@ -145,7 +145,7 @@ test("failed reorders leave the prior order and unrelated drops do not pin", asy
   const b = (await seed(page, baseURL!, "Beta")).project;
   await pin(page, baseURL!, a);
   await pin(page, baseURL!, b);
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   const pins = pinnedRegion(page);
   await expectOrder(pins, [a, b]);
   const externalDrag = await page.evaluateHandle(() => { const data = new DataTransfer(); data.setData("text/plain", "not-a-project"); return data; });
@@ -167,7 +167,7 @@ for (const width of [1440, 390]) {
     await pin(page, baseURL!, a);
     await pin(page, baseURL!, b);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/projects");
+    await page.goto("/w/default/projects");
     if (width < 768) await page.getByRole("button", { name: "Open navigation" }).click();
     const pins = pinnedRegion(page);
     await expectOrder(pins, [a, b]);
@@ -214,7 +214,7 @@ for (const width of [1440, 390]) {
 test("sidebar menus rename and archive projects and keep the open project in sync", async ({ page, baseURL }) => {
   const { project } = await seed(page, baseURL!, "Menu");
   const renamed = `Renamed ${randomUUID().slice(0, 8)}`;
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   const others = otherRegion(page);
   await actions(others, project.name).click();
   const menu = actionMenu(page, project.name);
@@ -257,7 +257,7 @@ test("unpinned sidebar follows latest issue update, including an in-app edit, wh
   await page.request.post(`/api/projects/${b.slug}/issues`, { headers, data: { body: "New project activity" } });
   const c = (await seed(page, baseURL!, "Pinned")).project;
   await pin(page, baseURL!, c);
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const others = otherRegion(page);
   await expect(others.getByRole("link").first()).toHaveText(b.name);
   await page.locator(".detail-form").getByRole("button", { name: "Markdown", exact: true }).click();
@@ -271,7 +271,7 @@ test("unpinned sidebar follows latest issue update, including an in-app edit, wh
 
 test("project pages keep details fresher than the loaded sidebar", async ({ page, baseURL }) => {
   const { project, headers } = await seed(page, baseURL!, "Stale");
-  await page.goto("/projects");
+  await page.goto("/w/default/projects");
   const others = otherRegion(page);
   await expect(others.getByRole("link", { name: project.name, exact: true })).toBeVisible();
   // Another member renames and archives it after this workspace loaded.
@@ -292,9 +292,9 @@ test("projects is the root breadcrumb and redundant sidebar copy is removed", as
   await expect(page.getByText("Team workspace", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Let’s make progress", { exact: true })).toHaveCount(0);
   const { issue } = await (await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Breadcrumb issue" } })).json();
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await expect(breadcrumb).not.toContainText("Workspace");
-  await expect(breadcrumb.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("href", "/projects");
-  await expect(breadcrumb.getByRole("link", { name: project.name, exact: true })).toHaveAttribute("href", `/projects/${project.slug}`);
+  await expect(breadcrumb.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("href", "/w/default/projects");
+  await expect(breadcrumb.getByRole("link", { name: project.name, exact: true })).toHaveAttribute("href", `/w/default/projects/${project.slug}`);
   await expect(breadcrumb.locator('[aria-current="page"]')).toHaveText(`Issue !${issue.number}`);
 });

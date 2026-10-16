@@ -2,6 +2,22 @@
 
 Issue Tracker is a single-instance application backed by SQLite. Its database, uploads, and encrypted runtime settings are all stored under `/data` and must survive pod replacement.
 
+## 0.28.0 workspace upgrade — read before starting
+
+Chart/application 0.28.0 introduces migration 22. An installation at migration 19 upgrades through sub-issues (20), close reasons (21), and workspaces (22). Existing content is preserved in one initial workspace, with its internal ID remaining `default`. Choose its display name and URL slug **before the first upgraded startup**:
+
+```yaml
+migration:
+  workspaceName: "richie's workspace"
+  workspaceSlug: richies-workspace
+```
+
+Defaults are `Default`/`default`. These values become `MIGRATION_WORKSPACE_NAME`/`MIGRATION_WORKSPACE_SLUG` and apply only when migration 22 first runs; later restarts/settings changes do not rename or move existing data. Do not rerun migrations to change a slug.
+
+Follow the [packaged chart migration guide](../charts/issue-tracker/README.md) and [backup/upgrade procedure](deployment/operations.mdx): stop writes, take a consistent full `DATA_DIR` and matching settings-Secret backup, preserve the exact PVC/PV, UID/GID, Secret, ingress and BASE_URL, then select a verified published image digest after CI. **No `--atomic`, automatic Helm rollback, or older-image-only rollback across migrations.** Recovery requires restoring the matching pre-upgrade data/key backup before starting its older image.
+
+UI URLs intentionally move to `/w/SLUG/...`; `/new` offers a workspace selector. Internal issue IDs stay stable while display numbers are scoped to a workspace. Send `X-Workspace-Slug` on data calls and resolve display numbers with `/api/issues/by-number/NUMBER`. Legacy private-project restrictions remain until explicit `convertLegacyAccess:true`; unchanged saves preserve them. Pending invitations to the initial workspace precede automatic compatibility onboarding. See [workspaces](guides/workspaces.mdx).
+
 ## Add the public Helm repository
 
 ```sh
@@ -10,7 +26,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.27.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.28.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 
@@ -20,7 +36,7 @@ Production assets must be built before the server image is assembled. The reposi
 docker build -t issue-tracker:local .
 ```
 
-The publication workflow targets `ghcr.io/ricsam/issue-tracker` on `main` and version tags, after all verification passes. Do not assume an example tag exists: choose a tag you have built and pushed or verified in the package registry. Prefer an immutable version or `sha-...` tag over `main`.
+The publication workflow targets `ghcr.io/ricsam/issue-tracker` on `main` and version tags, after all verification passes. Do not assume an example tag exists: choose a tag you have built and pushed or verified in the package registry. For production, pin the verified published digest after CI, using `image.tag: sha-<commit>@sha256:<digest>` rather than mutable `main`. Do not assume the chart's `appVersion` selects the application image.
 
 ## 2. Create the namespace and encryption-key Secret
 

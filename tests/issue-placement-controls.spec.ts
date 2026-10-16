@@ -31,7 +31,7 @@ async function selectLane(page: Page, lane: string) {
 
 test("custom lane, removal and project move are immediate and preserve draft body", async ({ page, baseURL }) => {
   const { project, issue, custom } = await seed(page, baseURL!);
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   const editor = page.locator(".detail-form").getByRole("textbox", { name: "Issue", exact: true });
   await page.locator(".detail-form").getByRole("button", { name: "Write", exact: true }).click();
   await editor.fill("Unsaved placement draft");
@@ -61,7 +61,7 @@ test("board loading can retry and closed off-board issues cannot be added", asyn
   const { project, issue } = await seed(page, baseURL!);
   const path = `**/api/projects/${project.slug}/board`;
   await page.route(path, (route) => route.fulfill({ status: 503, json: { error: "Board temporarily unavailable" } }));
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await page.getByRole("button", { name: "Change board lane", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Board temporarily unavailable");
   await page.unroute(path);

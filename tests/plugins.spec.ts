@@ -59,7 +59,7 @@ for (const embedded of [false, true]) {
       window.open = (...args) => { (window as unknown as { opened: unknown[] }).opened.push(args); return null; };
     });
     await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.example.test/base", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.example.test", team: "demo", defaultShare: embedded ? "project" : "none", projects: [{ projectId: project.id, remote: "git@github.com:acme/repo.git", defaultBranch: "develop" }] } }] } }));
-    await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
+    await page.goto(embedded ? `/w/default/projects/${project.slug}` : `/w/default/issues/${issue.number}`);
     if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
     await page.locator(".detail-form").getByRole("button", { name: "Markdown", exact: true }).click();
     await page.locator(".detail-form").getByLabel("Markdown source").fill("Unsaved body must not launch");
@@ -72,7 +72,7 @@ for (const embedded of [false, true]) {
     expect(target).toBe("_blank"); expect(features).toBe("noopener,noreferrer");
     expect(url).toMatch(/^https:\/\/r5d.example.test\/launch#[A-Za-z0-9_-]+$/);
     const payload = JSON.parse(inflateSync(Buffer.from(new URL(url!).hash.slice(1), "base64url")).toString());
-    expect(payload).toEqual({ v: 1, remote: "git@github.com:acme/repo.git", branch: { mode: "new", name: `issue/${issue.number}-fix-the-launch-integration`.slice(0, 40), from: "develop" }, share: { team: "demo", scope: "branch" }, workItems: [{ source: "threadline", kind: "issue", id: `tracker.example.test#${issue.number}`, url: `https://tracker.example.test/base/issues/${issue.number}`, title: issue.title, snapshot: `${issue.body}\n\n## Comment by Alex Morgan (${comment.createdAt})\n\n${comment.body}` }] });
+    expect(payload).toEqual({ v: 1, remote: "git@github.com:acme/repo.git", branch: { mode: "new", name: `issue/default/${issue.number}-fix-the-launch-integration`.slice(0, 40), from: "develop" }, share: { team: "demo", scope: "branch" }, workItems: [{ source: "threadline", kind: "issue", id: `tracker.example.test#default#${issue.number}`, url: `https://tracker.example.test/base/w/default/issues/${issue.number}`, title: issue.title, snapshot: `${issue.body}\n\n## Comment by Alex Morgan (${comment.createdAt})\n\n${comment.body}` }] });
   });
 }
 
@@ -80,8 +80,8 @@ test("unmapped launch still proposes team branch sharing and enforces payload li
   const { issue } = await seed(page, baseURL!);
   await page.addInitScript(() => { window.open = (url) => { (window as unknown as { launchUrl: string }).launchUrl = String(url); return null; }; });
   await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.dev", team: "demo", projects: [] } }] } }));
-  await page.route(`**/api/issues/${issue.id}`, (route) => route.fulfill({ json: { issue: { ...issue, title: "Long title ".repeat(100), body: "x".repeat(120000) }, comments: [] } }));
-  await page.goto(`/issues/${issue.id}`);
+  await page.route(`**/api/issues/by-number/${issue.number}`, (route) => route.fulfill({ json: { issue: { ...issue, title: "Long title ".repeat(100), body: "x".repeat(120000) }, comments: [] } }));
+  await page.goto(`/w/default/issues/${issue.number}`);
   await page.getByRole("button", { name: "Implement with r5d" }).click();
   const url = await page.evaluate(() => (window as unknown as { launchUrl: string }).launchUrl);
   const payload = JSON.parse(inflateSync(Buffer.from(new URL(url).hash.slice(1), "base64url")).toString());
@@ -99,9 +99,9 @@ test("external badges appear on cards, table and details, refresh without losing
     { pluginId: "r5d", externalId: "unsafe", title: "Unsafe", url: "javascript:alert(1)", status: "bad", tone: "danger" },
   ];
   await page.route(`**/api/issues/${issue.id}/external-links`, (route) => route.fulfill({ json: { links } }));
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(page.locator(".board-card .external-link")).toHaveText("running");
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await expect(page.locator(".issue-table .external-link")).toHaveText("running");
   await page.locator(`a[data-issue-id="${issue.id}"]`).click();
   const detail = page.locator(".detail-container");
@@ -118,7 +118,7 @@ test("external badges appear on cards, table and details, refresh without losing
 test("unsafe integration launch URLs are refused", async ({ page, baseURL }) => {
   const { issue } = await seed(page, baseURL!);
   await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "javascript:alert(1)", team: "demo", projects: [] } }] } }));
-  await page.goto(`/issues/${issue.id}`);
+  await page.goto(`/w/default/issues/${issue.number}`);
   await expect(page.getByRole("button", { name: "Implement with r5d" })).toBeDisabled();
   await expect(page.getByText("The integration requires valid HTTP(S) base URLs.")).toBeVisible();
 });

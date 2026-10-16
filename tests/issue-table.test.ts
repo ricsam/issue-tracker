@@ -44,6 +44,7 @@ const users: User[] = [
   { id: "b", name: "Bea", email: "bea@example.test", role: "member", createdAt: "2026-01-01" },
 ];
 const issue = (number: number, patch: Partial<Issue>): Issue => ({
+  workspaceId: "default", workspaceSlug: "default", access: "full",
   id: String(number), number, projectId: "p", title: `Issue ${number}`, body: "Body", labels: [], taggedUserIds: [], authorId: "a", state: "open", closedAt: null, closedById: null, createdAt: "2026-01-01T12:00:00Z", updatedAt: "2026-01-01T12:00:00Z", ...patch,
 });
 const issues = [
@@ -84,8 +85,8 @@ test("board lane display, filter and sort reflect membership including hidden cu
 });
 
 const projects: Project[] = [
-  { id: "p", name: "Alpha", slug: "alpha", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },
-  { id: "q", name: "Zebra", slug: "zebra", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: "2026-01-02", archivedById: "a", issueCount: 0, openCount: 0 },
+  { id: "p", name: "Alpha", slug: "alpha", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },
+  { id: "q", name: "Zebra", slug: "zebra", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: "2026-01-02", archivedById: "a", issueCount: 0, openCount: 0 },
 ];
 
 test("project filters distinguish unlinked and archived-project issues and combine with other filters", () => {

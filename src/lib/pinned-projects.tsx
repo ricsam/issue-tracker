@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useWorkspace } from "./workspace";
 import { api, message } from "./api";
 import { useNotification } from "../components/ui/snackbar";
 
@@ -17,6 +18,7 @@ const PinnedProjectsContext = createContext<PinnedProjects | null>(null);
 
 /** Mounted per signed-in user, independent of shared project refreshes. */
 export function PinnedProjectsProvider({ children }: { children: ReactNode }) {
+  const { workspace } = useWorkspace();
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -25,6 +27,7 @@ export function PinnedProjectsProvider({ children }: { children: ReactNode }) {
   const pending = useRef(false);
   const notify = useNotification();
   useEffect(() => {
+    if (!workspace) { setProjectIds([]); setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -33,7 +36,7 @@ export function PinnedProjectsProvider({ children }: { children: ReactNode }) {
       .catch((cause) => { if (!controller.signal.aborted) setError(message(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, workspace?.slug]);
   const update = useCallback(async (projectId: string, removing: boolean, beforeProjectId?: string | null) => {
     if (pending.current || loading || error) return false;
     pending.current = true;

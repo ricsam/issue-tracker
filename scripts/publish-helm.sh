@@ -48,7 +48,7 @@ else
   gh release create "$tag" "$HELM_REPO_DIR/candidate/$package" \
     --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
     --title "Helm chart $version" \
-    --notes "Threadline Helm chart $version. Repository: $HELM_REPO_URL . Install with an explicit published application image tag and an existing settings-key Secret; claim initial admin setup privately before enabling ingress."
+    --notes "Threadline Helm chart $version. Repository: $HELM_REPO_URL . Migration and rollback instructions (also included in the chart README): https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/charts/issue-tracker/README.md . Back up data and the settings-key Secret before upgrade; do not roll back the image alone after a database migration. Install with an explicit published application image tag and an existing settings-key Secret; claim initial admin setup privately before enabling ingress."
   mv "$HELM_REPO_DIR/candidate/$package" "$HELM_REPO_DIR/$package"
 fi
 rm -r "$HELM_REPO_DIR/candidate"

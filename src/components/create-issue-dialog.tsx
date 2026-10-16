@@ -4,7 +4,7 @@ import type { BoardSettings, Issue, Project } from "../../shared/types";
 import { orderedLanes } from "../../shared/board";
 import { api, message } from "../lib/api";
 import { validateIssueBody } from "../lib/validation";
-import { useWorkspace } from "../lib/workspace";
+import { useWorkspace, WorkspaceSelector, issuePath, workspacePath, canCreateInWorkspace, useWorkspaceDraftGuard } from "../lib/workspace";
 import { useProjectTags } from "../lib/issue-tags";
 import { CREATE_ISSUE_KEYS, createIssueTooltip, useCreateIssueShortcut, useIssueSaveShortcut } from "../lib/issue-shortcuts";
 import { creationLane, creationProject, readCreationPreferences, rememberCreationSelection } from "../lib/issue-creation-preferences";
@@ -36,11 +36,16 @@ export function CreateIssueDialog({
   canViewIssue: () => boolean;
   onViewIssue?: (issue: Issue, source: HTMLAnchorElement) => void;
 }) {
-  const { user, users, projects } = useWorkspace();
+  const { user, users, projects: allProjects, workspace } = useWorkspace();
+  const projects = allProjects.filter(candidate => candidate.access === "full");
+  const canCreateUnassigned = canCreateInWorkspace(workspace);
+  // Preserve the existing Default workspace preferences; new workspaces use independent keys.
+  const preferenceKey = workspace?.id === "default" ? user.id : `${user.id}:${workspace?.id}`;
+  const canCreate = canCreateUnassigned || projects.some(candidate => !candidate.archivedAt);
   const notify = useNotification();
-  const [projectId, setProjectId] = useState(() => parentIssue ? parentIssue.projectId ?? "" : creationProject(projects, readCreationPreferences(user.id).projectId, project));
+  const [projectId, setProjectId] = useState(() => parentIssue ? parentIssue.projectId ?? "" : creationProject(projects, readCreationPreferences(preferenceKey).projectId, project) || (canCreateUnassigned ? "" : projects.find(p => !p.archivedAt)?.id ?? ""));
   const selectedProject = projects.find((candidate) => candidate.id === projectId && !candidate.archivedAt);
-  const [requestedLane, setLane] = useState(() => readCreationPreferences(user.id).lanes[projectId] ?? "");
+  const [requestedLane, setLane] = useState(() => readCreationPreferences(preferenceKey).lanes[projectId] ?? "");
   const [boardResult, setBoardResult] = useState<{ projectId: string; board?: BoardSettings; error?: string } | null>(null);
   const [boardRetry, setBoardRetry] = useState(0);
   const board = boardResult?.projectId === projectId ? boardResult.board : undefined;
@@ -68,6 +73,7 @@ export function CreateIssueDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [body, setBody] = useState("");
+  useWorkspaceDraftGuard(!!body.trim() || busy);
   const [created, setCreated] = useState<Issue | null>(null);
   const [showNotice, setShowNotice] = useState(false);
   const dismissNotice = useCallback(() => setShowNotice(false), []);
@@ -77,7 +83,7 @@ export function CreateIssueDialog({
       // that route has changed, use the link normally rather than stale setters.
       const originPath = window.location.pathname;
       const dismiss = notify(`Issue !${created.number} created.`, "success", undefined,
-        <div className="issue-created-actions"><Link to={`/issues/${created.id}`} onClick={(event) => {
+        <div className="issue-created-actions"><Link to={issuePath(created)} onClick={(event) => {
           if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
             if (window.location.pathname === originPath) {
               if (!canViewIssue()) { event.preventDefault(); return; }
@@ -101,7 +107,7 @@ export function CreateIssueDialog({
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || awaitingRememberedLane) return;
+    if (submitting.current || awaitingRememberedLane || !selectedProject && !canCreateUnassigned) return;
     submitting.current = true;
     setBusy(true);
     setError("");
@@ -169,24 +175,26 @@ export function CreateIssueDialog({
       {standalone && <header className="standalone-create-header">
         <h1>Create issue</h1>
         <nav aria-label="Composer">
-          <a href="/projects" target="_blank" rel="noopener noreferrer">Open workspace</a>
+          <a href={workspacePath(workspace!.slug)} target="_blank" rel="noopener noreferrer">Open workspace</a>
           <Button type="button" variant="ghost" disabled={busy} onClick={() => {
             if (!body.trim() || window.confirm("Discard the new issue draft and sign out?")) onSignOut?.();
           }}>Sign out</Button>
         </nav>
       </header>}
+      {standalone && <WorkspaceSelector disabled={busy} />}
+      {!canCreateUnassigned && !projects.some(p => !p.archivedAt) && <p className="read-only-note">You have read-only access. Choose a workspace where you can create issues.</p>}
       <form ref={form} onSubmit={create} className="create-issue-form" aria-busy={busy}>
         <div ref={fields} className="create-issue-fields">
-          <fieldset disabled={busy} inert={busy} className="form-stack">
+          <fieldset disabled={busy || !canCreate} inert={busy || !canCreate} className="form-stack">
             <label>Project
               <select aria-label="Project" value={projectId} onChange={(event) => {
                 const next = event.target.value;
                 setProjectId(next);
-                setLane(readCreationPreferences(user.id).lanes[next] ?? "");
-                if (!project && !parentIssue) rememberCreationSelection(user.id, { projectId: next });
+                setLane(readCreationPreferences(preferenceKey).lanes[next] ?? "");
+                if (!project && !parentIssue) rememberCreationSelection(preferenceKey, { projectId: next });
                 setCreatedTags([]);
               }}>
-                <option value="">No project</option>
+                {canCreateUnassigned && <option value="">No project</option>}
                 {projects.filter((candidate) => !candidate.archivedAt).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
               </select>
             </label>
@@ -203,7 +211,7 @@ export function CreateIssueDialog({
                 <select aria-label="Board lane" value={lane} disabled={!board}
                   onChange={(event) => {
                     setLane(event.target.value);
-                    rememberCreationSelection(user.id, { lane: { projectId, value: event.target.value } });
+                    rememberCreationSelection(preferenceKey, { lane: { projectId, value: event.target.value } });
                   }}>
                   <option value="">Not on board</option>
                   {board && orderedLanes(board.lanes, board.customLanes, board.laneLabels).map((item) => (
@@ -217,7 +225,7 @@ export function CreateIssueDialog({
                 <Button type="button" variant="ghost" onClick={() => setBoardRetry((value) => value + 1)}>Retry board lanes</Button>
                 {awaitingRememberedLane && <Button type="button" variant="ghost" onClick={() => {
                   setLane("");
-                  rememberCreationSelection(user.id, { lane: { projectId, value: "" } });
+                  rememberCreationSelection(preferenceKey, { lane: { projectId, value: "" } });
                 }}>Create without board placement</Button>}
               </>}
             </div>}
@@ -241,8 +249,8 @@ export function CreateIssueDialog({
         <ToastViewport inline message={created && showNotice ? `Issue !${created.number} created. Ready for another.` : ""}
           onDismiss={dismissNotice} paused={busy}>
           {created && <div className="issue-created-actions">{standalone
-            ? <a href={`/issues/${created.id}`} target="_blank" rel="noopener noreferrer">View issue</a>
-            : <Link to={`/issues/${created.id}`} onClick={viewIssue}
+            ? <a href={issuePath(created)} target="_blank" rel="noopener noreferrer">View issue</a>
+            : <Link to={issuePath(created)} onClick={viewIssue}
               aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined}>View issue</Link>}</div>}
         </ToastViewport>
         <div className="create-issue-footer">
@@ -256,7 +264,7 @@ export function CreateIssueDialog({
             >
               {created ? "Done" : "Cancel"}
             </Button>}
-            <Button disabled={busy || awaitingRememberedLane || !body.trim()} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
+            <Button disabled={busy || awaitingRememberedLane || !body.trim() || !selectedProject && !canCreateUnassigned} title={createIssueTooltip()} aria-keyshortcuts={CREATE_ISSUE_KEYS}>
               {busy ? "Creating…" : draft ? "Save draft" : parentIssue ? "Create sub-issue" : "Create issue"}
             </Button>
           </div>

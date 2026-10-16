@@ -15,9 +15,15 @@ Threadline reads its server configuration from environment variables. OIDC setti
 | `SETTINGS_ENCRYPTION_KEY` | Generated development key when empty | Required Secret | Canonical base64 representing exactly 32 bytes |
 | `HOST` | `0.0.0.0` | `0.0.0.0` | Listen address; use loopback for local-only development |
 | `PORT` | `3000` | `3000` | HTTP listen port |
+| `MIGRATION_WORKSPACE_NAME` | `Default` | `migration.workspaceName` (default `Default`) | Initial workspace display name when migration 22 first runs |
+| `MIGRATION_WORKSPACE_SLUG` | `default` | `migration.workspaceSlug` (default `default`) | Initial workspace URL slug when migration 22 first runs |
 | `ALLOW_INSECURE_OIDC` | Disabled | Do not enable in production | Allows loopback HTTP provider URLs only in non-production mode |
 
 The development example uses the Vite browser origin `http://127.0.0.1:5173`. Do not confuse that with the API's listen address on port 3000.
+
+## One-time workspace initialization
+
+Set both migration values before the first 0.28.0 startup against a pre-22 database (or a new database). For example, `MIGRATION_WORKSPACE_NAME="richie's workspace"` and `MIGRATION_WORKSPACE_SLUG=richies-workspace`. The internal workspace ID stays `default`; only its initial name and URL slug are chosen. Names are trimmed to 1–100 characters; slugs must be 1–70 lowercase letters/digits with single hyphen separators. Invalid values fail startup validation even after migration. Already-migrated databases retain saved settings on restart: these variables are not rename controls. REST calls without `X-Workspace-Slug` fall back to the saved initial workspace's slug, which can differ from `default`; explicitly select the custom slug in clients that send their own default. Never delete migration records or recreate storage to change them. See the [packaged migration guide](https://github.com/ricsam/issue-tracker/blob/main/charts/issue-tracker/README.md).
 
 ## Origin and TLS
 

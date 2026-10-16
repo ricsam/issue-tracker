@@ -127,24 +127,26 @@ function validSession(value: unknown): value is Session {
   }
   return true;
 }
-function issueIds(session: Session, baseUrl: string) {
+function issueIds(session: Session, context: PluginContext) {
   if (session.parentSessionId != null) return [];
-  const base = new URL(baseUrl);
+  const base = new URL(context.baseUrl);
   const ids = new Set<string>();
   for (const item of session.workItems ?? []) {
     if (!item || item.source !== "threadline") continue;
     try {
       const url = new URL(item.url),
-        match = /^\/issues\/([1-9]\d*)$/.exec(url.pathname);
+        match = /^\/w\/([a-z0-9]+(?:-[a-z0-9]+)*)\/issues\/([1-9]\d*)$/.exec(url.pathname);
       if (
         url.origin === base.origin &&
         !url.username &&
         !url.password &&
         !url.search &&
         !url.hash &&
-        match
-      )
-        ids.add(match[1]!);
+        match && Number.isSafeInteger(Number(match[2]))
+      ) {
+        const issueId = context.resolveIssue(match[1]!, match[2]!);
+        if (issueId) ids.add(issueId);
+      }
     } catch {
       /* Foreign or malformed work item. */
     }
@@ -165,7 +167,7 @@ function tone(status: string): ExternalLink["tone"] {
 function render(context: PluginContext, state: State) {
   context.removeLinks();
   for (const session of Object.values(state.sessions))
-    for (const issueId of issueIds(session, context.baseUrl)) {
+    for (const issueId of issueIds(session, context)) {
       context.putLink(issueId, {
         externalId: `session:${session.id}`,
         title: session.name || "r5d session",
@@ -177,7 +179,7 @@ function render(context: PluginContext, state: State) {
   for (const [url, review] of Object.entries(state.reviews)) {
     const ids = new Set(
       review.sessionIds.flatMap((id) =>
-        state.sessions[id] ? issueIds(state.sessions[id], context.baseUrl) : [],
+        state.sessions[id] ? issueIds(state.sessions[id], context) : [],
       ),
     );
     for (const issueId of ids)

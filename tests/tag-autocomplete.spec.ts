@@ -20,7 +20,7 @@ test("existing tags complete in rich and source modes without competing mention 
   const { project } = await response.json();
   const seeded = await page.request.post(`/api/projects/${project.slug}/issues`, { headers, data: { body: "Tag catalog\n\n#bug #build #multi-word #Bad #bug_bad #日本語 #[multi%20word]" } });
   expect(seeded.ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await page.getByRole("button", { name: "Create issue", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   const editor = dialog.getByRole("textbox", { name: "Issue", exact: true });

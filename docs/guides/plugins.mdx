@@ -27,13 +27,13 @@ Only non-secret settings reach signed-in browsers. A project's repository mappin
 
 Open an issue or its desktop detail panel and select **Implement with r5d**. Your browser creates and opens a launch URL with:
 
-- The saved issue title, canonical Threadline URL and bounded Markdown snapshot, including comments with author names and dates. Unsaved editor changes are not sent.
-- A new `issue/NUMBER-title-slug` branch from the mapped default branch and the project's mapped remote, when configured.
+- The saved issue title, canonical `/w/WORKSPACE/issues/NUMBER` Threadline URL and bounded Markdown snapshot, including comments with author names and dates. Unsaved editor changes are not sent.
+- A new `issue/WORKSPACE/NUMBER-title-slug` branch from the mapped default branch and the project's mapped remote, when configured.
 - A proposal to share with the configured team, with **All sessions on the branch** preselected, including when no project mapping is configured.
 
 Without a mapping, r5d asks you to choose a project. r5d presents **Check before starting**; nothing starts until you confirm. When there is no existing share, choose the team and scope there, or choose not to share. Branch sharing also covers later sessions on that branch and the pull request's link to its team page. If an existing branch or project share already covers the session, the dialog shows how it is shared and links to the team's **Members and shares** settings (`/t/TEAM/members`), where the share owner or a team admin can revoke it; launching adds no share. For a new branch, only an existing project share applies. Review the content and sharing before confirming, especially for a private project or personal draft. Launching transfers the snapshot to r5d when you confirm there; the fragment is not sent to Threadline's server. Sharing with a team may expose that snapshot to the team's members, even if they cannot read the original issue in Threadline.
 
-Snapshots are limited to 100,000 characters, so long discussions can be truncated. The canonical issue URL remains available for full context. This action does not create a session directly through an API key.
+Launch work-item IDs include the workspace (`host#workspaceSlug#number`) so equal display numbers in different workspaces remain distinct. Snapshots are limited to 100,000 characters, so long discussions can be truncated. The canonical issue URL remains available for full context. This action does not create a session directly through an API key.
 
 ## Follow progress
 

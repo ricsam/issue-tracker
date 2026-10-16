@@ -12,7 +12,7 @@ async function fixture(page: Page, baseURL: string) {
     if (lane) expect((await page.request.post(`/api/projects/${project.slug}/board/issues`, { headers, data: { lane, issueIds: [issue.id] } })).ok()).toBeTruthy();
     if (closed) expect((await page.request.patch(`/api/issues/${issue.id}`, { headers, data: { state: "closed" } })).ok()).toBeTruthy();
   }
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await expect(page.locator("tbody .issue-link")).toHaveCount(4);
   return { project, headers };
 }
@@ -75,7 +75,7 @@ for (const width of [1440, 390]) test(`horizontal chips, tag operators, state an
   await expect(page.locator(".board-card:visible")).toHaveCount(3);
   await boardBar.getByRole("button", { name: "Remove filter: State is Open", exact: true }).click();
   await expect(page.locator(".board-card:visible")).toHaveCount(4);
-  await page.goto(`/projects/${project.slug}?state=closed`);
+  await page.goto(`/w/default/projects/${project.slug}?state=closed`);
   await expect(rows).toHaveText(["Closed bug"]);
   await expect(bar.getByRole("button", { name: "Edit filter: State is Closed", exact: true })).toBeVisible();
 });
@@ -101,16 +101,16 @@ test("repeated chip rules edit independently, support negatives and isolate proj
   await bar.getByRole("button", { name: "Remove filter: Board lane is Done", exact: true }).click();
   await expect(page.locator("tbody .issue-link")).toHaveText(["Todo bug", "Done bug"]);
   const { project: other } = await (await page.request.post("/api/projects", { headers, data: { name: `Other filters ${randomUUID()}` } })).json();
-  await page.goto(`/projects/${other.slug}`);
+  await page.goto(`/w/default/projects/${other.slug}`);
   await expect(bar.locator(".filter-chip")).toHaveCount(1);
-  await page.goto("/issues");
+  await page.goto("/w/default/issues");
   await openTableFilter(page, "project");
   await editor.getByLabel("Filter by project").selectOption(project.id);
   await page.keyboard.press("Escape");
   await expect(page.locator("tbody .issue-link")).toHaveCount(4);
   await page.reload();
   await expect(page.locator("tbody .issue-link")).toHaveCount(4);
-  await page.goto(`/projects/${project.slug}`);
+  await page.goto(`/w/default/projects/${project.slug}`);
   await expect(page.locator("tbody .issue-link")).toHaveText(["Todo bug", "Done bug"]);
   await bar.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(page.locator("tbody .issue-link")).toHaveCount(5);
@@ -118,7 +118,7 @@ test("repeated chip rules edit independently, support negatives and isolate proj
 
 test("board supports title chips, any/every tags and cleared-filter persistence", async ({ page, baseURL }) => {
   const { project } = await fixture(page, baseURL!);
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   const bar = page.getByRole("region", { name: "Board filters", exact: true });
   const cards = page.locator(".board-card:visible");
   await expect(cards).toHaveCount(3);

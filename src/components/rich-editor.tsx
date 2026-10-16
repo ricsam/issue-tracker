@@ -59,6 +59,8 @@ import {
   Paperclip,
   Loader2,
 } from "lucide-react";
+import { api, getApiWorkspace } from "../lib/api";
+import { workspacePath } from "../lib/workspace";
 import { mentionUserId } from "../../shared/mentions";
 import { MentionLinkNode, mentionLinkReplacement } from "./mention-link-node";
 import { MENTION_TRANSFORMER } from "./mention-transformer";
@@ -165,16 +167,8 @@ function EditorContents({
           throw new Error("Each attachment must be 10 MiB or smaller.");
         const body = new FormData();
         body.append("file", file);
-        const response = await fetch("/api/uploads", {
-          method: "POST",
-          body,
-          credentials: "same-origin",
-        });
-        const data = (await response.json()) as {
-          attachment?: Attachment;
-          error?: string;
-        };
-        if (!response.ok || !data.attachment)
+        const data = await api<{ attachment?: Attachment; error?: string }>("/api/uploads", { method: "POST", body });
+        if (!data.attachment)
           throw new Error(data.error || "Upload failed. Please try again.");
         const attachment = data.attachment;
         const name = attachment.name.replace(/[\[\]\\\n\r]/g, "");
@@ -246,7 +240,7 @@ function EditorContents({
         const reference = (event.target as Element).closest<HTMLElement>("[data-issue-reference-id]");
         if (reference) {
           event.preventDefault();
-          const url = `/issues/${reference.dataset.issueReferenceId}`;
+          const url = workspacePath(getApiWorkspace() ?? "", `/issues/${reference.dataset.issueReferenceId}`);
           if (event.ctrlKey || event.metaKey) window.open(url, "_blank", "noopener,noreferrer");
           else window.location.assign(url);
         }
@@ -256,7 +250,7 @@ function EditorContents({
         if (event.key === "Enter" && reference.dataset.issueReferenceId) {
           event.preventDefault();
           event.stopPropagation();
-          window.location.assign(`/issues/${reference.dataset.issueReferenceId}`);
+          window.location.assign(workspacePath(getApiWorkspace() ?? "", `/issues/${reference.dataset.issueReferenceId}`));
         }
       }}
       onDragOver={(e) => {

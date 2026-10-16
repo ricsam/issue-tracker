@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { GitBranch, Plus, Unlink } from "lucide-react";
 import type { BoardSettings, Issue, IssueReference, IssueRelationships } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { useWorkspace } from "../lib/workspace";
+import { useWorkspace, workspacePath } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import { useNotification } from "./ui/snackbar";
 import { IssueStateBadge } from "./lifecycle";
@@ -76,7 +76,7 @@ export function IssueRelationshipsSection({ issue, readOnly, disabled, revision,
   return <section className="issue-relationships" aria-label="Issue relationships" aria-busy={loading || busy}>
     {relationships?.parent && <div className="issue-parent">
       <span className="muted">Sub-issue of</span>
-      <Link to={`/issues/${relationships.parent.id}`} onClick={navigate}>!{relationships.parent.number} {relationships.parent.title}</Link>
+      <Link to={workspacePath(issue.workspaceSlug, `/issues/${relationships.parent.number}`)} onClick={navigate}>!{relationships.parent.number} {relationships.parent.title}</Link>
       <IssueStateBadge state={relationships.parent.state} />
       {!readOnly && <Button type="button" variant="ghost" className="icon-button" title="Remove parent" aria-label="Remove parent" disabled={locked}
         onClick={() => void remove(relationships.parent!.id, issue.id)}><Unlink size={15} /></Button>}
@@ -97,7 +97,7 @@ export function IssueRelationshipsSection({ issue, readOnly, disabled, revision,
       <div className="sub-issues-progress"><progress aria-label="Sub-issue completion" max={children.length} value={closed} /><span>{closed} of {children.length} completed</span></div>
       <ul className="sub-issues-list">{children.map((child) => <li key={child.id}>
         <IssueStateBadge state={child.state} />
-        <Link to={`/issues/${child.id}`} onClick={navigate}><span className="muted">!{child.number}</span> {child.title}</Link>
+        <Link to={workspacePath(issue.workspaceSlug, `/issues/${child.number}`)} onClick={navigate}><span className="muted">!{child.number}</span> {child.title}</Link>
         {!readOnly && <Button type="button" variant="ghost" className="icon-button" title="Remove sub-issue" aria-label={`Remove sub-issue !${child.number}`} disabled={locked}
           onClick={() => void remove(issue.id, child.id)}><Unlink size={15} /></Button>}
       </li>)}</ul>

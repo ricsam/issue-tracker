@@ -73,7 +73,7 @@ When signup is disabled, already-bound identities can still sign in.
 
 Changing issuer or subject represents a different identity; it does not migrate the old binding.
 There is no account-linking or identity-migration workflow in the current administration interface.
-Only allow SSO signup for people trusted to access public projects, unlinked issues, their saved attachments, and the workspace user directory. Private projects require ownership or explicit sharing; SSO signup does not grant administrator access.
+Only allow SSO signup for the intended audience. Account creation and workspace membership are separate: public workspace listing grants no content access. Verified-email login can apply pending [workspace invitations](/guides/workspaces), including their default and project-specific access. SSO signup does not grant instance administrator access.
 
 ## Diagnose a failed sign-in
 

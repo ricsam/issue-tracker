@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { BoardSettings, Issue } from "../../shared/types";
 import { message } from "./api";
 import { useNewIssueShortcut } from "./issue-shortcuts";
-import { useWorkspace } from "./workspace";
+import { useWorkspace, issuePath, canCreateInWorkspace } from "./workspace";
 import { ErrorNotice } from "../components/ui/primitives";
 
 const CreateIssueDialog = lazy(() => import("../components/create-issue-dialog").then((module) => ({ default: module.CreateIssueDialog })));
@@ -23,18 +23,20 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
   const [createdIssues, setCreatedIssues] = useState<Issue[]>([]);
   const [createdBoards, setCreatedBoards] = useState<Record<string, BoardSettings>>({});
   const [error, setError] = useState("");
-  const { refresh } = useWorkspace();
+  const { refresh, workspace, projects } = useWorkspace();
+  const canCreate = canCreateInWorkspace(workspace) || projects.some(p => p.access === "full" && !p.archivedAt);
   const navigate = useNavigate();
   const register = useCallback((next: () => void) => {
     handler.current = next;
     return () => { if (handler.current === next) handler.current = null; };
   }, []);
   const open = useCallback(() => {
+    if (!canCreate) return;
     if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
     if (handler.current) handler.current();
     else setCreating(true);
-  }, []);
-  useNewIssueShortcut(open, true);
+  }, [canCreate]);
+  useNewIssueShortcut(open, canCreate);
   return <IssueCreationContext.Provider value={{ open, register, createdIssues, createdBoards }}>
     {children}
     <ErrorNotice error={error} />
@@ -46,7 +48,7 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
       onBoardChanged={(projectId, board) => setCreatedBoards((current) => ({ ...current, [projectId]: board }))}
       onClose={() => setCreating(false)}
       canViewIssue={() => true}
-      onViewIssue={(issue) => { setCreating(false); navigate(`/issues/${issue.id}`); }}
+      onViewIssue={(issue) => { setCreating(false); navigate(issuePath(issue)); }}
     /></Suspense>}
   </IssueCreationContext.Provider>;
 }

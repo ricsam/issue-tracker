@@ -29,7 +29,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
       data: { name: "Board work" },
     })
   ).json();
-  const projectPath = `/projects/${project.slug}`;
+  const projectPath = `/w/default/projects/${project.slug}`;
   const endpoint = `/api/projects/${project.slug}/board`;
   const issueEndpoint = `/api/projects/${project.slug}/issues`;
   const issues: { id: string; number: number }[] = [];
@@ -207,7 +207,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     .click();
   await expect(editor).toBeEmpty();
   const desktopCreatedHref = await create.getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue: desktopCreated } = await (await page.request.get(`/api${desktopCreatedHref}`)).json();
+  const { issue: desktopCreated } = await (await page.request.get(`/api/issues/by-number/${desktopCreatedHref!.split("/").at(-1)}`)).json();
   await expect(create.getByRole("status")).toContainText(`Issue !${desktopCreated.number} created.`);
   const issueUrl = (await create.getByRole("link", { name: "View issue" }).getAttribute("href"))!;
   await create.getByRole("link", { name: "View issue" }).click();
@@ -280,7 +280,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
     .click();
   await expect(editor).toBeEmpty();
   const mobileCreatedHref = await create.getByRole("link", { name: "View issue" }).getAttribute("href");
-  const { issue: mobileCreated } = await (await page.request.get(`/api${mobileCreatedHref}`)).json();
+  const { issue: mobileCreated } = await (await page.request.get(`/api/issues/by-number/${mobileCreatedHref!.split("/").at(-1)}`)).json();
   await expect(create.getByRole("status")).toContainText(`Issue !${mobileCreated.number} created.`);
   await create.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page).toHaveURL(projectPath + "/board");
@@ -404,7 +404,7 @@ test("issues are label-only; boards explicitly place, move and remove work in la
       data: { name: "Other board" },
     })
   ).json();
-  await page.goto(`/projects/${other.project.slug}/board`);
+  await page.goto(`/w/default/projects/${other.project.slug}/board`);
   await expect(page.locator(".board-column")).toHaveCount(3);
   await expect(page.locator(".board-card")).toHaveCount(0);
   await page.getByRole("button", { name: "Add issues", exact: true }).click();
@@ -483,7 +483,7 @@ test("lanes reorder by dragging their headings or from Manage lanes, and the ord
   const column = (name: string) =>
     page.locator(".board-column").filter({ has: heading(name) });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(names).toHaveText(["Todo", "In progress", "Done", "In review"]);
 
   // Dropping a lane on another puts it in that lane's place; cards travel with it.

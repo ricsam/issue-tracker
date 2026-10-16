@@ -27,7 +27,7 @@ async function fixture(page: Page, baseURL: string) {
   }
   expect((await page.request.post(`${endpoint}/issues`, { headers, data: { issueIds: issues.slice(0, 5).map((issue) => issue.id), lane: "todo" } })).ok()).toBeTruthy();
   expect((await page.request.post(`${endpoint}/issues`, { headers, data: { issueIds: [issues[5].id], lane: "done" } })).ok()).toBeTruthy();
-  await page.goto(`/projects/${project.slug}/board`);
+  await page.goto(`/w/default/projects/${project.slug}/board`);
   await expect(order(page, "Todo")).toHaveText(numbers(issues, [1, 2, 3, 4, 5]));
   return { project, issues, endpoint, headers };
 }

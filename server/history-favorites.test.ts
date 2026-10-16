@@ -147,7 +147,7 @@ test("migration 12 is additive, preserves events across replay/reopen, and suppo
     const upgraded = openDatabase(path);
     expect(upgraded.query("SELECT * FROM issue_history").all()).toEqual([]);
     expect(upgraded.query("SELECT body FROM issues").all()).toEqual([{ body: "# Old" }]);
-    expect(upgraded.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 21 });
+    expect(upgraded.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 22 });
     upgraded.close();
   }
   expect(issue.id).toBe("1");

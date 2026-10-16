@@ -15,23 +15,32 @@ export function hostUrl(raw?: string): string {
     throw new CliError("Host must be an HTTPS origin without credentials, path, query or fragment; HTTP is allowed only on loopback.", 2);
   return url.origin;
 }
-export function issueId(raw: string, host: string): string {
+export function workspaceSlug(raw: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw)) throw new CliError("Expected a workspace slug.", 2);
+  return raw;
+}
+export function issueTarget(raw: string, host: string, selectedWorkspace?: string): { number: string; workspace: string } {
+  let workspace = selectedWorkspace === undefined ? "default" : workspaceSlug(selectedWorkspace);
   let value = raw;
   if (/^https?:/i.test(value)) {
     let url: URL;
     try { url = new URL(value); } catch { throw new CliError("Invalid issue URL.", 2); }
     if (url.origin !== host || url.username || url.password || url.search || url.hash)
       throw new CliError("Issue URL must belong to THREADLINE_HOST and have no credentials, query or fragment.", 2);
-    const match = /^\/issues\/([1-9]\d*)\/?$/.exec(url.pathname);
-    if (!match) throw new CliError("Expected an issue URL ending /issues/NUMBER.", 2);
-    value = match[1]!;
+    const match = /^\/w\/([a-z0-9]+(?:-[a-z0-9]+)*)\/issues\/([1-9]\d*)\/?$/.exec(url.pathname);
+    if (!match) throw new CliError("Expected an issue URL ending /w/WORKSPACE/issues/NUMBER.", 2);
+    if (selectedWorkspace !== undefined && selectedWorkspace !== match[1]) throw new CliError("Issue URL workspace conflicts with --workspace or THREADLINE_WORKSPACE.", 2);
+    workspace = match[1]!;
+    value = match[2]!;
   }
   value = value.replace(/^!/, "");
   if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new CliError("Expected a positive issue number, !NUMBER or same-origin issue URL.", 2);
-  return value;
+  return { number: value, workspace };
 }
+// Retained as a number parser; mutations must resolve issueTarget through by-number.
+export function issueId(raw: string, host: string): string { return issueTarget(raw, host).number; }
 export class Api {
-  constructor(public host: string, private token?: string, private timeout = 15000) {}
+  constructor(public host: string, private token?: string, private timeout = 15000, private workspace?: string) {}
   async request<T = any>(path: string, method = "GET", body?: unknown, publicEndpoint = false): Promise<T> {
     if (!path.startsWith("/api/") || new URL(path, this.host).origin !== this.host) throw new CliError("Unsafe API path.", 2);
     if (!publicEndpoint && !this.token) throw new CliError("Not authenticated. Run threadline auth login or set THREADLINE_TOKEN.", 4);
@@ -39,7 +48,7 @@ export class Api {
     try {
       response = await fetch(this.host + path, {
         method, redirect: "manual", signal: AbortSignal.timeout(this.timeout),
-        headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(!publicEndpoint ? { Authorization: `Bearer ${this.token}` } : {}) },
+        headers: { Accept: "application/json", ...(this.workspace ? { "X-Workspace-Slug": this.workspace } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(!publicEndpoint ? { Authorization: `Bearer ${this.token}` } : {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     } catch { throw new CliError("Request failed or timed out. Mutations are never retried; check server state before retrying."); }
