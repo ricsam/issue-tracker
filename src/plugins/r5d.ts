@@ -27,7 +27,9 @@ export async function r5dLaunchUrl(settings: PluginPublicSettings, context: Issu
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const name = `issue/${issue.number}${slug ? `-${slug}` : ""}`.slice(0, 40).replace(/-$/, "");
   const snapshot = [issue.body, ...comments.map((comment) => `\n\n## Comment by ${users.find((user) => user.id === comment.authorId)?.name || "Unknown author"} (${comment.createdAt})\n\n${comment.body}`)].join("").slice(0, 100000);
-  const scope = settings.values.defaultShare;
+  // Propose the connected team; r5d resolves existing shares and asks per launch.
+  // An installation's former defaultShare must not determine this choice.
+  const team = settings.values.team;
   const payload = {
     v: 1,
     ...(mapping && typeof mapping.remote === "string" && typeof mapping.defaultBranch === "string" ? {
@@ -35,7 +37,7 @@ export async function r5dLaunchUrl(settings: PluginPublicSettings, context: Issu
       branch: { mode: "new", name, from: mapping.defaultBranch },
     } : {}),
     workItems: [{ source: "threadline", id: `${new URL(base).host}#${issue.number}`, kind: "issue", url: `${base.replace(/\/$/, "")}/issues/${issue.number}`, title, snapshot }],
-    ...(["session", "branch", "project"].includes(String(scope)) && typeof settings.values.team === "string" ? { share: { team: settings.values.team, scope } } : {}),
+    ...(typeof team === "string" && team ? { share: { team, scope: "branch" } } : {}),
   };
   const stream = new Blob([JSON.stringify(payload)]).stream().pipeThrough(new CompressionStream("deflate"));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());

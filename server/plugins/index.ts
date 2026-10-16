@@ -100,7 +100,13 @@ export class PluginService {
     return row
       ? {
           enabled: !!row.enabled,
-          values: JSON.parse(row.value),
+          // Removed fields (such as r5d's old defaultShare) are no longer
+          // settings. Ignore them on read and drop them on the next save.
+          values: Object.fromEntries(
+            Object.entries(JSON.parse(row.value) as Record<string, unknown>).filter(
+              ([name]) => plugin.fields.some((field) => field.name === name && field.type !== "secret"),
+            ),
+          ),
           secrets: JSON.parse(row.secrets),
         }
       : { enabled: false, values: { ...plugin.defaults }, secrets: {} };

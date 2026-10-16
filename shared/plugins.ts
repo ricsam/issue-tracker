@@ -47,22 +47,11 @@ export const pluginRegistry: PluginMetadata[] = [
   {
     id: "r5d",
     name: "r5d",
-    description: "Implement issues with r5d and follow shared team sessions.",
+    description: "Implement issues with r5d and follow shared team sessions. Sharing is chosen for each launch in r5d, not here. Threadline shows status only while the session is shared with this team.",
     fields: [
       { name: "baseUrl", label: "r5d base URL", type: "url", required: true },
       { name: "team", label: "Team URL name", type: "text", required: true },
       { name: "apiKey", label: "Team API key", type: "secret", required: true },
-      {
-        name: "defaultShare",
-        label: "Default share",
-        type: "select",
-        options: [
-          { value: "none", label: "None" },
-          { value: "session", label: "This session" },
-          { value: "branch", label: "All sessions on the branch" },
-          { value: "project", label: "All sessions in the project" },
-        ],
-      },
       {
         name: "projects",
         label: "Project mappings",

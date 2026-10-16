@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { inflateSync } from "node:zlib";
+import type { Issue, User } from "../shared/types";
+import { r5dLaunchUrl } from "../src/plugins/r5d";
 import { openDatabase } from "./db";
 import { PluginService } from "./plugins";
 
@@ -58,6 +61,66 @@ function setup(handler: (path: URL) => Response | Promise<Response>) {
   };
 }
 const json = (data: unknown) => Response.json(data);
+
+for (const legacyScope of [undefined, "none", "session", "branch", "project"]) {
+  test(`r5d sharing is per launch, not the saved ${legacyScope ?? "unset"} default`, async () => {
+    const fixture = setup((url) => {
+      if (url.pathname.endsWith("/acme")) return json({});
+      if (url.pathname.endsWith("/sessions")) return json({ sessions: [session()], cursor: "1" });
+      return json({ events: [], cursor: "1" });
+    });
+    const { db, service } = fixture;
+    const user = { id: "u", role: "admin" } as User;
+    try {
+      expect(service.adminSettings()[0]!.values).not.toHaveProperty("defaultShare");
+      await fixture.enable();
+      await until(() => service.links("1").length === 1);
+      db.exec(`INSERT INTO projects(id,slug,name,description,createdAt,visibility,ownerId) VALUES ('p','p','P','','now','private','u')`);
+      const projects = [{ projectId: "p", remote: "git@github.com:acme/repo.git", defaultBranch: "main" }];
+      await service.update("r5d", { enabled: true, values: { projects } });
+      const before = db.query("SELECT value,secrets FROM plugin_settings WHERE pluginId='r5d'").get() as { value: string; secrets: string };
+      // Simulate a settings row saved by the previous version, without resaving
+      // or replacing its encrypted team key, mappings or running feed state.
+      if (legacyScope !== undefined) db.query("UPDATE plugin_settings SET value=? WHERE pluginId='r5d'")
+        .run(JSON.stringify({ ...JSON.parse(before.value), defaultShare: legacyScope }));
+      const state = db.query("SELECT * FROM plugin_state").all();
+      const links = service.links("1");
+      const admin = service.adminSettings()[0]!;
+      const publicSettings = service.publicSettings(user)[0]!;
+      expect(admin.fields.map((field) => field.name)).not.toContain("defaultShare");
+      expect(admin.values).not.toHaveProperty("defaultShare");
+      expect(publicSettings.values).not.toHaveProperty("defaultShare");
+      expect(publicSettings.values.projects).toEqual(projects);
+      expect(admin.hasSecrets.apiKey).toBe(true);
+      expect(JSON.stringify([admin, publicSettings])).not.toContain(key);
+      const issue = db.query("SELECT * FROM issues WHERE id=1").get() as Issue;
+      for (const projectId of [null, "p"]) {
+        // Also ignore stale settings delivered by an older server/browser cache.
+        const url = await r5dLaunchUrl({ ...publicSettings, values: { ...publicSettings.values, defaultShare: legacyScope } }, {
+          issue: { ...issue, projectId }, comments: [], users: [], baseUrl: "https://issues.test",
+        });
+        const payload = JSON.parse(inflateSync(Buffer.from(new URL(url).hash.slice(1), "base64url")).toString());
+        expect(payload.share).toEqual({ team: "acme", scope: "branch" });
+        if (projectId) {
+          expect(payload.remote).toBe(projects[0]!.remote);
+          expect(payload.branch).toEqual({ mode: "new", name: "issue/1-issue", from: "main" });
+        } else {
+          expect(payload).not.toHaveProperty("remote");
+          expect(payload).not.toHaveProperty("branch");
+        }
+      }
+      // The generated admin form may save its full values without the old
+      // field, and blank secrets still preserve the existing credential.
+      await service.update("r5d", { enabled: true, values: { ...admin.values, apiKey: "" } });
+      expect(db.query("SELECT value,secrets FROM plugin_settings WHERE pluginId='r5d'").get()).toEqual(before);
+      expect(service.links("1")).toEqual(links);
+      expect(db.query("SELECT * FROM plugin_state").all()).toEqual(state);
+      await expect(service.update("r5d", { enabled: true, values: { defaultShare: "project" } })).rejects.toThrow("Unknown plugin setting");
+    } finally {
+      await fixture.close();
+    }
+  });
+}
 
 test("r5d snapshot, exact work-item matching, newer versions, dedup, reviews, revoke and truncation", async () => {
   let listCount = 0;

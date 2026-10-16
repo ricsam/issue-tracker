@@ -207,10 +207,9 @@ export const r5dPlugin: PluginDefinition = {
   defaults: {
     baseUrl: "https://r5d.dev",
     team: "",
-    defaultShare: "none",
     projects: [],
   },
-  publicFields: ["baseUrl", "team", "defaultShare", "projects"],
+  publicFields: ["baseUrl", "team", "projects"],
   async check(context) {
     if (
       !/^[a-z0-9][a-z0-9-]{0,99}$/.test(String(context.values.team)) ||

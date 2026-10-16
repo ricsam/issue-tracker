@@ -14,11 +14,12 @@ Secret fields are encrypted at rest with `SETTINGS_ENCRYPTION_KEY`. Saved secret
 1. In r5d, open your team's **Integrations** page at `https://r5d.dev/t/YOUR-TEAM/integrations`. A team administrator creates a **team API key**. This is a read-only key for that team's shared work, not a personal r5d API key.
 2. In Threadline's **Administration → Plugins**, choose **r5d** and enable it.
 3. Set **r5d base URL** (normally `https://r5d.dev`), **Team URL name** (the URL segment, not its display name) and **Team API key**.
-4. Choose the default share: **None**, **This session**, **All sessions on the branch** or **All sessions in the project**.
-5. Optionally add **Project mappings**: select a Threadline project, enter its git remote (for example `https://github.com/acme/api.git` or `git@github.com:acme/api.git`) and default branch (for example `main`).
-6. Save. When enabled, Threadline checks the key against that team's API before accepting the settings.
+4. Optionally add **Project mappings**: select a Threadline project, enter its git remote (for example `https://github.com/acme/api.git` or `git@github.com:acme/api.git`) and default branch (for example `main`).
+5. Save. When enabled, Threadline checks the key against that team's API before accepting the settings.
 
 Changing the r5d URL or team requires entering the team key again, preventing an old credential from being sent accidentally to another service. Use HTTPS. HTTP is accepted only for localhost in non-production development with the existing `ALLOW_INSECURE_OIDC=true` option; it is not a production bypass. Requests never follow redirects with credentials.
+
+Sharing is not a plugin setting. Any previously saved **Default share** is ignored; you decide for each launch in r5d. The saved team key, project mappings and feed state are preserved.
 
 Only non-secret settings reach signed-in browsers. A project's repository mapping is exposed only to users who can read that project. The team key stays on the Threadline server.
 
@@ -28,13 +29,15 @@ Open an issue or its desktop detail panel and select **Implement with r5d**. You
 
 - The saved issue title, canonical Threadline URL and bounded Markdown snapshot, including comments with author names and dates. Unsaved editor changes are not sent.
 - A new `issue/NUMBER-title-slug` branch from the mapped default branch and the project's mapped remote, when configured.
-- The configured team sharing scope, unless it is **None**.
+- A proposal to share with the configured team, with **All sessions on the branch** preselected, including when no project mapping is configured.
 
-Without a mapping, r5d asks you to choose a project. r5d presents **Check before starting**; nothing starts until you confirm. Review the content and sharing scope before confirming, especially for a private project or personal draft. Launching transfers the snapshot to r5d when you confirm there; the fragment is not sent to Threadline's server. Sharing with a team may expose that snapshot to the team's members, even if they cannot read the original issue in Threadline.
+Without a mapping, r5d asks you to choose a project. r5d presents **Check before starting**; nothing starts until you confirm. When there is no existing share, choose the team and scope there, or choose not to share. Branch sharing also covers later sessions on that branch and the pull request's link to its team page. If an existing branch or project share already covers the session, the dialog shows how it is shared and links to the team's **Members and shares** settings (`/t/TEAM/members`), where the share owner or a team admin can revoke it; launching adds no share. For a new branch, only an existing project share applies. Review the content and sharing before confirming, especially for a private project or personal draft. Launching transfers the snapshot to r5d when you confirm there; the fragment is not sent to Threadline's server. Sharing with a team may expose that snapshot to the team's members, even if they cannot read the original issue in Threadline.
 
 Snapshots are limited to 100,000 characters, so long discussions can be truncated. The canonical issue URL remains available for full context. This action does not create a session directly through an API key.
 
 ## Follow progress
+
+Threadline shows a session's status only while it is shared with the plugin's configured team. If you choose not to share with that team, or existing shares cover only another team, Threadline cannot follow the session. The r5d launch dialog warns when the linked team is not covered.
 
 Threadline long-polls r5d's read-only team event feed from the server. It initially lists shared sessions, remembers the cursor, deduplicates events and only applies newer status versions. Expired event history triggers a fresh list. No incoming webhook or public Threadline URL is needed for this feed.
 

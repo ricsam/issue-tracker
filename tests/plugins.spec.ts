@@ -17,7 +17,7 @@ async function seed(page: Page, baseURL: string) {
 // real. Server suites separately test encryption, validation and feed behavior.
 test("generated admin form preserves drafts during status refresh and clears secret after save", async ({ page, baseURL }) => {
   const { project } = await seed(page, baseURL!);
-  let plugin: PluginAdminSettings = { ...pluginRegistry[0]!, enabled: false, values: { baseUrl: "https://r5d.dev", team: "", defaultShare: "none", projects: [] }, hasSecrets: { apiKey: false }, status: { state: "disabled" } };
+  let plugin: PluginAdminSettings = { ...pluginRegistry[0]!, enabled: false, values: { baseUrl: "https://r5d.dev", team: "", projects: [] }, hasSecrets: { apiKey: false }, status: { state: "disabled" } };
   const writes: { enabled: boolean; values: Record<string, unknown> }[] = [];
   await page.route("**/api/admin/plugins**", async (route) => {
     if (route.request().method() === "PUT") {
@@ -32,7 +32,8 @@ test("generated admin form preserves drafts during status refresh and clears sec
   await form.getByLabel("Enable r5d", { exact: true }).check();
   await form.getByLabel("Team URL name").fill("demo-team");
   await form.getByLabel("Team API key").fill("r5d_team_browser_fixture");
-  await form.getByLabel("Default share").selectOption("branch");
+  await expect(form.getByLabel("Default share")).toHaveCount(0);
+  await expect(form.getByText(/Sharing is chosen for each launch in r5d/)).toBeVisible();
   await form.getByRole("button", { name: "Add project mapping" }).click();
   await form.getByLabel("Project 1", { exact: true }).selectOption(project.id);
   await form.getByLabel("Git remote 1").fill("git@github.com:acme/repo.git");
@@ -40,7 +41,7 @@ test("generated admin form preserves drafts during status refresh and clears sec
   await form.getByRole("button", { name: "Save r5d settings" }).click();
   await expect(form.getByLabel("Team API key")).toHaveValue("");
   await expect(form.getByLabel("Team API key")).toHaveAttribute("placeholder", /leave blank/);
-  expect(writes[0]).toEqual({ enabled: true, values: { baseUrl: "https://r5d.dev", team: "demo-team", apiKey: "r5d_team_browser_fixture", defaultShare: "branch", projects: [{ projectId: project.id, remote: "git@github.com:acme/repo.git", defaultBranch: "main" }] } });
+  expect(writes[0]).toEqual({ enabled: true, values: { baseUrl: "https://r5d.dev", team: "demo-team", apiKey: "r5d_team_browser_fixture", projects: [{ projectId: project.id, remote: "git@github.com:acme/repo.git", defaultBranch: "main" }] } });
   await form.getByLabel("Team URL name").fill("unsaved-team");
   plugin = { ...plugin, status: { state: "error", error: "Team key rejected" } };
   await expect(form.getByText("Team key rejected")).toBeVisible({ timeout: 15000 });
@@ -57,7 +58,7 @@ for (const embedded of [false, true]) {
       (window as unknown as { opened: unknown[] }).opened = [];
       window.open = (...args) => { (window as unknown as { opened: unknown[] }).opened.push(args); return null; };
     });
-    await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.example.test/base", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.example.test", team: "demo", defaultShare: "branch", projects: [{ projectId: project.id, remote: "git@github.com:acme/repo.git", defaultBranch: "develop" }] } }] } }));
+    await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.example.test/base", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.example.test", team: "demo", defaultShare: embedded ? "project" : "none", projects: [{ projectId: project.id, remote: "git@github.com:acme/repo.git", defaultBranch: "develop" }] } }] } }));
     await page.goto(embedded ? `/projects/${project.slug}` : `/issues/${issue.id}`);
     if (embedded) await page.locator(`a[data-issue-id="${issue.id}"]`).click();
     await page.locator(".detail-form").getByRole("button", { name: "Markdown", exact: true }).click();
@@ -75,16 +76,17 @@ for (const embedded of [false, true]) {
   });
 }
 
-test("unmapped launch omits remote, branch and sharing and enforces payload limits", async ({ page, baseURL }) => {
+test("unmapped launch still proposes team branch sharing and enforces payload limits", async ({ page, baseURL }) => {
   const { issue } = await seed(page, baseURL!);
   await page.addInitScript(() => { window.open = (url) => { (window as unknown as { launchUrl: string }).launchUrl = String(url); return null; }; });
-  await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.dev", defaultShare: "none", projects: [] } }] } }));
+  await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "https://r5d.dev", team: "demo", projects: [] } }] } }));
   await page.route(`**/api/issues/${issue.id}`, (route) => route.fulfill({ json: { issue: { ...issue, title: "Long title ".repeat(100), body: "x".repeat(120000) }, comments: [] } }));
   await page.goto(`/issues/${issue.id}`);
   await page.getByRole("button", { name: "Implement with r5d" }).click();
   const url = await page.evaluate(() => (window as unknown as { launchUrl: string }).launchUrl);
   const payload = JSON.parse(inflateSync(Buffer.from(new URL(url).hash.slice(1), "base64url")).toString());
-  expect(Object.keys(payload).sort()).toEqual(["v", "workItems"]);
+  expect(Object.keys(payload).sort()).toEqual(["share", "v", "workItems"]);
+  expect(payload.share).toEqual({ team: "demo", scope: "branch" });
   expect(payload.workItems[0].title).toHaveLength(500);
   expect(payload.workItems[0].snapshot).toHaveLength(100000);
 });
@@ -115,7 +117,7 @@ test("external badges appear on cards, table and details, refresh without losing
 
 test("unsafe integration launch URLs are refused", async ({ page, baseURL }) => {
   const { issue } = await seed(page, baseURL!);
-  await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "javascript:alert(1)", defaultShare: "none", projects: [] } }] } }));
+  await page.route("**/api/plugins", (route) => route.fulfill({ json: { baseUrl: "https://tracker.test", plugins: [{ id: "r5d", values: { baseUrl: "javascript:alert(1)", team: "demo", projects: [] } }] } }));
   await page.goto(`/issues/${issue.id}`);
   await expect(page.getByRole("button", { name: "Implement with r5d" })).toBeDisabled();
   await expect(page.getByText("The integration requires valid HTTP(S) base URLs.")).toBeVisible();
@@ -129,6 +131,10 @@ test("real browser GET plugin endpoints never expose secret fields", async ({ pa
   })));
   for (const result of results) {
     expect(result.status).toBe(200);
-    for (const plugin of result.body.plugins) expect(plugin.values).not.toHaveProperty("apiKey");
+    for (const plugin of result.body.plugins) {
+      expect(plugin.values).not.toHaveProperty("apiKey");
+      expect(plugin.values).not.toHaveProperty("defaultShare");
+      if (plugin.fields) expect(plugin.fields.map((field: { name: string }) => field.name)).not.toContain("defaultShare");
+    }
   }
 });
