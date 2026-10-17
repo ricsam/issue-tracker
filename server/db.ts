@@ -30,7 +30,7 @@ export function migrationWorkspaceOptions(options: MigrationWorkspaceOptions = {
   return { workspaceName, workspaceSlug };
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 = 23, options: MigrationWorkspaceOptions = {}) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 = 24, options: MigrationWorkspaceOptions = {}) {
   const migrationWorkspace = migrationWorkspaceOptions(options);
   const db = new Database(path, { create: true, strict: true });
   db.exec(
@@ -595,5 +595,29 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
     throw error;
   }
   db.exec("PRAGMA foreign_keys=ON");
+  if (targetVersion < 24) return db;
+  db.transaction(() => {
+    if (db.query("SELECT version FROM migrations WHERE version=24").get()) return;
+    db.exec(`ALTER TABLE project_boards ADD COLUMN defaultFilters TEXT;
+      CREATE TABLE personal_boards (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        workspaceId TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        config TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+      CREATE INDEX personal_boards_owner ON personal_boards(userId,workspaceId);
+      CREATE TABLE personal_board_cards (
+        boardId TEXT NOT NULL REFERENCES personal_boards(id) ON DELETE CASCADE,
+        issueId INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        lane TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY(boardId,issueId)
+      );
+      INSERT INTO migrations VALUES (24);`);
+  }).immediate();
   return db;
 }

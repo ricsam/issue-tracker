@@ -38,7 +38,7 @@ export function apiKeyAllows(key: ApiKeyInfo, path: string, method: string) {
   const dataRoute = /^\/api\/(projects|issues|comments|uploads)(\/|$)/.test(path)
     || (path === "/api/users" && method === "GET")
     || (method === "GET" && /^\/api\/workspaces(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(path))
-    || /^\/api\/me\/(pinned-projects|favorite-projects)(\/|$)/.test(path);
+    || /^\/api\/me\/(pinned-projects|favorite-projects|boards)(\/|$)/.test(path);
   return dataRoute && key.scopes.includes(["GET", "HEAD"].includes(method) ? "read" : "write");
 }
 

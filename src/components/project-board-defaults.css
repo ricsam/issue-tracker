@@ -1,0 +1,4 @@
+.project-board-defaults { margin: -4px 0 16px; font-size: 12px; }
+.project-board-defaults-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.project-board-defaults .btn { font-size: 12px; padding: 5px 8px; min-height: 32px; }
+.project-board-defaults .settings-help { margin: 4px 0 0; }

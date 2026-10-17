@@ -136,6 +136,27 @@ Read scope exposes `workspace_list`, `issue_lookup`, `issue_get`, `issue_list`, 
 | GET | `/api/uploads/:id/:name` | Authorized download following draft/saved-reference access; raster images inline, other files forced attachment with nosniff and restrictive CSP |
 | GET | `/healthz`, `/readyz` | Public minimal probes |
 
+## Personal boards and project filter defaults
+
+Personal boards are account-private, workspace-scoped saved views, not projects or shared board membership. Every `/api/me/boards` route derives the owner from authentication and the workspace from `X-Workspace-Slug`; clients cannot assign either. Other users (including administrators) and other workspaces get 404 for direct board IDs. Workspace access remains required. Users with read-only issue access may manage their own boards. API keys require read for GET and write for mutations; session writes require same-origin Origin.
+
+| Method | Route | Request and response |
+| --- | --- | --- |
+| GET | `/api/me/boards` | `{boards:PersonalBoard[]}` for this user and workspace |
+| POST | `/api/me/boards` | `{name, ...optionalConfig}` → 201 `{board:PersonalBoard}` with revision 1 |
+| GET | `/api/me/boards/:id` | `{board:PersonalBoard}` |
+| PATCH | `/api/me/boards/:id` | `{revision, ...partialConfig}` → `{board:PersonalBoard}` with incremented revision; stale revisions return 409 |
+| DELETE | `/api/me/boards/:id` | `{ok:true}`; deletes only the private view and placements, not issues |
+| PATCH | `/api/projects/:slug/board/default-filters` | `{filters:IssueFilterGroup\|null}` → `{board:BoardSettings}`; current owner only, active project, no administrator/creator bypass |
+
+Personal configuration fields: `name` (trimmed 1–100 characters), `filters`, `search` (up to 1,000 characters), `lanes`, `customLanes`, `laneLabels`, `cards`, `collapsedLanes`, and `hiddenLanes`. Built-in lane IDs are `todo`, `in_progress`, `done`; custom IDs use `custom_` followed by a v4 UUID. Keep at least one lane and no more than 30 custom definitions; labels must be unique, nonblank, and at most 60 characters. `cards` contains private placement/order overrides (`{issueId,lane}`), never shared project-board memberships. Issue IDs must be currently readable in the selected workspace; responses omit inaccessible placements. The browser derives matching issues from `/api/issues` using current permissions, not a stored membership list. Source-project lane filters use the same composite values as All issues, independently of the private placement.
+
+`IssueFilterGroup` is `{conjunction:"and"|"or",conditions:IssueFilter[]}`. Conditions contain `id`, `field`, `operator`, `value`, optionally `values` for multi-value operators or `valueTo` for created-date ranges. Supported fields are `number`, `title`, `labels`, `tagged`, `creator`, `created`, `project`, `lane`, `state`; project defaults exclude the project field. Operators are `is`, `isNot`, `isOneOf` (option fields), and `matchesEvery` (tags/tagged users). API writes strictly validate the bounded structure (at most 50 conditions) rather than silently dropping malformed conditions. Omitted personal filters default to State is Open; explicit empty conditions stay empty.
+
+Project `BoardSettings.defaultFilters` is optional: absent means no owner defaults; `{conditions:[],conjunction:"and"}` explicitly means no filters. PATCH with null removes defaults. Shared lane edits remain creator-only and never overwrite defaults. Browser filter edits never call this endpoint automatically: local overrides win over owner defaults, then the global open-state filter. Search/appearance changes alone do not create an override, and resetting local filters does not reset appearance or search.
+
+Migration v24 adds nullable `project_boards.defaultFilters`, `personal_boards`, and `personal_board_cards` with foreign keys and per-owner/workspace indexing. It is transactional/idempotent and leaves existing issues, project lanes, cards and timestamps unchanged. Back up all of `DATA_DIR` before upgrading; restore that backup for rollback.
+
 ## Sub-issues
 
 Migration 20 transactionally adds `issue_relationships` (one parent per child, indexed parent lookup, foreign keys and a self-link check). Startup is idempotent and preserves all existing data. Back up the data directory before upgrading; rollback requires restoring that backup.

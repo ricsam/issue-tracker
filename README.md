@@ -6,7 +6,7 @@ Threadline is a small, self-hosted issue tracker for an authenticated team. The 
 
 Use the workspace switcher for separate project collections and issue numbering. Public listing grants no access; hidden workspaces are visible only to members/admins. Membership defaults and project overrides provide None, Read, Create issues, Read + create issues, or Full access. Existing data migrates into **Default** (or a name/slug chosen before the first workspace migration), preserving IDs and numbers. Canonical issue links are `/w/SLUG/issues/NUMBER`; API mutations keep stable internal IDs. See [Workspaces](docs/guides/workspaces.mdx) for invitations, creation policy, permissions and migration, and [API scope](docs/api-contract.md#workspace-scope-and-identity) for integration changes.
 
-Upgrading to **0.28.0**? Read the [migration guide packaged with the Helm chart](charts/issue-tracker/README.md) before starting the new image, including one-time workspace naming, consistent backups, digest pinning and safe rollback.
+Upgrading to **0.29.0**? Read the [migration guide packaged with the Helm chart](charts/issue-tracker/README.md) before starting the new image, including one-time workspace naming, consistent backups, digest pinning and safe rollback.
 
 ## Behavior and security model
 
@@ -15,7 +15,7 @@ Upgrading to **0.28.0**? Read the [migration guide packaged with the Helm chart]
 - Unsaved uploads are uploader-only (with administrator recovery access). Once referenced by a saved issue, attachments follow issue access, including creator-only draft privacy with no administrator bypass. Saved attachment references inherit access from readable issues, comments, or history, evaluated on every download. Knowing a URL alone does not grant access.
 - The first local account is created atomically as an administrator. Claim it only over private access before exposing the service.
 - Administrators can create local members and configure OIDC. OIDC identities are bound to the provider issuer and subject; matching email addresses are never linked automatically. The provider must return a verified email. Local admin login remains available if OIDC is down.
-- Issues and projects are retained: issues can be closed and reopened, and projects archived and restored, but neither can be deleted. The application only exposes deletion for comments (by their author or an administrator).
+- Issues and projects are retained: issues can be closed and reopened, and projects archived and restored, but neither can be deleted. Comments can be deleted by their author or an administrator; personal boards can be deleted only by their owner, without deleting any issues.
 - Only the project creator can manage shared board lanes, with no administrator bypass. Owner transfers do not transfer this right. Card placement uses issue editing rights; personal collapse/hide preferences remain available. Migration backfills existing creators from recorded owners; new creators are immutable.
 - SQLite, uploads, and encrypted runtime settings live together under `DATA_DIR`.
 - Uploads are retained even when no issue or comment references them. The first release has no automatic orphan cleanup; include all of `/data` in backups and plan capacity accordingly.
@@ -57,6 +57,16 @@ Migration v15 adds personal pin ordering without removing existing favorites, in
 Migration v16 adds shared display-name overrides for built-in and custom lanes without changing lane IDs, issue placement, card order, or historical entries. Existing boards keep their current names. Back up `DATA_DIR` before upgrading; restore that backup for a rollback.
 
 Migration v17 adds personal drafts without changing existing issues, their state, content, history, or timestamps. Back up `DATA_DIR` before upgrading. Never run an older application against draft data: older versions do not enforce draft privacy; rollback requires restoring a pre-upgrade backup.
+
+## Personal boards and project filter defaults
+
+**Personal boards**, beside **All issues** in the workspace navigation, are private saved views of issues you can access in that workspace. Create a named board there, or use **Save as personal board** in All issues to copy its current filters and search. Combine **Tagged users is you** with **Project is A**, for example. Browse, rename, and delete your boards without affecting anybody else's views or the underlying issues.
+
+Filters, search, lane names/order, hidden and collapsed lanes, and personal card placements save automatically to your account on the backend and follow you across browsers. Matching issues are included without manual membership; use **Refresh issues** or reopen the board to fetch newly created/updated issues. Unplaced issues use the first personal lane (closed issues use Done when available). Moving a card changes only this personal board, never the shared project board or the issue's state. **Project board lane** filters refer to the original project placement, just as in All issues, independently of personal lanes. Read-only workspace access still permits managing your own views; personal boards never grant access to otherwise hidden issues. Check the saving indicator before leaving. Failed saves expose retry/reload controls; conflicting edits from another tab cannot silently overwrite the saved board.
+
+Project boards remain shared: only the **project creator** may change their lanes. Ordinary filter edits remain private to your account in the current browser's localStorage. The **project owner** can explicitly **Save filters as project default** or **Remove project default** on an active project. Applied filters use this precedence: **browser override → owner-defined default → State is Open**. An explicitly empty filter bar is an override, not a request for defaults. **Restore default filters** removes your local filter override without resetting search or lane visibility. Changing search or collapsing/hiding lanes alone does not create a filter override. Existing saved browser filters remain overrides after upgrading.
+
+Migration v24 additively creates private board/configuration tables and nullable project default filters, preserving existing boards, issue placements, and timestamps. Back up the full `DATA_DIR` before upgrading; use the matching backup for rollback.
 
 ## Issue table and mentions
 

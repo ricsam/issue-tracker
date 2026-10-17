@@ -22,7 +22,7 @@ let pendingWrites = 0;
 export const hasPendingWorkspaceWrites = () => pendingWrites > 0;
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const scoped = /^\/api\/(?:projects|issues|comments|users|uploads|plugins|me\/(?:pinned-projects|favorite-projects))(?:[/?#]|$)/.test(path);
+  const scoped = /^\/api\/(?:projects|issues|comments|users|uploads|plugins|me\/(?:pinned-projects|favorite-projects|boards))(?:[/?#]|$)/.test(path);
   const generation = workspaceGeneration;
   const headers = new Headers(init.headers);
   const targetWorkspace = headers.get("X-Workspace-Slug") || workspaceSlug;

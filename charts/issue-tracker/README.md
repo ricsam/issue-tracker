@@ -1,15 +1,20 @@
-# Threadline Helm chart — 0.28.0
+# Threadline Helm chart — 0.29.0
 
 ## Migration guide metadata
 
-- Chart/application release: **0.28.0**; application images are selected independently.
-- Target database migration: **22** (workspaces).
-- Upgrade from migration 19: runs **20** (sub-issues), **21** (close reasons), then **22**.
+- Chart/application release: **0.29.0**; application images are selected independently.
+- Target database migration: **24** (personal boards and project default filters).
+- Upgrade from 0.28.0/schema 22: runs **23** (permission sets and immutable project creator policy), then **24**.
+- Upgrade from migration 19: first runs **20** (sub-issues), **21** (close reasons), and **22** (workspaces), then **23** and **24**.
 - Execution: application startup, not a Helm hook or a separate migration Job.
 - This guide ships inside the chart archive as `issue-tracker/README.md`.
 - Source and complete operations guide: https://github.com/ricsam/issue-tracker/blob/main/docs/deployment/operations.mdx
 
-## Before the first workspace upgrade
+## Personal boards and permission migration
+
+Migration 23 preserves legacy grants while adding permission sets and backfilling immutable project creators (`creatorId` from `ownerId`). Migration 24 additively creates personal board/configuration tables and nullable project default filters. Personal boards start empty and project default filters remain unset; existing shared boards, issue placements, content and timestamps do not drift. No new deployment values are required. Personal boards do not grant access to otherwise inaccessible issues; verify owner-only board visibility and current issue access after upgrading.
+
+## Before the first workspace upgrade (historical migration 22)
 
 Migration 22 puts existing content into one initial workspace. Choose its name and URL slug **before the first startup of the new image**:
 
@@ -31,21 +36,21 @@ These settings initialize migration 22 only. Changing them after migration 22 ha
 4. Wait for release CI to pass and the intended image to be published. Resolve and record its immutable registry digest. Chart `appVersion` does not select an image and publishing a chart does not deploy it. Do not use `main`, invent a digest, or retain the old image while merely upgrading the chart.
 5. Merge the migration settings into the **existing production values**, keeping PVC, Secret, UID/GID, ingress, storage and other environment settings unchanged. Render and review the manifests before applying them.
 6. Upgrade with the explicitly pinned chart and image. Do **not** use `--atomic`: automatic old-image rollback is unsafe after database migration. Start exactly one instance and wait for readiness.
-7. Verify the resulting workspace name/slug and migration version; compare project/issue/comment/attachment counts and known IDs with the pre-upgrade inventory. Check a private project as both an authorized member and an outsider, a creator-only draft, read-only access, an attachment download, board placement, local login and OIDC. Inspect logs without exposing secrets. Only then resume writes/automation.
+7. Verify the resulting workspace name/slug and migration version **24**; check creator backfill, preserved legacy grants, empty initial personal boards and unset project default filters; compare project/issue/comment/attachment counts and known IDs with the pre-upgrade inventory. Check a private project as both an authorized member and an outsider, a creator-only draft, read-only access, an attachment download, board placement, local login and OIDC. Inspect logs without exposing secrets. Only then resume writes/automation.
 
 Example (replace every placeholder; `production-values.yaml` is the reviewed existing configuration):
 
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
 helm repo update
-helm show chart issue-tracker/issue-tracker --version 0.28.0
+helm show chart issue-tracker/issue-tracker --version 0.29.0
 # Confirm the published release image/digest after CI; tag@digest pins its bytes.
 export IMAGE_TAG='sha-<published-commit>@sha256:<verified-registry-digest>'
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.28.0 --namespace issue-tracker -f production-values.yaml \
+  --version 0.29.0 --namespace issue-tracker -f production-values.yaml \
   --set-string image.tag="$IMAGE_TAG"
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.28.0 --namespace issue-tracker -f production-values.yaml \
+  --version 0.29.0 --namespace issue-tracker -f production-values.yaml \
   --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 
@@ -61,4 +66,4 @@ Use the actual existing release name/namespace, not a new release. The template 
 
 ## Rollback and recovery
 
-An old image or `helm rollback` cannot undo migrations. If recovery is necessary, stop the new application and all writes first. Preserve the failed upgraded data separately if it contains newer writes. Restore the **matching pre-upgrade complete data backup and settings Secret**, then run its matching pre-upgrade image/chart with the original PVC/UID/ingress configuration. Verify integrity and permissions before resuming traffic. Do not run an older image against the migration-22 database, delete a PVC, or replace the encryption key as a troubleshooting shortcut.
+An old image or `helm rollback` cannot undo migrations. If recovery is necessary, stop the new application and all writes first. Preserve the failed upgraded data separately if it contains newer writes. Restore the **matching pre-upgrade complete data backup and settings Secret**, then run its matching pre-upgrade image/chart with the original PVC/UID/ingress configuration. Verify integrity and permissions before resuming traffic. Do not run an older image against the migration-24 database, delete a PVC, or replace the encryption key as a troubleshooting shortcut.

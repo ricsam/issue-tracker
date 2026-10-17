@@ -39,6 +39,8 @@ import { attachmentIds, canReadAttachment, retainAttachmentReferences } from "./
 import { PluginService, PluginError, type PluginDefinition } from "./plugins";
 import type { PluginEvent } from "../shared/plugins";
 import { registerMcp } from "./mcp";
+import { registerPersonalBoards } from "./personal-boards";
+import { issueFiltersField } from "./issue-filters";
 
 export interface AppOptions {
   dataDir?: string;
@@ -164,7 +166,7 @@ export function createApp(options: AppOptions = {}) {
     key = readFileSync(keyPath);
     if (key.length !== 32) throw new Error("Invalid persistent settings key");
   }
-  const db = openDatabase(resolve(dataDir, "app.sqlite"), 23, migrationWorkspace);
+  const db = openDatabase(resolve(dataDir, "app.sqlite"), 24, migrationWorkspace);
   // Legacy clients and saved uploads omit scope. Resolve by stable migration ID,
   // never by a literal slug which an operator may customize before first upgrade.
   const legacyWorkspaceSlug = () => (db.query("SELECT slug FROM workspaces WHERE id='default'").get() as { slug: string }).slug;
@@ -316,8 +318,8 @@ export function createApp(options: AppOptions = {}) {
   };
   const board = (projectId: string, user?: User): BoardSettings => {
     const row = db
-      .query("SELECT lanes,customLanes,laneLabels FROM project_boards WHERE projectId=?")
-      .get(projectId) as { lanes: string; customLanes: string; laneLabels: string } | null;
+      .query("SELECT lanes,customLanes,laneLabels,defaultFilters FROM project_boards WHERE projectId=?")
+      .get(projectId) as { lanes: string; customLanes: string; laneLabels: string; defaultFilters: string | null } | null;
     const cards = db
       .query(
         `SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? AND i.isDraft=0 ${user ? `AND ${visibleIssueSql}` : ''} ORDER BY b.position,i.number`,
@@ -326,6 +328,7 @@ export function createApp(options: AppOptions = {}) {
     const laneLabels: Record<string, string> = JSON.parse(row?.laneLabels ?? "{}");
     return {
       ...(Object.keys(laneLabels).length ? { laneLabels } : {}),
+      ...(row?.defaultFilters != null ? { defaultFilters: JSON.parse(row.defaultFilters) } : {}),
       lanes: row ? JSON.parse(row.lanes) : LANES.map((s) => s.value),
       customLanes: row ? JSON.parse(row.customLanes) : [],
       cards,
@@ -461,7 +464,7 @@ export function createApp(options: AppOptions = {}) {
     if (user && !isPublic && !publicDevice) {
       workspaces.acceptInvitations(user);
       const contentRoute = /^\/api\/(projects|issues|comments|uploads|plugins|users)(\/|$)/.test(path)
-        || /^\/api\/me\/(pinned-projects|favorite-projects)(\/|$)/.test(path);
+        || /^\/api\/me\/(pinned-projects|favorite-projects|boards)(\/|$)/.test(path);
       if (contentRoute) {
         // Native attachment images cannot send a custom request header.
         const attachmentWorkspace = c.req.method === "GET" && path.startsWith("/api/uploads/") ? c.req.query("workspace") : undefined;
@@ -481,6 +484,7 @@ export function createApp(options: AppOptions = {}) {
   );
   tokens.register(app, baseUrl);
   workspaces.register(app);
+  registerPersonalBoards(app, db, json);
   registerMcp(app, { tokens, baseUrl, publicUser });
   app.get("/healthz", (c) => c.json({ ok: true }));
   app.get("/readyz", (c) => {
@@ -782,6 +786,20 @@ export function createApp(options: AppOptions = {}) {
       rows.map(({ issueId, total, closed }) => [issueId, { total, closed }]),
     );
     return c.json({ progress });
+  });
+  app.patch("/api/projects/:slug/board/default-filters", async (c) => {
+    const user = c.get("user");
+    const p = activeProject(c.req.param("slug"), user);
+    if (p.ownerId !== user.id) fail(403, "Project owner required");
+    const input = z.object({ filters: issueFiltersField(false).nullable() }).strict().parse(await json(c));
+    db.transaction(() => {
+      const current = activeProject(p.slug, user);
+      if (current.ownerId !== user.id) fail(403, "Project owner required");
+      db.query(`INSERT INTO project_boards (projectId,lanes,customLanes,defaultFilters) VALUES (?,?,?,?)
+        ON CONFLICT(projectId) DO UPDATE SET defaultFilters=excluded.defaultFilters`)
+        .run(p.id, JSON.stringify(LANES.map((lane) => lane.value)), "[]", input.filters === null ? null : JSON.stringify(input.filters));
+    }).immediate();
+    return c.json({ board: board(p.id, user) });
   });
   app.patch("/api/projects/:slug/board", async (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));

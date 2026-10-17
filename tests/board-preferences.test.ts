@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { boardPreferencesKey, defaultBoardPreferences, parseBoardPreferences, serializeBoardPreferences, type BoardPreferences } from "../src/components/board-preferences";
+import { boardPreferencesKey, defaultBoardPreferences, hasBoardFilterOverride, parseBoardPreferences, resolveBoardFilters, serializeBoardPreferences, type BoardPreferences } from "../src/components/board-preferences";
 
 const openState = { id: "default-state", field: "state", operator: "is", value: "open" } as const;
 const parseFilters = (filters: unknown) => parseBoardPreferences(JSON.stringify({ filters })).filters;
@@ -79,6 +79,30 @@ test("hidden lanes migrate safely, deduplicate and remain independent of collaps
   expect(parsed.collapsedLanes).toEqual(["todo"]);
   expect(parseBoardPreferences(serializeBoardPreferences(parsed))).toEqual(parsed);
   expect(parseBoardPreferences(JSON.stringify({ hiddenLanes: false })).hiddenLanes).toEqual([]);
+});
+test("project defaults apply only without a local filter override, including explicit empty groups", () => {
+  const defaults: BoardPreferences["filters"] = { conjunction: "and", conditions: [{ id: "tag", field: "labels", operator: "is", value: "label:bug" }] };
+  expect(resolveBoardFilters(null, defaults)).toEqual(defaults);
+  expect(resolveBoardFilters(null, null)).toEqual(defaultBoardPreferences().filters);
+  expect(resolveBoardFilters(null, { conjunction: "and", conditions: [] }).conditions).toEqual([]);
+  for (const raw of ["invalid", "[]", "42", "{}", JSON.stringify({ filters: [] })]) {
+    expect(hasBoardFilterOverride(raw)).toBe(false);
+    expect(resolveBoardFilters(raw, defaults)).toEqual(defaults);
+  }
+  const local = defaultBoardPreferences();
+  local.filters = { conjunction: "or", conditions: [] };
+  expect(hasBoardFilterOverride(serializeBoardPreferences(local))).toBe(true);
+  expect(resolveBoardFilters(serializeBoardPreferences(local), defaults)).toEqual(local.filters);
+  expect(hasBoardFilterOverride(JSON.stringify({ filters: { tags: ["bug"] } }))).toBe(true);
+});
+test("appearance/search saves and restoring defaults do not pin inherited filters", () => {
+  const preferences = { ...defaultBoardPreferences(), search: "query", collapsedLanes: ["todo"], hiddenLanes: ["done"] };
+  const raw = serializeBoardPreferences(preferences, false);
+  expect(hasBoardFilterOverride(raw)).toBe(false);
+  expect(parseBoardPreferences(raw)).toEqual(preferences);
+  const newDefault: BoardPreferences["filters"] = { conjunction: "and", conditions: [{ id: "closed", field: "state", operator: "is", value: "closed" }] };
+  expect(resolveBoardFilters(raw, newDefault)).toEqual(newDefault);
+  expect(resolveBoardFilters(raw, null)).toEqual(defaultBoardPreferences().filters);
 });
 test("empty draft rules persist and defaults are independently mutable", () => {
   const filters: BoardPreferences["filters"] = { conjunction: "or", conditions: [{ id: "draft", field: "state", operator: "isNot", value: "" }] };

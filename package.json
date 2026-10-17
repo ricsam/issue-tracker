@@ -1,6 +1,6 @@
 {
   "name": "issue-tracker",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -15,7 +15,7 @@
     "test:cli:package": "bun scripts/test-cli-package.ts",
     "start": "bun server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test server cli tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/issue-filters.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts tests/copy-tooltip.test.tsx tests/board-preferences.test.ts tests/creation-preferences.test.ts tests/issue-pagination.test.ts tests/project-navigation.test.ts",
+    "test": "bun test server cli tests/editor.test.tsx tests/mention-editor.test.tsx tests/issue-references.test.tsx tests/issue-table.test.ts tests/issue-filters.test.ts tests/tag-autocomplete.test.ts tests/board-order.test.ts tests/copy-tooltip.test.tsx tests/board-preferences.test.ts tests/creation-preferences.test.ts tests/issue-pagination.test.ts tests/project-navigation.test.ts tests/personal-boards.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

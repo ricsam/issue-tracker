@@ -35,7 +35,7 @@ test("v23 preserves access rows, indexes, external triggers and foreign keys acr
     const triggers = db.query("SELECT name,sql FROM sqlite_schema WHERE type='trigger' ORDER BY name").all();
     db.close();
     db = openDatabase(path);
-    expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 23 });
+    expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 24 });
     expect(["workspace_members", "workspace_project_access", "workspace_invitations"].map((table) => db.query(`SELECT * FROM ${table} ORDER BY rowid`).all())).toEqual(before);
     expect(db.query("SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND name!='projects_creator_immutable' ORDER BY name").all()).toEqual(triggers);
     expect(db.query("SELECT name FROM sqlite_schema WHERE name='custom_member_access'").get()).not.toBeNull();

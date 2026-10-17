@@ -163,7 +163,7 @@ test("v16 additive migration defaults existing board overrides to empty and reru
   for (let i = 0; i < 2; i++) {
     db = openDatabase(path);
     try {
-      expect(db.query("SELECT * FROM project_boards").all()).toEqual([{ projectId: "p", lanes: '["todo"]', customLanes: "[]", laneLabels: "{}" }]);
+      expect(db.query("SELECT * FROM project_boards").all()).toEqual([{ projectId: "p", lanes: '["todo"]', customLanes: "[]", laneLabels: "{}", defaultFilters: null }]);
       expect(db.query("SELECT version FROM migrations WHERE version=16").all()).toEqual([{ version: 16 }]);
       expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     } finally { db.close(); }

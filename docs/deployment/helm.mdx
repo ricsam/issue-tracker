@@ -3,9 +3,13 @@ title: Deploy with Helm
 description: Install the published chart with persistent storage and private first-admin bootstrap.
 ---
 
-The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.28.0**. A chart version and an application image tag are separate choices.
+The standard Helm repository is `https://ricsam.github.io/issue-tracker`. This guide targets chart **0.29.0** and database schema **24**. A chart version and an application image tag are separate choices.
 
-## Migration 22: choose the initial workspace before upgrade
+## Migrations 23–24: permissions and personal boards
+
+From 0.28.0/schema 22, startup runs migration **23** (permission sets and immutable project creators), preserving legacy grants and backfilling creators, then **24** (personal boards and project default filters). Personal boards start empty and project default filters remain unset. Existing shared boards, placements, content and timestamps do not drift. No new deployment values are required. Back up the complete data directory and matching settings key before starting the new image; never roll back the application alone against migrated data.
+
+## Historical migration 22: choose the initial workspace before first run
 
 Release 0.28.0 introduces [workspaces](/guides/workspaces). Read the [migration guide packaged in the chart](https://github.com/ricsam/issue-tracker/blob/main/charts/issue-tracker/README.md) before starting a new image. From migration 19, startup runs migrations 20 (sub-issues), 21 (close reasons), and 22 (workspaces), preserving existing content.
 
@@ -31,11 +35,11 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-Verify `0.28.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.27.0 adds completed, not-planned and duplicate close reasons, an atomic **Close with comment** action beside Post comment, and board-card progress for accessible direct sub-issues. Closing/reopening preserves unsaved issue-body edits and board placement. The release retains nested sub-issues, [first-party plugins and r5d](/guides/plugins), the [MCP endpoint](/guides/mcp), and scoped API keys for the [Threadline CLI](/guides/cli). The npm CLI remains independently versioned.
+Verify `0.29.0` is listed before installing. Pinning the chart version keeps later releases from changing this install. Version 0.27.0 adds completed, not-planned and duplicate close reasons, an atomic **Close with comment** action beside Post comment, and board-card progress for accessible direct sub-issues. Closing/reopening preserves unsaved issue-body edits and board placement. The release retains nested sub-issues, [first-party plugins and r5d](/guides/plugins), the [MCP endpoint](/guides/mcp), and scoped API keys for the [Threadline CLI](/guides/cli). The npm CLI remains independently versioned.
 
 Migration v21 adds nullable close-reason and duplicate-target columns, backfilling existing closures as completed without changing content, boards, timestamps or historical entries. Upgrades from before 0.26.0 also run v20 (sub-issues); older upgrades run the intervening privacy, credential and plugin migrations. Back up all of `/data` and preserve the encryption-key Secret before upgrading. **Never use `--atomic`/`helm rollback` alone or run an older image against migrated data:** restore the pre-upgrade backup with its matching image/chart, preserving newer writes separately. No new deployment values are required. Keep the PVC binding, Secrets, OIDC settings and ingress host unchanged. Route `/mcp` and the JSON device endpoints unchanged, preserving Authorization; do not disable CSRF or TLS checks.
 
-**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.28.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.28.0), explicitly pinned to its verified published digest after CI; retaining an old image leaves the new endpoints unavailable even with the latest chart. Publishing the chart does not upgrade any running deployment.
+**Set a new application image tag when upgrading.** The chart never replaces an explicit `image.tag` with its `appVersion`. Use the verified SHA image from the [0.29.0 release notes](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.29.0), explicitly pinned to its verified published digest after CI; retaining an old image leaves the new endpoints unavailable even with the latest chart. Publishing the chart does not upgrade any running deployment.
 
 Version 0.23.0 adds creator-only personal draft issues, including protection against other administrators. Choose **Personal draft** on creation, use **State is Draft** in tables, and **Publish issue** to share the saved issue, comments, history, and attachments. Drafts remain off shared boards and still require project access.
 
@@ -89,7 +93,7 @@ The Secret value is canonical base64 text decoding to exactly 32 bytes. Kubernet
 
 ```sh
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --version 0.28.0 --namespace issue-tracker \
+  --version 0.29.0 --namespace issue-tracker \
   --set-string image.tag="$IMAGE_TAG" \
   --set-string baseUrl=https://issues.example.com \
   --set-string existingSecret=issue-tracker-settings
@@ -129,9 +133,9 @@ ingress:
 
 ```sh
 helm template issue-tracker issue-tracker/issue-tracker \
-  --version 0.28.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.29.0 --namespace issue-tracker -f production-values.yaml
 helm upgrade issue-tracker issue-tracker/issue-tracker \
-  --version 0.28.0 --namespace issue-tracker -f production-values.yaml
+  --version 0.29.0 --namespace issue-tracker -f production-values.yaml
 ```
 
 ## Storage and resources

@@ -2,7 +2,11 @@
 
 Issue Tracker is a single-instance application backed by SQLite. Its database, uploads, and encrypted runtime settings are all stored under `/data` and must survive pod replacement.
 
-## 0.28.0 workspace upgrade — read before starting
+## 0.29.0 personal boards upgrade — read before starting
+
+Chart/application 0.29.0 targets schema **24**. Upgrading from 0.28.0/schema 22 runs migration **23** (permission sets and immutable project creators), preserving legacy grants and backfilling creators, then **24** (personal boards and project default filters). Personal boards start empty and project default filters remain unset; existing shared boards, placements, content and timestamps do not drift. No new deployment values are required.
+
+### Historical workspace first-run settings
 
 Chart/application 0.28.0 introduces migration 22. An installation at migration 19 upgrades through sub-issues (20), close reasons (21), and workspaces (22). Existing content is preserved in one initial workspace, with its internal ID remaining `default`. Choose its display name and URL slug **before the first upgraded startup**:
 
@@ -26,7 +30,7 @@ helm repo update
 helm search repo issue-tracker --versions
 ```
 
-The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.28.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
+The commands below use a source checkout's `charts/issue-tracker`. Without a checkout, use `issue-tracker/issue-tracker --version 0.29.0` instead. Chart versions and application image tags are separate; select both explicitly for reproducible installs.
 
 ## 1. Build or select an image
 

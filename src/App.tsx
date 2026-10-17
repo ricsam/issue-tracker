@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Layers3, KeyRound, LayoutGrid, List, Plus, Settings, LogOut, Menu, X, ChevronRight } from "lucide-react";
+import { Layers3, KeyRound, LayoutGrid, Columns3, List, Plus, Settings, LogOut, Menu, X, ChevronRight } from "lucide-react";
 import type { AuthStatus, Issue, Project, User, Workspace } from "../shared/types";
 import { canCreateIssues } from "../shared/access";
 import { api, AUTH_EXPIRED_EVENT, message, setApiWorkspace, getApiWorkspace } from "./lib/api";
@@ -18,6 +18,8 @@ import { AuthPage } from "./pages/auth";
 import { ProjectsPage } from "./pages/projects";
 import { WorkspacesPage, WorkspaceSettingsPage, AdminWorkspacesPage } from "./pages/workspaces";
 const IssuesPage = lazy(() => import("./pages/issues").then(module => ({ default: module.IssuesPage })));
+const PersonalBoardsPage = lazy(() => import("./pages/personal-boards").then(module => ({ default: module.PersonalBoardsPage })));
+const PersonalBoardPage = lazy(() => import("./pages/personal-boards").then(module => ({ default: module.PersonalBoardPage })));
 const DetailPage = lazy(() => import("./pages/detail").then(module => ({ default: module.DetailPage })));
 const AdminPage = lazy(() => import("./pages/admin").then(module => ({ default: module.AdminPage })));
 const ApiAccessPage = lazy(() => import("./pages/api-access").then(module => ({ default: module.ApiAccessPage })));
@@ -150,6 +152,7 @@ function AppContent() {
           <nav aria-label="Workspace">{workspace && scopedReady && <>
             <SidebarCreateIssue />
             <NavLink end to={workspacePath(slug!, "/issues")} className="nav-item"><List size={18} />All issues</NavLink>
+            <NavLink to={workspacePath(slug!, "/boards")} className="nav-item"><Columns3 size={18} />Personal boards</NavLink>
             <NavLink end to={base} className="nav-item"><LayoutGrid size={18} />All projects</NavLink>
             <SidebarProjects projects={value.projects} />
             {workspace.canManage && <NavLink to={workspacePath(slug!, "/settings")} className="nav-item"><Settings size={18} />Workspace settings</NavLink>}
@@ -169,8 +172,8 @@ function AppContent() {
             {breadcrumbProject ? <Link to={base}>Projects</Link> : <Link to={workspacePath(slug ?? "", "/issues")}>All issues</Link>}<ChevronRight size={14} aria-hidden="true" />
             {breadcrumbProject && <><Link className="breadcrumb-project" to={projectPath(breadcrumbProject)} title={breadcrumbProject.name}>{breadcrumbProject.name}</Link><ChevronRight size={14} aria-hidden="true" /></>}
             <strong aria-current="page">{currentIssue ? `Issue !${currentIssue.number}` : "Issue details"}</strong>
-          </> : <strong aria-current="page">{location.pathname === "/settings/api-access" ? "API access" : location.pathname === "/cli/authorize" ? "Authorize CLI access" : location.pathname.startsWith("/admin") ? "Administration" : location.pathname.endsWith("/issues") ? "All issues" : location.pathname === "/workspaces" ? "Workspaces" : workspace?.name ?? "Workspaces"}</strong>}</nav>
-          <span className="topbar-right"><span className="online-dot" />Shared with your team</span>
+          </> : <strong aria-current="page">{location.pathname === "/settings/api-access" ? "API access" : location.pathname === "/cli/authorize" ? "Authorize CLI access" : location.pathname.startsWith("/admin") ? "Administration" : location.pathname.endsWith("/issues") ? "All issues" : /^\/w\/[^/]+\/boards(?:\/|$)/.test(location.pathname) ? "Personal boards" : location.pathname === "/workspaces" ? "Workspaces" : workspace?.name ?? "Workspaces"}</strong>}</nav>
+          <span className="topbar-right"><span className="online-dot" />{/^\/w\/[^/]+\/boards(?:\/|$)/.test(location.pathname) ? "Personal view · only you" : "Shared with your team"}</span>
         </header>
         <main id="main-content" tabIndex={-1} className="main-content"><ErrorNotice error={error} /><Suspense fallback={<Loading />}>
           {routeSlug && !workspace ? <section className="empty-state"><h1>Workspace unavailable</h1><p>You do not have access to this workspace. Ask its administrator for an invitation.</p><Link to="/workspaces">Browse workspaces</Link></section>
@@ -178,6 +181,8 @@ function AppContent() {
             : <Routes key={slug ?? "none"}>
               <Route path="/w/:workspaceSlug/projects" element={<ProjectsPage />} />
               <Route path="/w/:workspaceSlug/issues" element={<IssuesPage />} />
+              <Route path="/w/:workspaceSlug/boards" element={<PersonalBoardsPage />} />
+              <Route path="/w/:workspaceSlug/boards/:boardId" element={<PersonalBoardPage />} />
               <Route path="/w/:workspaceSlug/projects/:slug" element={<IssuesPage />} />
               <Route path="/w/:workspaceSlug/projects/:slug/board" element={<IssuesPage />} />
               <Route path="/w/:workspaceSlug/issues/:number" element={<DetailPage />} />

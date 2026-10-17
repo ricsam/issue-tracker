@@ -1,3 +1,5 @@
+import type { IssueFilterGroup } from "./issue-filters";
+export type { IssueFilter, IssueFilterField, IssueFilterGroup } from "./issue-filters";
 import type { ExternalLink } from "./plugins";
 
 export type Role = "admin" | "member";
@@ -87,7 +89,22 @@ export interface SubIssueProgress {
   total: number;
   closed: number;
 }
+export interface PersonalBoard extends BoardSettings {
+  id: string;
+  userId: string;
+  workspaceId: string;
+  name: string;
+  filters: IssueFilterGroup;
+  search: string;
+  collapsedLanes: string[];
+  hiddenLanes: string[];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface BoardSettings {
+  /** Project-only defaults; absent/null means application defaults. */
+  defaultFilters?: IssueFilterGroup | null;
   lanes: Lane[];
   customLanes: BoardLane[];
   /** Display-only overrides for built-in and custom lanes; omitted when empty. */

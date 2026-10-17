@@ -46,25 +46,43 @@ export function parseBoardPreferences(raw: string | null): BoardPreferences {
     };
   } catch { return fallback; }
 }
-export function serializeBoardPreferences(preferences: BoardPreferences) {
-  return JSON.stringify({ ...preferences, version: filterPreferencesVersion });
+export function serializeBoardPreferences(preferences: BoardPreferences, filtersOverridden = true) {
+  return JSON.stringify({ ...preferences, version: filterPreferencesVersion, filtersOverridden });
+}
+/** An explicit empty group is still an override. Appearance/search writes are not. */
+export function hasBoardFilterOverride(raw: string | null): boolean {
+  try {
+    const value = JSON.parse(raw ?? "null");
+    return !!value && typeof value === "object" && !Array.isArray(value)
+      && value.filtersOverridden !== false && !!value.filters && typeof value.filters === "object" && !Array.isArray(value.filters);
+  } catch { return false; }
+}
+export function resolveBoardFilters(raw: string | null, defaults?: BoardFilterState | null): BoardFilterState {
+  return hasBoardFilterOverride(raw) ? parseBoardPreferences(raw).filters : structuredClone(defaults ?? defaultIssueFilters);
 }
 function load(key: string | null) {
-  try { return parseBoardPreferences(key ? localStorage.getItem(key) : null); }
-  catch { return defaultBoardPreferences(); }
+  let raw: string | null = null;
+  try { raw = key ? localStorage.getItem(key) : null; } catch { /* Storage can be blocked. */ }
+  return { preferences: parseBoardPreferences(raw), filtersOverridden: hasBoardFilterOverride(raw) };
 }
 /** Scope changes load synchronously: never write the previous user's preferences to a new key. */
-export function useBoardPreferences(userId: string, boardId?: string) {
+export function useBoardPreferences(userId: string, boardId?: string, defaults?: BoardFilterState | null) {
   const key = boardId ? boardPreferencesKey(userId, boardId) : null;
-  const [stored, setStored] = useState(() => ({ key, value: load(key) }));
-  const value = stored.key === key ? stored.value : load(key);
-  if (stored.key !== key) setStored({ key, value });
-  function update(patch: Partial<BoardPreferences>) {
-    setStored((current) => {
-      const next = { ...(current.key === key ? current.value : load(key)), ...patch };
-      try { if (key) localStorage.setItem(key, serializeBoardPreferences(next)); } catch { /* Privacy/quota restrictions must not break controls. */ }
-      return { key, value: next };
+  const [stored, setStored] = useState(() => ({ key, ...load(key) }));
+  const current = stored.key === key ? stored : { key, ...load(key) };
+  if (stored.key !== key) setStored(current);
+  const value = { ...current.preferences, filters: current.filtersOverridden ? current.preferences.filters : defaults ?? defaultIssueFilters };
+  function persist(patch: Partial<BoardPreferences>, reset = false) {
+    setStored((previous) => {
+      const base = previous.key === key ? previous : { key, ...load(key) };
+      const filtersOverridden = reset ? false : patch.filters !== undefined || base.filtersOverridden;
+      const preferences = { ...base.preferences, ...patch };
+      try { if (key) localStorage.setItem(key, serializeBoardPreferences(preferences, filtersOverridden)); } catch { /* Privacy/quota restrictions must not break controls. */ }
+      return { key, preferences, filtersOverridden };
     });
   }
-  return [value, update] as const;
+  return [value, (patch: Partial<BoardPreferences>) => persist(patch), {
+    filtersOverridden: current.filtersOverridden,
+    resetFilters: () => persist({}, true),
+  }] as const;
 }

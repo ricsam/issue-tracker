@@ -73,6 +73,7 @@ import { boardDropAnchor, boardOrderTarget, type BoardOrderAction } from "../lib
 import { boardArrowTarget, boardSelectionRange, type BoardArrow } from "../lib/board-selection";
 import { BoardFilters, matchesBoardFilters } from "../components/board-filters";
 import { useBoardPreferences } from "../components/board-preferences";
+import { ProjectBoardDefaults } from "../components/project-board-defaults";
 import "./board-order.css";
 import "./board-preferences.css";
 
@@ -236,7 +237,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     cardMembershipKey, progressRevision);
   const [error, setError] = useState("");
   const [listQuery, setListQuery] = useState("");
-  const [boardPreferences, updateBoardPreferences] = useBoardPreferences(user.id, project?.id);
+  const [boardPreferences, updateBoardPreferences, boardFilterOverrides] = useBoardPreferences(user.id, project?.id, boardSettings.defaultFilters);
   const { filters: boardFilters, collapsedLanes, hiddenLanes } = boardPreferences;
   // Project List and Board have always shared their search when switching views.
   const query = all ? listQuery : boardPreferences.search;
@@ -770,6 +771,8 @@ function ProjectIssues({ slug }: { slug: string }) {
             {project && <ProjectAccessSummary project={project} />}
           </div>
           <div className="page-actions">
+            {all && <Link className="btn btn-secondary" to={workspacePath(workspace!.slug, "/boards")}
+              state={{ create: true, filters: tableState.filters, search: query }}><Columns3 size={16} />Save as personal board</Link>}
             {project && workspace?.id === "default" && (workspace.canManage || project.ownerId === user.id) && <Button variant="secondary" onClick={() => { if (canLeaveDetails()) setEditingAccess(true); }}>Manage access</Button>}
             {project && workspace?.id !== "default" && workspace?.canManage && <Link className="btn btn-secondary" to={workspacePath(workspace.slug, "/settings")}>Manage workspace access</Link>}
             {project?.access === "full" && !project.archivedAt && <>
@@ -834,6 +837,10 @@ function ProjectIssues({ slug }: { slug: string }) {
         </div>
         {board && <BoardFilters value={boardFilters} onChange={setBoardFilters}
           lanes={lanes} tags={existingTags} users={users} disabled={closingIssues || !!saving} />}
+        {board && project && <ProjectBoardDefaults slug={slug} defaults={boardSettings.defaultFilters} filters={boardFilters}
+          overridden={boardFilterOverrides.filtersOverridden} onReset={boardFilterOverrides.resetFilters}
+          owner={project.ownerId === user.id && !project.archivedAt} disabled={closingIssues || !!saving}
+          onSaved={(defaultFilters) => setBoardSettings((current) => ({ ...current, defaultFilters }))} />}
         <ErrorNotice error={error} />
         {board && subIssueProgress.error && <div className="board-progress-error">
           <ErrorNotice error={`Could not refresh sub-issue progress: ${subIssueProgress.error}`} />

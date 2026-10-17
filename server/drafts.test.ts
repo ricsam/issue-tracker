@@ -209,7 +209,7 @@ test("migration 17 preserves existing issues, child data and timestamps and surv
       expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(rows.map((row: any) => ({ ...row, workspaceId: "default", isDraft: 0, closeReason: row.closedAt === null ? null : "completed", duplicateOfId: null })));
       expect(db.query("SELECT * FROM board_issues").all()).toEqual(cards);
       expect(db.query("SELECT * FROM comments").all()).toEqual(comments);
-      expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 23 });
+      expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 24 });
       expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(() => db.exec("UPDATE issues SET isDraft=1 WHERE id=2")).toThrow();
     } finally { db.close(); }
