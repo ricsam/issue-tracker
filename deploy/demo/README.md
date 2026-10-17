@@ -4,14 +4,14 @@ Live URL: **https://issue-tracker.r5d.app**. Namespace `issue-tracker-demo`, Hel
 
 ## Reproducible deployment
 
-`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.28.0 and a verified published SHA image after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
+`values.yaml` preserves this deployment's host, storage, settings-key reference and resource settings. Select chart 0.29.0 and a verified published SHA image after CI succeeds; the image tag is deliberately required rather than tracking `main`. Pin a verified digest for reproducibility:
 
 ```sh
 helm repo add issue-tracker https://ricsam.github.io/issue-tracker
 helm repo update issue-tracker
-export IMAGE_TAG='sha-7735d06@sha256:cf88fec303aca182815bcbb0f29b9c9dcbc691f87f45382272ec3acd44feef33'
+export IMAGE_TAG='sha-c503af2@sha256:151eed46b69b198f305473efbe941af06833c806a8b0e5e1d1a4d37d28e74f17'
 helm upgrade --install issue-tracker issue-tracker/issue-tracker \
-  --kube-context ricsam --namespace issue-tracker-demo --version 0.28.0 \
+  --kube-context ricsam --namespace issue-tracker-demo --version 0.29.0 \
   -f deploy/demo/values.yaml --set-string image.tag="$IMAGE_TAG" --wait --timeout 5m
 ```
 
@@ -40,6 +40,27 @@ Secrets are not in Git. Recovery references:
 - Kubernetes `issue-tracker-demo/issue-tracker-settings` contains the unchanged settings-encryption key; the OIDC client secret is encrypted in the tracker database.
 
 Use the secure account-secret interface or authorized Kubernetes secret access for recovery; do not print values in logs or paste them into issues. Workspace synchronization does not back up Kubernetes data or Secrets.
+
+## Deployment verification, 2026-10-17 — personal boards 0.29.0
+
+- Application commit `c503af2a30d1ae9397dc43c4d13d2b7932ddacbb`; [CI](https://github.com/ricsam/issue-tracker/actions/runs/39018796751) passed full API/CLI/unit and isolated browser verification, CLI packaging, Helm checks and image publication. The first attempt hit an existing keyboard-focus test timing failure; 18 focused repetitions passed and the complete CI rerun passed without weakening assertions. [Documentation checks](https://github.com/ricsam/issue-tracker/actions/runs/39018796764) passed.
+- Image `ghcr.io/ricsam/issue-tracker:sha-c503af2@sha256:151eed46b69b198f305473efbe941af06833c806a8b0e5e1d1a4d37d28e74f17`, verified from registry manifest bytes. Helm revision **17**, chart/application **0.29.0**. Rendered changes were image and version labels only.
+- [Chart release](https://github.com/ricsam/issue-tracker/releases/tag/helm-issue-tracker-0.29.0) is published at `https://ricsam.github.io/issue-tracker`; package SHA-256 `f0ae5fc0b1de0a22fedd44bcbda927413f2aa9250e094b0ffba24a9f9ac2cc2e` matches the repository index and locally packaged source.
+- Stopped-writer migration rehearsal and live upgrade **22 → 24** passed SQLite integrity and foreign-key checks. All 29 existing tables were compared in rehearsal (only expected project creator backfill/default-filter columns changed). Live normalized content/file hashes matched the rehearsal: **2 users, 1 identity, 3 projects, 2 issues, 0 comments, 2 attachments, 1 board card, 9 history entries**. Existing workspace identity, membership/grants and encrypted OIDC/plugin settings were preserved.
+- PVC UID/spec/PV binding, ingress UID/spec and all three Secret UIDs/data were unchanged. One ready pod, zero restarts; public HTTPS `/readyz` passed. No application-only rollback or `--atomic` was used.
+- The owner's existing signed-in Chrome session opened [Personal boards](https://issue-tracker.r5d.app/w/richies-workspace/boards) as Richie. Recovery-admin login, closed-signup OIDC configuration, enabled r5d plugin, project-board reads and temporary personal-board create/save/read/revision-conflict/delete checks passed. The temporary board was removed, recovery login logged out, and final inventory matched the preserved content. No shared project defaults or existing issues were changed. Fresh OAuth, attachment downloads and live multi-user isolation were not retested; isolation is covered by automated tests.
+- Local verification: **297 API/CLI/unit tests**, **19 focused browser tests**, an additional isolated remainder sweep and focused CI-flake repetitions passed; full release CI repeated the complete suite. Typecheck, production build and strict Helm lint/render passed.
+
+### Personal-board upgrade recovery copies
+
+The application was stopped before an owned read-only backup pod mounted the original PVC. Full data, all application Secrets, Helm values/manifests/release records, storage/routing inventory and chart 0.28.0 were copied securely to:
+
+- `hetzner-kata-2:/home/r5d-backups/issue-tracker/pre-0.29.0-4a595e59-5382-4935-983f-77f070641d1f-qYQnWx/`
+- `hetzner-ceph-1:/home/r5d-backups/issue-tracker/pre-0.29.0-4a595e59-5382-4935-983f-77f070641d1f-uXkUUz/`
+
+Both root-owned 0700 directories contain matching `data.tar.gz` SHA-256 `bfa1aca86d0ccb1bc1c29af0e18c0f1328169d14f43881bc363dbcd5a0fbce25`; sensitive archives are 0600. Extracted copies passed integrity/foreign-key/count checks at migration 22. `SHA256SUMS`, `verification.json`, rehearsal and post-upgrade inventories/checksums are retained on both hosts. The temporary backup pod was deleted. Preserve these and all older recovery copies.
+
+Rollback requires preserving newer writes separately, restoring this matching complete pre-upgrade data/key backup, and chart **0.28.0** with image `sha-7735d06@sha256:cf88fec303aca182815bcbb0f29b9c9dcbc691f87f45382272ec3acd44feef33`. Never run that old image against migration 24.
 
 ## Deployment verification, 2026-10-16 — workspaces 0.28.0
 
