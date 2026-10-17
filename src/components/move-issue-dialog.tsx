@@ -1,15 +1,19 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { Issue } from "../../shared/types";
+import { canCreateIssues } from "../../shared/access";
 import { api, message } from "../lib/api";
-import { useWorkspace, canCreateInWorkspace } from "../lib/workspace";
+import { useWorkspace, canCreateInWorkspace, canCreateProjectsInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import "./move-issue-dialog.css";
 
 export function MoveIssueDialog({ issue, onMoved, onClose, onBusyChange }: {
   issue: Issue; onMoved: (issue: Issue) => void; onClose: () => void; onBusyChange: (busy: boolean) => void;
 }) {
-  const { projects, workspace } = useWorkspace();
-  const destinations = projects.filter(project => !project.archivedAt && project.access === "full");
+  const { projects, workspace, user } = useWorkspace();
+  const ownIssue = issue.authorId === user.id;
+  const canMoveUnassigned = canCreateProjectsInWorkspace(workspace) || ownIssue && canCreateInWorkspace(workspace);
+  const destinations = projects.filter(project => !project.archivedAt && (project.access === "full" || ownIssue && canCreateIssues(project.access)));
+  const currentProject = projects.find(project => project.id === issue.projectId);
   const [projectId, setProjectId] = useState(issue.projectId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +21,7 @@ export function MoveIssueDialog({ issue, onMoved, onClose, onBusyChange }: {
   const changed = projectId !== (issue.projectId ?? "");
   async function move(event: FormEvent) {
     event.preventDefault();
-    if (!changed || submitting.current || issue.access !== "full" || (projectId ? !destinations.some(project => project.id === projectId) : !canCreateInWorkspace(workspace))) return;
+    if (!changed || submitting.current || issue.access !== "full" || (projectId ? !destinations.some(project => project.id === projectId) : !canMoveUnassigned)) return;
     submitting.current = true;
     setBusy(true);
     onBusyChange(true);
@@ -32,7 +36,8 @@ export function MoveIssueDialog({ issue, onMoved, onClose, onBusyChange }: {
   return <Modal open title="Move issue" description="Choose a project for this issue." onOpenChange={(open) => { if (!open && !submitting.current) onClose(); }} className="move-issue-dialog">
     <form className="form-stack" onSubmit={move} aria-busy={busy}>
       <label>Destination project<select value={projectId} disabled={busy} onChange={(event) => setProjectId(event.target.value)}>
-        {canCreateInWorkspace(workspace) && <option value="">No project</option>}
+        {(canMoveUnassigned || !issue.projectId) && <option value="" disabled={!canMoveUnassigned}>No project</option>}
+        {currentProject && !destinations.some(project => project.id === currentProject.id) && <option value={currentProject.id} disabled>{currentProject.name}</option>}
         {destinations.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
       </select></label>
       <p className="muted">Moving removes any placement on the previous project’s board. It does not add this issue to the destination board. Issue identity, comments, and unsaved drafts are preserved.</p>

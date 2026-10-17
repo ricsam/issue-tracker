@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSPrope
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Layers3, KeyRound, LayoutGrid, List, Plus, Settings, LogOut, Menu, X, ChevronRight } from "lucide-react";
 import type { AuthStatus, Issue, Project, User, Workspace } from "../shared/types";
+import { canCreateIssues } from "../shared/access";
 import { api, AUTH_EXPIRED_EVENT, message, setApiWorkspace, getApiWorkspace } from "./lib/api";
 import { WorkspaceContext, WorkspaceSelector, workspacePath, projectPath, issuePath, canEnterWorkspace, canCreateInWorkspace, useWorkspace, confirmWorkspaceSwitch } from "./lib/workspace";
 import { PinnedProjectsProvider } from "./lib/pinned-projects";
@@ -26,7 +27,7 @@ const StandaloneCreateIssue = lazy(() => import("./components/create-issue-dialo
 function SidebarCreateIssue() {
   const open = useIssueCreation();
   const { workspace, projects } = useWorkspace();
-  if (!canCreateInWorkspace(workspace) && !projects.some(p => p.access === "full" && !p.archivedAt)) return null;
+  if (!canCreateInWorkspace(workspace) && !projects.some(p => canCreateIssues(p.access) && !p.archivedAt)) return null;
   return <Tooltip content={newIssueTooltip()}><button type="button" className="nav-item sidebar-create-issue" onClick={open}
     aria-label="Create issue (Alt+N)" aria-keyshortcuts={NEW_ISSUE_KEYS}>
     <Plus size={18} /><span>Create issue</span><kbd>Alt N</kbd>

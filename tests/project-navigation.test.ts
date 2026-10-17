@@ -4,7 +4,7 @@ import { projectNavigation } from "../src/lib/project-navigation";
 
 const project = (id: string, overrides: Partial<Project> = {}): Project => ({
   workspaceId: "default", workspaceSlug: "default", access: "full",
-  id, name: id, slug: id, description: "", visibility: "public", ownerId: "user", sharedUserIds: [],
+  id, name: id, slug: id, description: "", visibility: "public", ownerId: "user", creatorId: "user", canManageLanes: true, sharedUserIds: [],
   createdAt: "2026-01-01T00:00:00.000Z", lastIssueUpdatedAt: null,
   archivedAt: null, archivedById: null, issueCount: 0, openCount: 0, ...overrides,
 });

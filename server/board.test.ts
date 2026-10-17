@@ -138,7 +138,7 @@ test("v4 migration retains default visibility and populated hidden lane placemen
   }
 });
 
-test("explicit board defaults, auth/CSRF, member edits, submitted lane order and restart", async () => {
+test("explicit board defaults, authentication/CSRF, creator lane policy, submitted order and restart", async () => {
   const f = await fixture();
   const issue = (await (await f.create()).json()).issue;
   expect(await f.get()).toEqual(defaults);
@@ -191,7 +191,9 @@ test("explicit board defaults, auth/CSRF, member edits, submitted lane order and
     },
     body: JSON.stringify({ lanes: ["done", "todo"] }),
   });
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(403);
+  expect(await f.get()).toEqual(defaults);
+  expect((await f.set({ lanes: ["done", "todo"] })).status).toBe(200);
   expect((await f.add([issue.id])).status).toBe(200);
   const saved = {
     customLanes: [],

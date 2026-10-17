@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect } from "react";
 import { hasPendingWorkspaceWrites } from "./api";
 import type { Project, User, Workspace } from "../../shared/types";
+import { canCreateIssues } from "../../shared/access";
 export interface WorkspaceContextValue {
   user: User;
   users: User[];
@@ -35,7 +36,8 @@ export const workspacePath = (slug: string, path = "/projects") => `/w/${encodeU
 export const projectPath = (project: Pick<Project, "workspaceSlug" | "slug">) => workspacePath(project.workspaceSlug, `/projects/${encodeURIComponent(project.slug)}`);
 export const issuePath = (issue: { workspaceSlug: string; number: number }) => workspacePath(issue.workspaceSlug, `/issues/${issue.number}`);
 export const canEnterWorkspace = (workspace: Workspace) => workspace.role !== null || workspace.canManage;
-export const canCreateInWorkspace = (workspace: Workspace | null) => !!workspace && (workspace.canManage || workspace.defaultAccess === "full");
+export const canCreateProjectsInWorkspace = (workspace: Workspace | null) => !!workspace && (workspace.canManage || workspace.defaultAccess === "full");
+export const canCreateInWorkspace = (workspace: Workspace | null) => !!workspace && (workspace.canManage || canCreateIssues(workspace.defaultAccess));
 export function WorkspaceSelector({ onBeforeChange, disabled = false }: { onBeforeChange?: () => boolean; disabled?: boolean }) {
   const { workspace, workspaces, selectWorkspace } = useWorkspace();
   const accessible = workspaces.filter(canEnterWorkspace);

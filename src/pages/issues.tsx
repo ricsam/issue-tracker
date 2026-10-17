@@ -38,6 +38,7 @@ import {
   type BoardLane,
 } from "../../shared/types";
 import { moveLaneTo, orderedLanes } from "../../shared/board";
+import { canCreateIssues } from "../../shared/access";
 import { api, message } from "../lib/api";
 import { useWorkspace, issuePath, workspacePath, canCreateInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
@@ -195,6 +196,8 @@ function ProjectIssues({ slug }: { slug: string }) {
     if (previous.name !== sharedProject.name) changes.name = sharedProject.name;
     if (previous.description !== sharedProject.description) changes.description = sharedProject.description;
     if (previous.archivedAt !== sharedProject.archivedAt) Object.assign(changes, { archivedAt: sharedProject.archivedAt, archivedById: sharedProject.archivedById });
+    if (previous.access !== sharedProject.access) changes.access = sharedProject.access;
+    if (previous.canManageLanes !== sharedProject.canManageLanes) changes.canManageLanes = sharedProject.canManageLanes;
     const keys = Object.keys(changes) as (keyof Project)[];
     if (keys.length) setProject((current) => current?.id === sharedProject.id && keys.some((key) => current[key] !== changes[key]) ? { ...current, ...changes } : current);
   }, [sharedProject]);
@@ -418,7 +421,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || (next && !boardSettings.lanes.includes(next))) return;
     const placed = new Map(boardSettings.cards.map((card) => [card.issueId, card.lane]));
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
-    const targets = ids.flatMap((id) => visibleBoardCards.some((card) => card.issueId === id) && placed.has(id) && byId.has(id) ? [byId.get(id)!] : []);
+    const targets = ids.flatMap((id) => visibleBoardCards.some((card) => card.issueId === id) && placed.has(id) && byId.get(id)?.access === "full" ? [byId.get(id)!] : []);
     if (!targets.length) return;
     boardRange.current = null;
     boardBusy.current = true;
@@ -457,7 +460,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     }
   }
   async function reorderCards(ids: string[], lane: Lane, beforeIssueId: string | null) {
-    ids = ids.filter((id) => visibleBoardCards.some((card) => card.issueId === id));
+    ids = ids.filter((id) => visibleBoardCards.some((card) => card.issueId === id) && issues.some(issue => issue.id === id && issue.access === "full"));
     if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || !ids.length || !boardSettings.lanes.includes(lane)) return;
     boardRange.current = null;
     boardBusy.current = true;
@@ -511,7 +514,7 @@ function ProjectIssues({ slug }: { slug: string }) {
     requestAnimationFrame(() => focusLane());
   }
   async function saveLane(lane: Lane, label?: string) {
-    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt) throw new Error("The board is busy or read-only. Try again.");
+    if (saving || bulkClosing.current || boardBusy.current || !project?.canManageLanes || project.archivedAt) throw new Error("Only the project creator can manage lanes on an active board.");
     boardBusy.current = true;
     setSaving(`lane:${lane}`);
     try {
@@ -530,7 +533,7 @@ function ProjectIssues({ slug }: { slug: string }) {
   async function reorderLane(lane: Lane, target: Lane) {
     const previous = boardSettings;
     const index = previous.lanes.indexOf(target);
-    if (saving || bulkClosing.current || boardBusy.current || project?.archivedAt || lane === target || index < 0 || !previous.lanes.includes(lane))
+    if (saving || bulkClosing.current || boardBusy.current || !project?.canManageLanes || project.archivedAt || lane === target || index < 0 || !previous.lanes.includes(lane))
       return;
     boardBusy.current = true;
     setSaving(`lane:${lane}`);
@@ -569,10 +572,13 @@ function ProjectIssues({ slug }: { slug: string }) {
       </>
     );
   // Archived projects are read-only until restored.
-  const readOnly = all ? !canCreateInWorkspace(workspace) && !projects.some(p => p.access === "full" && !p.archivedAt) : !!project?.archivedAt || project?.access !== "full";
+  const canCreate = all ? canCreateInWorkspace(workspace) || projects.some(p => canCreateIssues(p.access) && !p.archivedAt) : !project?.archivedAt && canCreateIssues(project?.access);
+  const writableIds = new Set(issues.filter(issue => issue.access === "full" && !projects.find(p => p.id === issue.projectId)?.archivedAt).map(issue => issue.id));
+  const readOnly = !!project?.archivedAt || (project?.access !== "full" && !writableIds.size);
+  const canManageLanes = !!project?.canManageLanes && !project.archivedAt;
   const lanes = orderedLanes(boardSettings.lanes, boardSettings.customLanes, boardSettings.laneLabels);
   const shownLanes = lanes.filter((lane) => !hiddenLanes.includes(lane.value));
-  const canReorderLanes = shownLanes.length > 1 && !saving && !closingIssues && !readOnly;
+  const canReorderLanes = shownLanes.length > 1 && !saving && !closingIssues && canManageLanes;
   const dragFrom = laneDrag
     ? shownLanes.findIndex((lane) => lane.value === laneDrag.lane)
     : -1;
@@ -595,13 +601,14 @@ function ProjectIssues({ slug }: { slug: string }) {
   const boardColumns = shownLanes.map((lane) => collapsedLanes.includes(lane.value) ? [] : filtered.filter((issue) => placements.get(issue.id) === lane.value).map((issue) => issue.id));
   const boardOrder = boardColumns.flat();
   const boardOrderKey = JSON.stringify([query, boardFilters, boardSettings.lanes, boardColumns]);
-  const selectedBoard = boardSelection.filter((id) => boardOrder.includes(id));
+  const writableBoardOrder = boardOrder.filter(id => writableIds.has(id));
+  const selectedBoard = boardSelection.filter((id) => writableBoardOrder.includes(id));
   function selectBoardIssue(id: string, checked: boolean, range = false) {
     if (saving || readOnly) return;
     boardRange.current = null;
     const anchor = boardAnchor.current ? boardOrder.indexOf(boardAnchor.current) : -1;
     const index = boardOrder.indexOf(id);
-    const targets = range && anchor >= 0 ? boardOrder.slice(Math.min(anchor, index), Math.max(anchor, index) + 1) : [id];
+    const targets = (range && anchor >= 0 ? boardOrder.slice(Math.min(anchor, index), Math.max(anchor, index) + 1) : [id]).filter(id => writableIds.has(id));
     setBoardSelection((current) => checked ? [...new Set([...current, ...targets])] : current.filter((item) => !targets.includes(item)));
     if (!range || anchor < 0) boardAnchor.current = id;
   }
@@ -626,7 +633,7 @@ function ProjectIssues({ slug }: { slug: string }) {
       const range = boardRange.current;
       range.head = next;
       boardAnchor.current = range.anchor;
-      setBoardSelection([...new Set([...range.base, ...boardSelectionRange(boardColumns, range.anchor, next)])]);
+      setBoardSelection([...new Set([...range.base, ...boardSelectionRange(boardColumns, range.anchor, next)])].filter(id => writableIds.has(id)));
     } else {
       if (next === source) return;
       const issue = issueById.get(next);
@@ -638,11 +645,13 @@ function ProjectIssues({ slug }: { slug: string }) {
   }
   function selectLane(ids: string[], checked: boolean) {
     if (saving || readOnly) return;
+    ids = ids.filter(id => writableIds.has(id));
     boardRange.current = null;
     boardAnchor.current = null;
     setBoardSelection((current) => checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)));
   }
   function issueCard(i: Issue) {
+    const cardReadOnly = readOnly || !writableIds.has(i.id);
     const checked = selectedBoard.includes(i.id);
     const targets = checked ? selectedBoard : [i.id];
     const currentLane = targets.every((id) => placements.get(id) === placements.get(i.id)) ? placements.get(i.id) : undefined;
@@ -687,7 +696,7 @@ function ProjectIssues({ slug }: { slug: string }) {
         }}
       >
         <div className="board-card-toolbar">
-          <input type="checkbox" aria-label={`Select issue !${i.number}`} checked={checked} disabled={!!saving || readOnly}
+          <input type="checkbox" aria-label={`Select issue !${i.number}`} checked={checked} disabled={!!saving || cardReadOnly}
             onClick={(event) => {
               if (event.shiftKey) selectBoardIssue(i.id, !checked, true);
             }}
@@ -697,9 +706,9 @@ function ProjectIssues({ slug }: { slug: string }) {
           <Tooltip content="Drag to reorder or move issue; use Board actions for keyboard controls"><span
             className="board-card-handle"
             aria-label={`Drag issue !${i.number}`}
-            draggable={!saving && !readOnly}
+            draggable={!saving && !cardReadOnly}
             onDragStart={(event) => {
-              if (saving || readOnly) { event.preventDefault(); return; }
+              if (saving || cardReadOnly) { event.preventDefault(); return; }
               cardDrag.current = [...targets];
               setCardDrop(null);
               event.dataTransfer.setData("text/plain", i.id);
@@ -713,7 +722,7 @@ function ProjectIssues({ slug }: { slug: string }) {
             onDragEnd={() => { cardDrag.current = []; setCardDrop(null); }}
           ><GripVertical size={14} className="drag-hint" /></span></Tooltip>
           <BoardActionsMenu label={`Board actions for issue !${i.number}`} lanes={lanes} currentLane={currentLane}
-            count={targets.length} disabled={!!saving || readOnly} {...reorderActions(targets)}
+            count={targets.length} disabled={!!saving || cardReadOnly} {...reorderActions(targets)}
             onMove={(lane) => void changeBoard(targets, lane)} onRemove={() => void changeBoard(targets)} />
         </div>
         <Link
@@ -763,18 +772,18 @@ function ProjectIssues({ slug }: { slug: string }) {
           <div className="page-actions">
             {project && workspace?.id === "default" && (workspace.canManage || project.ownerId === user.id) && <Button variant="secondary" onClick={() => { if (canLeaveDetails()) setEditingAccess(true); }}>Manage access</Button>}
             {project && workspace?.id !== "default" && workspace?.canManage && <Link className="btn btn-secondary" to={workspacePath(workspace.slug, "/settings")}>Manage workspace access</Link>}
-            {!readOnly && <>
-              {project && <>
+            {project?.access === "full" && !project.archivedAt && <>
                 <Button variant="secondary" onClick={() => { setProjectSaved(""); setEditingProject(true); }}>Edit project</Button>
                 <ArchiveProjectButton project={project} onChange={setProject} />
-              </>}
-              <Button disabled={!!saving} onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+            </>}
+            {canCreate && <Button disabled={!!saving} onClick={() => setOpen(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                 <Plus size={16} />
                 Create issue
-              </Button>
-            </>}
+              </Button>}
           </div>
         </header>
+        {project?.access === "create-issue" && <p className="read-only-note">You can create issues and view, edit, and comment on your own issues only.</p>}
+        {project?.access === "read+create-issue" && <p className="read-only-note">You can view all published issues, create issues, and edit and comment on your own issues.</p>}
         <Snackbar message={projectSaved} onDismiss={dismissProjectSaved} />
         {project?.archivedAt && project.access === "full" && (
           <ArchivedProjectNotice project={project} onChange={setProject} />
@@ -838,7 +847,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 {` · ${issues.length - boardIssues.length} unassigned · ${lanes.length} lanes`}
                 {hiddenCount > 0 && ` · ${hiddenCount} issues in hidden lanes`}
               </p>
-              <Button variant="ghost" disabled={!!saving || readOnly || !boardOrder.length} onClick={() => { boardRange.current = null; boardAnchor.current = null; setBoardSelection(boardOrder); }}>Select visible issues</Button>
+              <Button variant="ghost" disabled={!!saving || readOnly || !writableBoardOrder.length} onClick={() => { boardRange.current = null; boardAnchor.current = null; setBoardSelection(writableBoardOrder); }}>Select visible issues</Button>
               <span className="issue-selection-count">{selectedBoard.length} selected</span>
               {selectedBoard.length > 0 && <>
                 <BoardActionsMenu label="Selected board issue actions" text="Board actions" count={selectedBoard.length} lanes={lanes}
@@ -887,6 +896,7 @@ function ProjectIssues({ slug }: { slug: string }) {
                 const cards = filtered.filter(
                   (i) => placements.get(i.id) === s.value,
                 );
+                const writableCards = cards.filter(issue => writableIds.has(issue.id));
                 return (
                   <section
                     className={`board-column${collapsed ? " is-collapsed" : ""}${laneDrag?.lifted && laneDrag.lane === s.value ? " is-lane-dragging" : ""}${drop}${cardDrop?.lane === s.value && cardDrop.targetId === null ? " card-drop-end" : ""}`}
@@ -936,9 +946,9 @@ function ProjectIssues({ slug }: { slug: string }) {
                       className="board-lane-select"
                       type="checkbox"
                       aria-label={`Select all visible issues in ${s.label}`}
-                      checked={cards.length > 0 && cards.every((issue) => selectedBoard.includes(issue.id))}
-                      ref={(element) => { if (element) element.indeterminate = cards.some((issue) => selectedBoard.includes(issue.id)) && !cards.every((issue) => selectedBoard.includes(issue.id)); }}
-                      disabled={!!saving || readOnly || collapsed || !cards.length}
+                      checked={writableCards.length > 0 && writableCards.every((issue) => selectedBoard.includes(issue.id))}
+                      ref={(element) => { if (element) element.indeterminate = writableCards.some((issue) => selectedBoard.includes(issue.id)) && !writableCards.every((issue) => selectedBoard.includes(issue.id)); }}
+                      disabled={!!saving || readOnly || collapsed || !writableCards.length}
                       onChange={(event) => selectLane(cards.map((issue) => issue.id), event.target.checked)}
                     /></Tooltip>
                     <Tooltip content={canReorderLanes ? "Drag to reorder lanes" : undefined}><h2
@@ -959,14 +969,14 @@ function ProjectIssues({ slug }: { slug: string }) {
                       }}
                       onDragEnd={() => setLaneDrag(null)}
                     >
-                      {lanes.length > 1 && !readOnly && (
+                      {lanes.length > 1 && canManageLanes && (
                         <GripVertical size={13} className="lane-grip" />
                       )}
                       <span className={`lane-dot ${s.value}`} />
                       <span className="lane-name">{s.label}</span>
                       <span className="count">{cards.length}</span>
                     </h2></Tooltip>
-                    <BoardLaneMenu lane={s} collapsed={collapsed} disabled={!!saving || !!laneDrag} readOnly={readOnly}
+                    <BoardLaneMenu lane={s} collapsed={collapsed} disabled={!!saving || !!laneDrag} readOnly={!canManageLanes}
                       canRemove={lanes.length > 1} canMoveLeft={index > 0} canMoveRight={index < shownLanes.length - 1}
                       onCollapse={() => updateBoardPreferences({ collapsedLanes: collapsed ? collapsedLanes.filter((lane) => lane !== s.value) : [...collapsedLanes, s.value] })}
                       onHide={() => hideLane(s)}
@@ -1088,7 +1098,7 @@ function ProjectIssues({ slug }: { slug: string }) {
           settings={boardSettings}
           hiddenLanes={hiddenLanes}
           onHiddenLanesChange={(lanes) => updateBoardPreferences({ hiddenLanes: lanes })}
-          readOnly={readOnly}
+          readOnly={!canManageLanes}
           onSaved={boardSaved}
           onClose={() => setConfigureBoard(false)}
           onClosed={() => focusLane()}
@@ -1105,8 +1115,8 @@ function ProjectIssues({ slug }: { slug: string }) {
       )}
       {open && (
         <CreateIssueDialog
-          project={readOnly ? null : project}
-          existingTags={readOnly ? undefined : existingTags}
+          project={canCreate ? project : null}
+          existingTags={canCreate ? existingTags : undefined}
           onCreated={issueCreated}
           onBoardChanged={listBoardChanged}
           onClose={() => setOpen(false)}

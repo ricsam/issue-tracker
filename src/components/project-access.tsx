@@ -1,18 +1,20 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { Project } from "../../shared/types";
+import { permissionLabel } from "../../shared/access";
 import { api, message } from "../lib/api";
 import { useWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import "./project-access.css";
 
-export const accessExplanation = "Legacy project visibility applies to migrated Default workspace memberships. Members with workspace permissions use their default access and project overrides instead.";
+export const accessExplanation = "Legacy project visibility applies to migrated Default workspace memberships. Members with workspace permissions use their default permissions and project-scoped overrides instead.";
 
 export function ProjectAccessSummary({ project }: { project: Project }) {
   const { users } = useWorkspace();
   const owner = users.find((user) => user.id === project.ownerId);
-  if (project.workspaceId !== "default") return <div className="project-access-summary" aria-label="Project access"><span className="tag">{project.access === "full" ? "Full access" : "Read-only"}</span><span>Managed by workspace permissions</span></div>;
-  return <div className="project-access-summary" aria-label="Project access">
+  if (project.workspaceId !== "default") return <div className="project-access-summary" aria-label="Project permissions"><span className="tag">{permissionLabel(project.access)}</span><span>Managed by workspace permissions</span></div>;
+  return <div className="project-access-summary" aria-label="Project permissions">
     <span className="tag" title={accessExplanation}>{project.visibility === "private" ? "Private" : "Public"}</span>
+    <span className="tag">{permissionLabel(project.access)}</span>
     <span>Owner: {owner?.name || "Unassigned"}</span>
     <span>{project.sharedUserIds.length} shared</span>
   </div>;

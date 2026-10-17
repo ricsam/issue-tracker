@@ -30,7 +30,7 @@ export function migrationWorkspaceOptions(options: MigrationWorkspaceOptions = {
   return { workspaceName, workspaceSlug };
 }
 
-export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 = 22, options: MigrationWorkspaceOptions = {}) {
+export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 = 23, options: MigrationWorkspaceOptions = {}) {
   const migrationWorkspace = migrationWorkspaceOptions(options);
   const db = new Database(path, { create: true, strict: true });
   db.exec(
@@ -544,6 +544,51 @@ export function openDatabase(path: string, targetVersion: 10 | 11 | 12 | 13 | 14
         INSERT INTO migrations VALUES (22);
       `);
       if (db.query("PRAGMA foreign_key_check").all().length) throw new Error("Foreign key violation during workspace migration");
+    }).immediate();
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  db.exec("PRAGMA foreign_keys=ON");
+  if (targetVersion < 23) return db;
+  db.exec("PRAGMA foreign_keys=OFF");
+  try {
+    db.transaction(() => {
+      if (db.query("SELECT version FROM migrations WHERE version=23").get()) return;
+      // External triggers (notably users_default_workspace) reference the rebuilt
+      // tables too. Suspend and restore all triggers transactionally so ALTER
+      // TABLE never sees a dangling reference, and copying rows has no effects.
+      const triggers = db.query("SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND sql IS NOT NULL").all() as { name: string; sql: string }[];
+      for (const trigger of triggers) db.exec(`DROP TRIGGER "${trigger.name.replaceAll('"', '""')}"`);
+      for (const table of ['workspace_members', 'workspace_project_access', 'workspace_invitations']) {
+        const { sql } = db.query("SELECT sql FROM sqlite_schema WHERE type='table' AND name=?").get(table) as { sql: string };
+        const indexes = db.query("SELECT sql FROM sqlite_schema WHERE tbl_name=? AND type='index' AND sql IS NOT NULL").all(table) as { sql: string }[];
+        const accessCheck = table === 'workspace_project_access'
+          ? /CHECK\s*\(\s*access\s+IN\s*\('read','full'\)\s*\)/i
+          : /CHECK\s*\(\s*defaultAccess\s+IN\s*\('none','read','full'\)\s*\)/i;
+        if (!accessCheck.test(sql)) throw new Error(`Unexpected ${table} access constraint`);
+        const definition = sql.replace(/^CREATE TABLE\s+(?:"[^"]+"|\w+)/i, `CREATE TABLE ${table}_access`)
+          .replace(accessCheck, table === 'workspace_project_access'
+            ? "CHECK(access IN ('read','create-issue','read+create-issue','full'))"
+            : "CHECK(defaultAccess IN ('none','read','create-issue','read+create-issue','full'))");
+        db.exec(definition);
+        const columns = db.query(`PRAGMA table_xinfo(${table})`).all() as { name: string; hidden: number }[];
+        const names = columns.filter((c) => !c.hidden).map((c) => `"${c.name.replaceAll('"', '""')}"`).join(',');
+        db.exec(`INSERT INTO ${table}_access (${names}) SELECT ${names} FROM ${table};
+          DROP TABLE ${table}; ALTER TABLE ${table}_access RENAME TO ${table};`);
+        for (const index of indexes) db.exec(index.sql);
+      }
+      db.exec(`ALTER TABLE projects ADD COLUMN creatorId TEXT REFERENCES users(id);
+        UPDATE projects SET creatorId=ownerId;`);
+      for (const trigger of triggers) db.exec(trigger.sql);
+      // IS NOT is NULL-safe: even an unknown historical creator stays immutable.
+      db.exec(`CREATE TRIGGER projects_creator_immutable BEFORE UPDATE OF creatorId ON projects
+        WHEN NEW.creatorId IS NOT OLD.creatorId BEGIN
+          SELECT RAISE(ABORT,'Project creator is immutable');
+        END;`);
+      if (db.query("PRAGMA foreign_key_check").all().length)
+        throw new Error("Foreign key violation during workspace access migration");
+      db.query("INSERT INTO migrations VALUES (23)").run();
     }).immediate();
   } catch (error) {
     db.close();

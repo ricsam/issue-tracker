@@ -123,7 +123,9 @@ const boardFields = z
     customLanes: z.array(customLaneField).max(30).optional(),
   })
   .strict();
-const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount, (SELECT COUNT(*) FROM board_issues b JOIN issues bi ON bi.id=b.issueId WHERE b.projectId=p.id AND b.lane != 'done' AND bi.closedAt IS NULL AND bi.isDraft=0) AS openCount FROM projects p LEFT JOIN issues i ON i.projectId=p.id AND (i.isDraft=0 OR i.authorId=?)`;
+const projectSql = `SELECT p.*, MAX(i.updatedAt) AS lastIssueUpdatedAt, COUNT(i.id) AS issueCount,
+  SUM(CASE WHEN i.closedAt IS NULL AND i.isDraft=0 AND EXISTS(SELECT 1 FROM board_issues b WHERE b.projectId=p.id AND b.issueId=i.id AND b.lane!='done') THEN 1 ELSE 0 END) AS openCount
+  FROM projects p LEFT JOIN issues i ON i.projectId=p.id AND ${visibleIssueSql}`;
 
 export function createApp(options: AppOptions = {}) {
   const migrationWorkspace = migrationWorkspaceOptions({
@@ -162,7 +164,7 @@ export function createApp(options: AppOptions = {}) {
     key = readFileSync(keyPath);
     if (key.length !== 32) throw new Error("Invalid persistent settings key");
   }
-  const db = openDatabase(resolve(dataDir, "app.sqlite"), 22, migrationWorkspace);
+  const db = openDatabase(resolve(dataDir, "app.sqlite"), 23, migrationWorkspace);
   // Legacy clients and saved uploads omit scope. Resolve by stable migration ID,
   // never by a literal slug which an operator may customize before first upgrade.
   const legacyWorkspaceSlug = () => (db.query("SELECT slug FROM workspaces WHERE id='default'").get() as { slug: string }).slug;
@@ -239,7 +241,7 @@ export function createApp(options: AppOptions = {}) {
       )
       .get(issueId) as any;
     if (!row || row.workspaceId !== workspaceIdFor(user) || (row.isDraft && row.authorId !== user.id)) return fail(404, "Issue not found");
-    access.requireRead(row.projectId, user, "Issue");
+    access.requireIssueRead(row, user);
     const { isDraft, ...fields } = row;
     return {
       ...fields,
@@ -247,7 +249,7 @@ export function createApp(options: AppOptions = {}) {
       duplicateOfId: row.duplicateOfId != null && visibleDuplicate(String(row.duplicateOfId), user) ? String(row.duplicateOfId) : null,
       number: row.number,
       workspaceSlug: user.workspaceSlug ?? legacyWorkspaceSlug(),
-      access: access.level(row.projectId, user) === "full" ? "full" : "read",
+      access: access.canWriteIssue(row, user) ? "full" : "read",
       labels: JSON.parse(row.labels),
       taggedUserIds: (db.query("SELECT userId FROM issue_tagged_users WHERE issueId=? ORDER BY userId").all(issueId) as { userId: string }[]).map((r) => r.userId),
       state: isDraft ? "draft" : row.closedAt ? "closed" : "open",
@@ -257,7 +259,7 @@ export function createApp(options: AppOptions = {}) {
   const project = (slug: string, user: User) => {
     const row = db
       .query(`${projectSql} WHERE p.slug=? AND p.workspaceId=? GROUP BY p.id`)
-      .get(user.id, slug, workspaceIdFor(user)) as Project | null;
+      .get(...issueAccessParams(user), slug, workspaceIdFor(user)) as Project | null;
     if (!row) return fail(404, "Project not found");
     access.requireRead(row.id, user);
     return access.serialize(row, user);
@@ -265,19 +267,18 @@ export function createApp(options: AppOptions = {}) {
   // Archived projects stay readable but reject content and board changes until restored.
   const activeProject = (slug: string, user: User) => {
     const p = project(slug, user);
-    access.requireWrite(p.id, user);
     if (p.archivedAt) fail(409, "Project is archived");
     return p;
   };
   const requireActiveProjectId = (projectId: string, user: User) => {
-    access.requireWrite(projectId, user);
+    access.requireRead(projectId, user);
     const p = db.query("SELECT archivedAt FROM projects WHERE id=?").get(projectId) as { archivedAt: string | null } | null;
     if (!p) return fail(404, "Project not found");
     if (p.archivedAt) fail(409, "Project is archived");
   };
   const activeIssue = (issueId: string, user: User) => {
     const i = issue(issueId, user);
-    access.requireWrite(i.projectId, user, "Issue");
+    access.requireIssueWrite(i, user);
     if (i.projectId !== null) requireActiveProjectId(i.projectId, user);
     return i;
   };
@@ -293,7 +294,7 @@ export function createApp(options: AppOptions = {}) {
   const relationshipEndpoints = (parentId: string, childId: string, user: User) => {
     // Check both read permissions before revealing either endpoint's lifecycle state.
     const parent = issue(parentId, user), child = issue(childId, user);
-    for (const endpoint of [parent, child]) access.requireWrite(endpoint.projectId, user, "Issue");
+    for (const endpoint of [parent, child]) access.requireIssueWrite(endpoint, user);
     if (parent.state === "draft" || child.state === "draft") fail(409, "Draft issues cannot have relationships");
     for (const endpoint of [parent, child]) if (endpoint.projectId !== null) requireActiveProjectId(endpoint.projectId, user);
   };
@@ -313,15 +314,15 @@ export function createApp(options: AppOptions = {}) {
     if (cycle) fail(409, "Issue relationship conflict");
     db.query("INSERT INTO issue_relationships (childId,parentId) VALUES (?,?)").run(childId, parentId);
   };
-  const board = (projectId: string): BoardSettings => {
+  const board = (projectId: string, user?: User): BoardSettings => {
     const row = db
       .query("SELECT lanes,customLanes,laneLabels FROM project_boards WHERE projectId=?")
       .get(projectId) as { lanes: string; customLanes: string; laneLabels: string } | null;
     const cards = db
       .query(
-        "SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? AND i.isDraft=0 ORDER BY b.position,i.number",
+        `SELECT CAST(b.issueId AS TEXT) AS issueId,b.lane FROM board_issues b JOIN issues i ON i.id=b.issueId WHERE b.projectId=? AND i.isDraft=0 ${user ? `AND ${visibleIssueSql}` : ''} ORDER BY b.position,i.number`,
       )
-      .all(projectId) as BoardCard[];
+      .all(projectId, ...(user ? issueAccessParams(user) : [])) as BoardCard[];
     const laneLabels: Record<string, string> = JSON.parse(row?.laneLabels ?? "{}");
     return {
       ...(Object.keys(laneLabels).length ? { laneLabels } : {}),
@@ -333,7 +334,8 @@ export function createApp(options: AppOptions = {}) {
   const requireBoardIssue = (issueId: string, projectId: string, user: User) => {
     const row = db.query("SELECT authorId,isDraft,closedAt FROM issues WHERE id=? AND projectId=?")
       .get(issueId, projectId) as { authorId: string; isDraft: number; closedAt: string | null } | null;
-    if (!row) return fail(400, "Unknown project issue");
+    if (!row || !access.canReadIssue({ ...row, projectId }, user)) return fail(400, "Unknown project issue");
+    access.requireIssueWrite({ ...row, projectId }, user);
     if (row.isDraft) {
       // Match nonexistent/foreign IDs so board probes cannot identify a draft.
       if (row.authorId !== user.id) return fail(400, "Unknown project issue");
@@ -681,7 +683,7 @@ export function createApp(options: AppOptions = {}) {
     c.json({
       projects: db
         .query(`${projectSql} WHERE ${visibleProjectSql} GROUP BY p.id ORDER BY p.createdAt,p.id`)
-        .all(c.get("user").id, ...accessParams(c.get("user"))).map((row) => access.serialize(row as Project, c.get("user"))),
+        .all(...issueAccessParams(c.get("user")), ...accessParams(c.get("user"))).map((row) => access.serialize(row as Project, c.get("user"))),
     }),
   );
   app.post("/api/projects", async (c) => {
@@ -708,8 +710,8 @@ export function createApp(options: AppOptions = {}) {
       access.requireWrite(null, c.get("user"));
       const projectId = id();
       db.query(
-        "INSERT INTO projects (id,slug,name,description,createdAt,visibility,ownerId,workspaceId) VALUES (?,?,?,?,?,?,?,?)",
-      ).run(projectId, slug, input.name, input.description, now(), input.visibility, c.get("user").id, workspaceIdFor(c.get("user")));
+        "INSERT INTO projects (id,slug,name,description,createdAt,visibility,ownerId,workspaceId,creatorId) VALUES (?,?,?,?,?,?,?,?,?)",
+      ).run(projectId, slug, input.name, input.description, now(), input.visibility, c.get("user").id, workspaceIdFor(c.get("user")), c.get("user").id);
       saveSharedUsers(projectId, input.sharedUserIds);
     }).immediate();
     return c.json({ project: project(slug, c.get("user")) });
@@ -731,7 +733,7 @@ export function createApp(options: AppOptions = {}) {
       if (input.sharedUserIds !== undefined) saveSharedUsers(p.id, input.sharedUserIds);
       // A transfer may revoke the caller's access, but still return the committed
       // settings for this authorized operation. Subsequent reads use the new ACL.
-      const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(c.get("user").id, p.id) as Project;
+      const row = db.query(`${projectSql} WHERE p.id=? GROUP BY p.id`).get(...issueAccessParams(c.get("user")), p.id) as Project;
       return access.serialize(row, c.get("user"));
     }).immediate();
     return c.json({ project: updated });
@@ -761,7 +763,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ project: project(p.slug, c.get("user")) });
   });
   app.get("/api/projects/:slug/board", (c) =>
-    c.json({ board: board(project(c.req.param("slug"), c.get("user")).id) }),
+    c.json({ board: board(project(c.req.param("slug"), c.get("user")).id, c.get("user")) }),
   );
   app.get("/api/projects/:slug/board/sub-issue-progress", (c) => {
     const user = c.get("user"), p = project(c.req.param("slug"), user);
@@ -783,9 +785,10 @@ export function createApp(options: AppOptions = {}) {
   });
   app.patch("/api/projects/:slug/board", async (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));
+    access.requireManageLanes(p, c.get("user"));
     const input = boardFields.parse(await json(c));
     db.transaction(() => {
-      activeProject(p.slug, c.get("user"));
+      access.requireManageLanes(activeProject(p.slug, c.get("user")), c.get("user"));
       const state = board(p.id);
       const customLanes = [...state.customLanes];
       const seenIds = new Set<string>();
@@ -813,10 +816,11 @@ export function createApp(options: AppOptions = {}) {
         `INSERT INTO project_boards (projectId,lanes,customLanes) VALUES (?,?,?) ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes,customLanes=excluded.customLanes`,
       ).run(p.id, JSON.stringify(input.lanes), JSON.stringify(customLanes));
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.patch("/api/projects/:slug/board/lanes/:lane", async (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));
+    access.requireManageLanes(p, c.get("user"));
     const lane = c.req.param("lane");
     const { index, label } = z
       .object({ index: z.number().int().min(0).optional(), label: text(60).optional() })
@@ -824,7 +828,7 @@ export function createApp(options: AppOptions = {}) {
       .refine((input) => input.index !== undefined || input.label !== undefined)
       .parse(await json(c));
     db.transaction(() => {
-      activeProject(p.slug, c.get("user"));
+      access.requireManageLanes(activeProject(p.slug, c.get("user")), c.get("user"));
       // Move within the current state so concurrent visibility changes are kept;
       // positions past the end place the lane last.
       const state = board(p.id);
@@ -849,13 +853,14 @@ export function createApp(options: AppOptions = {}) {
         JSON.stringify(laneLabels),
       );
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.delete("/api/projects/:slug/board/lanes/:lane", (c) => {
     const p = activeProject(c.req.param("slug"), c.get("user"));
+    access.requireManageLanes(p, c.get("user"));
     const lane = c.req.param("lane");
     db.transaction(() => {
-      activeProject(p.slug, c.get("user"));
+      access.requireManageLanes(activeProject(p.slug, c.get("user")), c.get("user"));
       const state = board(p.id);
       if (![...LANES, ...state.customLanes].some((definition) => definition.value === lane))
         fail(404, "Lane not found");
@@ -866,7 +871,7 @@ export function createApp(options: AppOptions = {}) {
         ON CONFLICT(projectId) DO UPDATE SET lanes=excluded.lanes`)
         .run(p.id, JSON.stringify(state.lanes.filter((value) => value !== lane)), JSON.stringify(state.customLanes));
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   const historyTransaction = <T>(c: Context<Env>, ids: string[], mutate: () => T) => ({
     immediate: () => {
@@ -1011,7 +1016,7 @@ export function createApp(options: AppOptions = {}) {
         );
       }
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.post("/api/projects/:slug/board/issues/reorder", async (c) => {
     const input = z.object({
@@ -1022,6 +1027,8 @@ export function createApp(options: AppOptions = {}) {
     const result = historyTransaction(c, input.issueIds, () => {
       const p = activeProject(c.req.param("slug"), c.get("user"));
       requireVisibleLane(p.id, input.lane);
+      for (const id of input.issueIds) requireBoardIssue(id, p.id, c.get("user"));
+      if (input.beforeIssueId !== null) issue(input.beforeIssueId, c.get("user"));
       const current = board(p.id).cards;
       const selected = new Set(input.issueIds);
       if (input.issueIds.some((id) => !current.some((card) => card.issueId === id)))
@@ -1040,7 +1047,7 @@ export function createApp(options: AppOptions = {}) {
           db.query("UPDATE board_issues SET lane=?,position=? WHERE projectId=? AND issueId=? AND (lane!=? OR position!=?)")
             .run(input.lane, position + 1, p.id, issueId, input.lane, position + 1);
       }
-      return board(p.id);
+      return board(p.id, c.get("user"));
     }).immediate();
     return c.json({ board: result });
   });
@@ -1065,7 +1072,7 @@ export function createApp(options: AppOptions = {}) {
           ON CONFLICT(projectId,issueId) DO UPDATE SET lane=excluded.lane,position=excluded.position
           WHERE board_issues.lane != excluded.lane`).run(p.id, issueId, input.lane, nextBoardPosition(p.id, input.lane));
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.patch("/api/projects/:slug/board/issues/:id", async (c) => {
     issueIdField.parse(c.req.param("id"));
@@ -1076,7 +1083,7 @@ export function createApp(options: AppOptions = {}) {
       .parse(await json(c));
     historyTransaction(c, [c.req.param("id")], () => {
       activeProject(p.slug, c.get("user"));
-      issue(c.req.param("id"), c.get("user"));
+      activeIssue(c.req.param("id"), c.get("user"));
       if (
         !db
           .query(
@@ -1090,17 +1097,17 @@ export function createApp(options: AppOptions = {}) {
         "UPDATE board_issues SET lane=?,position=? WHERE projectId=? AND issueId=? AND lane!=?",
       ).run(lane, nextBoardPosition(p.id, lane), p.id, c.req.param("id"), lane);
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.delete("/api/projects/:slug/board/issues/:id", (c) => {
     issueIdField.parse(c.req.param("id"));
     const p = activeProject(c.req.param("slug"), c.get("user"));
     historyTransaction(c, [c.req.param("id")], () => {
-      issue(c.req.param("id"), c.get("user"));
+      activeIssue(c.req.param("id"), c.get("user"));
       const result = db.query("DELETE FROM board_issues WHERE projectId=? AND issueId=?").run(p.id, c.req.param("id"));
       if (!result.changes) fail(404, "Board member not found");
     }).immediate();
-    return c.json({ board: board(p.id) });
+    return c.json({ board: board(p.id, c.get("user")) });
   });
   app.get("/api/projects/:slug/issues", (c) => {
     const p = project(c.req.param("slug"), c.get("user"));
@@ -1114,7 +1121,7 @@ export function createApp(options: AppOptions = {}) {
     const rows = db.query(`SELECT i.id,i.projectId FROM issues i WHERE ${visibleIssueSql} ORDER BY i.createdAt,i.id`)
       .all(...issueAccessParams(c.get("user"))) as { id: string; projectId: string | null }[];
     const projectIds = [...new Set(rows.flatMap((row) => row.projectId ? [row.projectId] : []))];
-    return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))), boards: Object.fromEntries(projectIds.map((id) => [id, board(id)])) });
+    return c.json({ issues: rows.map((r) => issue(r.id, c.get("user"))), boards: Object.fromEntries(projectIds.map((id) => [id, board(id, c.get("user"))])) });
   });
   const createIssue = async (c: Context<Env>) => {
     const slug = c.req.param("slug");
@@ -1128,7 +1135,7 @@ export function createApp(options: AppOptions = {}) {
     const time = now();
     const result = db.transaction(() => {
       const projectId = slug ? activeProject(slug, c.get("user")).id : input.projectId ?? null;
-      access.requireWrite(projectId, c.get("user"), "Issue");
+      access.requireCreate(projectId, c.get("user"), "Issue");
       if (projectId !== null) requireActiveProjectId(projectId, c.get("user"));
       if (input.lane != null) {
         if (input.state === "draft") return fail(400, "Draft issues cannot be placed on a board");
@@ -1165,7 +1172,7 @@ export function createApp(options: AppOptions = {}) {
         db.query("INSERT INTO board_issues (projectId,issueId,lane,position) VALUES (?,?,?,?)")
           .run(projectId, uid, input.lane, nextBoardPosition(projectId, input.lane));
         recordIssueChange(db, uid, c.get("user").id, null);
-        return { issue: issue(uid, c.get("user")), board: board(projectId) };
+        return { issue: issue(uid, c.get("user")), board: board(projectId, c.get("user")) };
       }
       recordIssueChange(db, uid, c.get("user").id, null);
       return { issue: issue(uid, c.get("user")) };
@@ -1305,7 +1312,10 @@ export function createApp(options: AppOptions = {}) {
       const latest = activeIssue(current.id, c.get("user"));
       if (input.state === "draft" && latest.state !== "draft") fail(409, "Published issues cannot become drafts");
       if (input.state === "closed" && latest.state === "draft") fail(409, "Publish draft issue before closing it");
-      if (input.projectId !== undefined) access.requireWrite(input.projectId, c.get("user"), "Project");
+      if (input.projectId !== undefined && input.projectId !== latest.projectId) {
+        if (latest.authorId === c.get("user").id) access.requireCreate(input.projectId, c.get("user"));
+        else access.requireWrite(input.projectId, c.get("user"));
+      }
       if (input.projectId != null) requireActiveProjectId(input.projectId, c.get("user"));
       if (body !== current.body) validateAttachments(body, c.get("user"));
       if (input.projectId !== undefined && input.projectId !== current.projectId) {
@@ -1413,7 +1423,7 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ ok: true, issue: issue(row.issueId, c.get("user")) });
   });
   app.post("/api/uploads", async (c) => {
-    if (!access.canWriteAny(c.get("user"))) fail(403, "Full access required");
+    if (!access.canWriteAny(c.get("user"))) fail(403, "Issue creation or edit permission required");
     let form: FormData;
     try {
       form = await c.req.formData();

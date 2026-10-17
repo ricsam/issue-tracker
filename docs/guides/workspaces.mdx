@@ -1,6 +1,6 @@
 ---
 title: Workspaces
-description: Separate projects and issue numbering, invite members, and grant read-only or full access.
+description: Separate projects and issue numbering, invite members, and grant read, create-issue, or full access.
 ---
 
 ## Choose a workspace
@@ -17,19 +17,34 @@ Each workspace has its own issue numbering. `!12` means issue 12 in the containi
 
 Workspace administrators manage membership and permissions. Instance administrators can manage every workspace. A workspace must retain at least one workspace administrator.
 
-Each member has a default project access level:
+The authorization model distinguishes four terms:
+
+- **Role:** workspace Administrator or Member; administrators manage membership.
+- **Permission:** an allowed action, such as Read or Create issues (`create-issue`); Full groups collaborative permissions.
+- **Scope:** the projects a permission grant covers—selected projects or all current and future projects.
+- **Policy:** an additional authorization rule, such as the issue-author or project-creator rules below. Authentication is signing in, not a permission.
+
+Each member has default permissions:
 
 - **None:** no default project access.
-- **Read:** read-only access; no content, comment or board mutations.
-- **Full:** collaborative writes, subject to archive and other data rules.
+- **Read:** view all published issues; no creation or edits to other people’s issues.
+- **Create issues** (`create-issue`): create issues, but view, edit, and comment only on issues you created.
+- **Read + create issues** (`read+create-issue`): view all published issues and create issues, but edit and comment only on your own.
+- **Full:** collaborative writes, subject to archive and other data rules. Includes project creation when used as the default.
 
-Specific projects can override the default with **Read** or **Full**. The specific value wins, rather than taking the greater permission: default Full plus project Read makes that project read-only; default None plus project Full grants access only there. Unlinked issues use the default access level. Workspace administrators have full workspace access. Creator-only personal drafts still have no administrator bypass.
+Specific projects can override the default with any of the four non-None options. The specific value replaces the default rather than adding to it: default Full plus project Create issues restricts that project to your own issues; default None plus a project grant grants access only there. Defaults apply to all current and future projects. Unlinked issues use the default access level. Workspace administrators have full workspace access. Creator-only personal drafts still have no administrator bypass.
+
+An issue’s author can edit and comment on it while they retain access, even if their access is later reduced to Read. Removing access removes this author privilege too. Archived projects remain read-only. Other people’s comments can still only be edited/deleted by their author or an administrator. Moving your own issue requires creation rights at the destination; moving someone else’s requires Full access there. Linking issues requires editing rights to both endpoints.
+
+Only a project’s **creator**, with current Full permissions on an active project, can change its shared board lanes (create, rename, reorder, remove, or restore). Full-access members and administrators who did not create the project cannot do so. Changing the project owner does not transfer lane management. Card placement follows issue editing rights; personal lane collapse/hide preferences remain available to everyone with project access.
+
+The permissions migration preserves existing grants and backfills project creators from their recorded owners, the only historical identity available. New projects record their creator separately and immutably. Projects with no recorded owner have no lane manager.
 
 New workspace memberships use these explicit defaults/overrides. Migrated Default memberships retain legacy private-project owner/sharing restrictions until explicitly converted with `convertLegacyAccess:true` (unchanged saves preserve legacy restrictions); this avoids broadening existing private content on upgrade. Member responses expose `legacyAccess` so administrators can identify this compatibility mode. Replacing it requires an explicit `convertLegacyAccess:true` member update; the UI warns and asks for confirmation because conversion may expose previously private projects. Merely opening permissions and saving unchanged does not convert it. Project visibility and sharing fields are not a substitute for configuring the new membership permissions.
 
 ## Invite and manage people
 
-A workspace administrator invites an email address with a default access level and optional project overrides. Invitations are pending grants, not local-account creation or password-reset links. They are applied when the server can verify that the signed-in account owns the matching email. OIDC requires verified email; local accounts are provisioned by the instance administrator. Do not assume an email notification was sent: share the installation's sign-in instructions separately.
+A workspace administrator invites an email address with default permissions and optional project-scoped permission overrides. Invitations are pending grants, not local-account creation or password-reset links. They are applied when the server can verify that the signed-in account owns the matching email. OIDC requires verified email; local accounts are provisioned by the instance administrator. Do not assume an email notification was sent: share the installation's sign-in instructions separately.
 
 Pending invitations can be updated or revoked. Existing members are changed through member settings, not reinvited; invitations do not silently escalate an existing membership. Removing a member removes their workspace access, but cannot retract data already copied or downloaded. Membership edits replace the project-override list, so retain every override you intend to keep.
 

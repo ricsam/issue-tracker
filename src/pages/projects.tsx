@@ -3,13 +3,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Archive, ArrowUpRight, FolderKanban, Plus } from "lucide-react";
 import type { Project } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { useWorkspace, workspacePath, projectPath, canCreateInWorkspace } from "../lib/workspace";
+import { useWorkspace, workspacePath, projectPath, canCreateProjectsInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "../components/ui/primitives";
 import { PinProjectButton } from "../components/pinned-projects";
 import { ProjectAccessFields, ProjectAccessSummary } from "../components/project-access";
 export function ProjectsPage() {
   const { projects, refresh, user, workspace } = useWorkspace();
-  const canCreate = canCreateInWorkspace(workspace);
+  const canCreate = canCreateProjectsInWorkspace(workspace);
   const [visibility, setVisibility] = useState<Project["visibility"]>("public");
   const [sharedUserIds, setSharedUserIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);

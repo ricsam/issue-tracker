@@ -8,8 +8,8 @@ import type { User, Workspace, WorkspaceMember, WorkspaceInvitation, WorkspacePr
 export const workspaceSlugField = z.string().min(1).max(70).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const name = z.string().trim().min(1).max(100);
 const visibility = z.enum(["public", "hidden"]);
-const defaultAccess = z.enum(["none", "read", "full"]);
-const projectAccess = z.array(z.object({ projectId: z.string().min(1).max(100), access: z.enum(["read", "full"]) }).strict()).max(1000)
+const defaultAccess = z.enum(["none", "read", "create-issue", "read+create-issue", "full"]);
+const projectAccess = z.array(z.object({ projectId: z.string().min(1).max(100), access: z.enum(["read", "create-issue", "read+create-issue", "full"]) }).strict()).max(1000)
   .refine((rows) => new Set(rows.map((row) => row.projectId)).size === rows.length);
 const permissions = z.object({ defaultAccess, projectAccess: projectAccess.default([]) });
 type WorkspaceRow = Pick<Workspace, "id" | "slug" | "name" | "visibility">;

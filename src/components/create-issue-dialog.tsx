@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEve
 import { Link } from "react-router-dom";
 import type { BoardSettings, Issue, Project } from "../../shared/types";
 import { orderedLanes } from "../../shared/board";
+import { canCreateIssues } from "../../shared/access";
 import { api, message } from "../lib/api";
 import { validateIssueBody } from "../lib/validation";
 import { useWorkspace, WorkspaceSelector, issuePath, workspacePath, canCreateInWorkspace, useWorkspaceDraftGuard } from "../lib/workspace";
@@ -37,7 +38,7 @@ export function CreateIssueDialog({
   onViewIssue?: (issue: Issue, source: HTMLAnchorElement) => void;
 }) {
   const { user, users, projects: allProjects, workspace } = useWorkspace();
-  const projects = allProjects.filter(candidate => candidate.access === "full");
+  const projects = allProjects.filter(candidate => canCreateIssues(candidate.access));
   const canCreateUnassigned = canCreateInWorkspace(workspace);
   // Preserve the existing Default workspace preferences; new workspaces use independent keys.
   const preferenceKey = workspace?.id === "default" ? user.id : `${user.id}:${workspace?.id}`;

@@ -83,8 +83,8 @@ test("workspace management invitations, overrides, read-only screens, discovery,
   await page.getByRole("button", { name: "Invite member", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Email address").fill(email);
-  await dialog.getByLabel("Default access", { exact: true }).selectOption("full");
-  await dialog.getByLabel("Access to Read project", { exact: true }).selectOption("read");
+  await dialog.getByLabel("Default permissions", { exact: true }).selectOption("full");
+  await dialog.getByLabel("Permissions for Read project", { exact: true }).selectOption("read");
   await dialog.getByRole("button", { name: "Create invitation", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByText(email, { exact: true })).toBeVisible();
@@ -136,8 +136,8 @@ test("workspace management invitations, overrides, read-only screens, discovery,
     await expect(reader.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
     await page.reload();
     await page.getByRole("button", { name: "Edit permissions for Workspace Reader", exact: true }).click();
-    await dialog.getByLabel("Default access", { exact: true }).selectOption("none");
-    await dialog.getByLabel("Access to Read project", { exact: true }).selectOption("full");
+    await dialog.getByLabel("Default permissions", { exact: true }).selectOption("none");
+    await dialog.getByLabel("Permissions for Read project", { exact: true }).selectOption("full");
     await dialog.getByRole("button", { name: "Save permissions", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await reader.goto(`/w/${slug}/projects`);
@@ -233,7 +233,7 @@ test("legacy permission changes require confirmation while no-op saves retain pr
   const before = await (await page.request.get("/api/workspaces/default/members")).json();
   expect(before.members.find((member: { userId: string }) => member.userId === account.user.id).legacyAccess).toBe(true);
   await page.getByRole("button", { name: `Edit permissions for Legacy member ${tag}`, exact: true }).click();
-  await dialog.getByLabel("Default access", { exact: true }).selectOption("read");
+  await dialog.getByLabel("Default permissions", { exact: true }).selectOption("read");
   await expect(dialog.getByRole("button", { name: "Save permissions", exact: true })).toBeDisabled();
   await dialog.getByLabel("I understand this replaces legacy private-project protections").check();
   const changed = page.waitForRequest(request => request.method() === "PATCH" && request.url().endsWith(`/members/${account.user.id}`));

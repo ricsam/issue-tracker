@@ -121,6 +121,39 @@ test("rename/remove enforce authentication, CSRF, private project visibility and
   expect(await f.get()).toEqual(before);
 });
 
+test("lane management belongs to immutable creator, not transferred owner or administrators", async () => {
+  const f = await fixture();
+  const db = f.entry.app.db;
+  const creator = f.project.creatorId;
+  const otherId = crypto.randomUUID();
+  db.query("INSERT INTO users (id,name,email,role,createdAt,password) VALUES (?,'Other','other@example.com','member','now',?)")
+    .run(otherId, await Bun.password.hash("long-password-123"));
+  db.query("UPDATE workspace_members SET defaultAccess='full',legacyAccess=0 WHERE userId=?").run(otherId);
+  const login = await f.req("/api/auth/login", "POST", { email: "other@example.com", password: "long-password-123" }, "");
+  const other = login.headers.get("set-cookie")!.split(";")[0]!;
+  expect((await f.req(`${f.path}/access`, "PATCH", { ownerId: otherId })).status).toBe(200);
+  expect((await (await f.req(f.path)).json()).project).toMatchObject({ creatorId: creator, ownerId: otherId, canManageLanes: true });
+  for (const role of ['member', 'workspace-admin', 'admin']) {
+    db.query("UPDATE users SET role=? WHERE id=?").run(role === 'admin' ? 'admin' : 'member', otherId);
+    db.query("UPDATE workspace_members SET role=? WHERE userId=?").run(role === 'workspace-admin' ? 'admin' : 'member', otherId);
+    expect((await (await f.req(f.path, 'GET', undefined, other)).json()).project.canManageLanes).toBe(false);
+    for (const [route, method, body] of [
+      [`${f.path}/board`, 'PATCH', { lanes: ['todo', 'done'] }],
+      [`${f.path}/board/lanes/todo`, 'PATCH', { label: 'Changed' }],
+      [`${f.path}/board/lanes/todo`, 'PATCH', { index: 1 }],
+      [`${f.path}/board/lanes/todo`, 'DELETE', undefined],
+    ] as const) expect((await f.req(route, method, body, other)).status).toBe(403);
+  }
+  db.query("UPDATE users SET role='member' WHERE id=?").run(creator);
+  db.query("UPDATE workspace_members SET role='member',legacyAccess=0,defaultAccess='read' WHERE userId=?").run(creator);
+  expect((await f.patch('todo', { label: 'No' })).status).toBe(403);
+  for (const access of ['create-issue', 'read+create-issue', 'full']) {
+    db.query('UPDATE workspace_members SET defaultAccess=? WHERE userId=?').run(access, creator);
+    expect((await f.patch('todo', { label: `Allowed ${access}` })).status).toBe(access === 'full' ? 200 : 403);
+    expect((await (await f.req(f.path)).json()).project.canManageLanes).toBe(access === 'full');
+  }
+});
+
 test("v16 additive migration defaults existing board overrides to empty and reruns safely", async () => {
   const f = await fixture(); const path = join(f.entry.dir, "migration.sqlite");
   let db = openDatabase(path, 15);

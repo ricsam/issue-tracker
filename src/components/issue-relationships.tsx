@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { GitBranch, Plus, Unlink } from "lucide-react";
 import type { BoardSettings, Issue, IssueReference, IssueRelationships } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { useWorkspace, workspacePath } from "../lib/workspace";
+import { canCreateIssues } from "../../shared/access";
+import { useWorkspace, workspacePath, canCreateInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Modal } from "./ui/primitives";
 import { useNotification } from "./ui/snackbar";
 import { IssueStateBadge } from "./lifecycle";
@@ -21,7 +22,8 @@ export function IssueRelationshipsSection({ issue, readOnly, disabled, revision,
   onCreated: (issue: Issue) => void;
   onBoardChanged?: (projectId: string, board: BoardSettings) => void;
 }) {
-  const { projects } = useWorkspace();
+  const { projects, workspace } = useWorkspace();
+  const canCreate = canCreateInWorkspace(workspace) || projects.some(project => !project.archivedAt && canCreateIssues(project.access));
   const notify = useNotification();
   const [relationships, setRelationships] = useState<IssueRelationships | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export function IssueRelationshipsSection({ issue, readOnly, disabled, revision,
         <Button type="button" variant="ghost" disabled={locked} onClick={() => void load()}>Refresh sub-issues</Button>
         {!readOnly && <>
           <Button type="button" variant="secondary" disabled={locked} onClick={() => setAdding(true)}>Add existing issue</Button>
-          <Button type="button" variant="secondary" disabled={locked} onClick={() => setCreating(true)}><Plus size={14} /> Create sub-issue</Button>
+          <Button type="button" variant="secondary" disabled={locked || !canCreate} onClick={() => setCreating(true)}><Plus size={14} /> Create sub-issue</Button>
         </>}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BoardSettings, Issue } from "../../shared/types";
+import { canCreateIssues } from "../../shared/access";
 import { message } from "./api";
 import { useNewIssueShortcut } from "./issue-shortcuts";
 import { useWorkspace, issuePath, canCreateInWorkspace } from "./workspace";
@@ -24,7 +25,7 @@ export function IssueCreationProvider({ children }: { children: ReactNode }) {
   const [createdBoards, setCreatedBoards] = useState<Record<string, BoardSettings>>({});
   const [error, setError] = useState("");
   const { refresh, workspace, projects } = useWorkspace();
-  const canCreate = canCreateInWorkspace(workspace) || projects.some(p => p.access === "full" && !p.archivedAt);
+  const canCreate = canCreateInWorkspace(workspace) || projects.some(p => canCreateIssues(p.access) && !p.archivedAt);
   const navigate = useNavigate();
   const register = useCallback((next: () => void) => {
     handler.current = next;

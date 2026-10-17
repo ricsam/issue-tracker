@@ -32,7 +32,7 @@ export function BoardAddIssuesDialog({
   const placed = new Set(settings.cards.map((card) => card.issueId));
   // Boards plan open work; a closed issue must be reopened before it is added.
   const available = issues.filter(
-    (issue) => !placed.has(issue.id) && issue.state === "open",
+    (issue) => issue.access === "full" && !placed.has(issue.id) && issue.state === "open",
   );
   const matches = available.filter((issue) =>
     `${issue.number} ${issue.title} ${issue.labels.join(" ")}`

@@ -57,8 +57,8 @@ test("drafts are creator-only across project/workspace discovery, references, co
     expect((await call(auth, "/api/issues"))).toEqual({ issues: [], boards: {} });
     expect((await call(auth, `${path}/issues`))).toEqual({ issues: [] });
     expect((await call(auth, `${path}/board`)).board.cards).toEqual([]);
-    expect((await call(auth, path)).project).toEqual(before);
-    expect((await call(auth, "/api/projects")).projects.find((p: any) => p.id === project.id)).toEqual(before);
+    expect((await call(auth, path)).project).toEqual({ ...before, canManageLanes: auth === other.cookie });
+    expect((await call(auth, "/api/projects")).projects.find((p: any) => p.id === project.id)).toEqual({ ...before, canManageLanes: auth === other.cookie });
     for (const q of [linked.id, unlinked.id, "Secret"])
       expect((await call(auth, `/api/issues/references?q=${q}`)).issues).toEqual([]);
     for (const draft of [linked, unlinked]) for (const suffix of ["", "/history"])
@@ -209,7 +209,7 @@ test("migration 17 preserves existing issues, child data and timestamps and surv
       expect(db.query("SELECT * FROM issues ORDER BY id").all()).toEqual(rows.map((row: any) => ({ ...row, workspaceId: "default", isDraft: 0, closeReason: row.closedAt === null ? null : "completed", duplicateOfId: null })));
       expect(db.query("SELECT * FROM board_issues").all()).toEqual(cards);
       expect(db.query("SELECT * FROM comments").all()).toEqual(comments);
-      expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 22 });
+      expect(db.query("SELECT MAX(version) AS version FROM migrations").get()).toEqual({ version: 23 });
       expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(() => db.exec("UPDATE issues SET isDraft=1 WHERE id=2")).toThrow();
     } finally { db.close(); }

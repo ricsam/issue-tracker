@@ -205,7 +205,7 @@ test("v22 migration preserves IDs, numbers, drafts, relationships, attachments, 
   old.close();
   for (let attempt = 0; attempt < 2; attempt++) {
     const db = openDatabase(path);
-    for (const table of tables) expect(db.query(`SELECT * FROM ${table}`).all()).toEqual(before[table]!.map((row: any) => ["issues", "projects", "attachments"].includes(table) ? { ...row, workspaceId: "default" } : row));
+    for (const table of tables) expect(db.query(`SELECT * FROM ${table}`).all()).toEqual(before[table]!.map((row: any) => ["issues", "projects", "attachments"].includes(table) ? { ...row, workspaceId: "default", ...(table === 'projects' ? { creatorId: row.ownerId } : {}) } : row));
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(db.query("SELECT nextIssueNumber FROM workspaces WHERE id='default'").get()).toEqual({ nextIssueNumber: 43 });
     expect(db.query("SELECT COUNT(*) AS count FROM workspace_members").get()).toEqual({ count: 2 });
@@ -284,7 +284,7 @@ test("configured v22 workspace retains legacy IDs, content, attachments, relatio
   e.app = createApp({ dataDir: e.dir, migrationWorkspaceName: "richie's workspace", migrationWorkspaceSlug: "richies-workspace" });
   const check = () => {
     expect(e.app!.db.query("SELECT id,name,slug FROM workspaces").all()).toEqual([{ id: "default", name: "richie's workspace", slug: "richies-workspace" }]);
-    for (const table of tables) expect(e.app!.db.query(`SELECT * FROM ${table}`).all()).toEqual(rows[table]!.map((row: any) => ["issues", "projects", "attachments"].includes(table) ? { ...row, workspaceId: "default" } : row));
+    for (const table of tables) expect(e.app!.db.query(`SELECT * FROM ${table}`).all()).toEqual(rows[table]!.map((row: any) => ["issues", "projects", "attachments"].includes(table) ? { ...row, workspaceId: "default", ...(table === 'projects' ? { creatorId: row.ownerId } : {}) } : row));
     expect(e.app!.db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(readFileSync(join(e.dir, "uploads", fileId), "utf8")).toBe("legacy");
   };

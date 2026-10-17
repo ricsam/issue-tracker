@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createApp } from "./app";
 import type { PluginDefinition } from "./plugins";
 import type { PluginEvent } from "../shared/plugins";
+import type { WorkspacePermissions } from "../shared/types";
 
 const owned: { dir: string; app: ReturnType<typeof createApp> }[] = [];
 afterEach(async () => {
@@ -79,6 +80,78 @@ test("plugin link reads inherit draft and project access on direct, list and det
   expect((await web(linkPath(privateIssue.id), "GET", undefined, other.cookie)).status).toBe(404);
   await web("/api/admin/plugins/fixture", "PUT", { enabled: false, values: {} });
   expect((await (await web(linkPath(unlinked.id))).json()).links).toEqual([]);
+});
+
+test("plugin links and hooks follow current issue-level access for every permission level", async () => {
+  const { app, web, member, events } = await fixture();
+  const author = await member("author");
+  const { project } = await (await web("/api/projects", "POST", { name: "ACL matrix" })).json();
+  const levels: WorkspacePermissions[] = ["none", "read", "create-issue", "read+create-issue", "full"];
+  const setAccess = (level: WorkspacePermissions) => app.db.query(
+    "UPDATE workspace_members SET defaultAccess=?,legacyAccess=0 WHERE workspaceId='default' AND userId=?",
+  ).run(level, author.user.id);
+  for (const projectId of [null, project.id]) {
+    setAccess("full");
+    const { issue: own } = await (await web("/api/issues", "POST", { body: "Own issue", projectId }, author.cookie)).json();
+    const { issue: other } = await (await web("/api/issues", "POST", { body: "Other issue", projectId })).json();
+    for (const level of levels) {
+      setAccess(level);
+      for (const [issue, isOwn] of [[own, true], [other, false]] as const) {
+        const readable = level !== "none" && (isOwn || level !== "create-issue");
+        const writable = readable && (isOwn || level === "full");
+        for (const suffix of ["", "/external-links"]) {
+          const response = await web(`/api/issues/${issue.id}${suffix}`, "GET", undefined, author.cookie);
+          expect(response.status).toBe(readable ? 200 : 404);
+          if (readable) {
+            const data = await response.json();
+            expect(suffix ? data.links : data.issue.externalLinks).toHaveLength(1);
+          }
+        }
+        events.length = 0;
+        const response = await web(`/api/issues/${issue.id}`, "PATCH", { body: `${level}: ${isOwn}` }, author.cookie);
+        expect(response.status).toBe(writable ? 200 : readable ? 403 : 404);
+        expect(events.map((event) => event.type)).toEqual(writable ? ["issue.updated"] : []);
+      }
+      const listed = await (await web("/api/issues", "GET", undefined, author.cookie)).json();
+      const ids = listed.issues.map((issue: { id: string }) => issue.id);
+      expect(ids.includes(own.id)).toBe(level !== "none");
+      expect(ids.includes(other.id)).toBe(level !== "none" && level !== "create-issue");
+    }
+  }
+});
+
+test("plugin links cannot bypass revoked draft/project access and archived writes emit no hooks", async () => {
+  const { app, web, member, events } = await fixture();
+  const author = await member("draft-author");
+  const { project } = await (await web("/api/projects", "POST", { name: "Revocable" })).json();
+  const { issue: draft } = await (await web("/api/issues", "POST", { body: "Private draft", state: "draft", projectId: project.id }, author.cookie)).json();
+  const { issue } = await (await web("/api/issues", "POST", { body: "Published", projectId: project.id }, author.cookie)).json();
+  const setOverride = (level: WorkspacePermissions) => {
+    app.db.query("UPDATE workspace_members SET defaultAccess='none',legacyAccess=0 WHERE workspaceId='default' AND userId=?").run(author.user.id);
+    app.db.query("DELETE FROM workspace_project_access WHERE workspaceId='default' AND userId=?").run(author.user.id);
+    if (level !== "none") app.db.query(
+      "INSERT INTO workspace_project_access(workspaceId,userId,projectId,access) VALUES ('default',?,?,?)",
+    ).run(author.user.id, project.id, level);
+  };
+  setOverride("none");
+  for (const item of [draft, issue]) {
+    expect((await web(`/api/issues/${item.id}/external-links`, "GET", undefined, author.cookie)).status).toBe(404);
+    events.length = 0;
+    expect((await web(`/api/issues/${item.id}`, "PATCH", { body: "Denied" }, author.cookie)).status).toBe(404);
+    expect(events).toEqual([]);
+  }
+  setOverride("read");
+  for (const item of [draft, issue]) {
+    expect((await web(`/api/issues/${item.id}/external-links`, "GET", undefined, author.cookie)).status).toBe(200);
+    expect((await web(`/api/issues/${item.id}`, "PATCH", { body: "Author can edit at read access" }, author.cookie)).status).toBe(200);
+  }
+  expect((await web(`/api/projects/${project.slug}`, "PATCH", { archived: true })).status).toBe(200);
+  for (const item of [draft, issue]) {
+    expect((await web(`/api/issues/${item.id}/external-links`, "GET", undefined, author.cookie)).status).toBe(200);
+    events.length = 0;
+    expect((await web(`/api/issues/${item.id}`, "PATCH", { body: "Archived write denied" }, author.cookie)).status).toBe(409);
+    expect(events).toEqual([]);
+  }
 });
 
 test("plugin settings require admin browser auth and CSRF; bearer keys can read authorized issue links only", async () => {

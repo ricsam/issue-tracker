@@ -1,7 +1,12 @@
 import type { ExternalLink } from "./plugins";
 
 export type Role = "admin" | "member";
-export type WorkspaceAccess = "none" | "read" | "full";
+/** Action permissions, distinct from administrator/member roles and project scope. */
+export type WorkspacePermission = "read" | "create-issue" | "full";
+/** Serialized permission sets; full includes read, create, and collaborative writes. */
+export type WorkspacePermissions = "none" | WorkspacePermission | "read+create-issue";
+/** Compatibility name for the existing API's access fields. */
+export type WorkspaceAccess = WorkspacePermissions;
 export interface Workspace {
   id: string;
   slug: string;
@@ -11,7 +16,7 @@ export interface Workspace {
   defaultAccess: WorkspaceAccess;
   canManage: boolean;
 }
-export interface WorkspaceProjectAccess { projectId: string; access: "read" | "full" }
+export interface WorkspaceProjectAccess { projectId: string; access: Exclude<WorkspaceAccess, "none"> }
 export interface WorkspaceMember {
   userId: string;
   id: string;
@@ -52,7 +57,11 @@ export interface Project {
   workspaceId: string;
   workspaceSlug: string;
   /** Null only in a successful ACL update that revoked the caller's access. */
-  access: "read" | "full" | null;
+  access: Exclude<WorkspaceAccess, "none"> | null;
+  /** Immutable creator; existing projects are backfilled from their recorded owner. */
+  creatorId: string | null;
+  /** Only the creator may change the shared board lane configuration. */
+  canManageLanes: boolean;
   slug: string;
   name: string;
   description: string;

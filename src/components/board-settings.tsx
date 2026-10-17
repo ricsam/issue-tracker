@@ -115,7 +115,7 @@ export function BoardSettingsDialog({
     <Modal
       title="Manage lanes"
       description={readOnly
-        ? "Shared lanes are read-only on archived boards. You can still restore lanes hidden from your view."
+        ? "Only the project creator can manage shared lanes on an active board. You can still restore lanes hidden from your view."
         : "Manage shared board lanes and restore lanes hidden only for you."}
       open
       onOpenChange={(open) => !open && !busy && onClose()}

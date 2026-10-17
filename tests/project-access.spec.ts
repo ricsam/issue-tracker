@@ -44,8 +44,8 @@ for (const width of [1440, 390]) test(`private creation, sharing, collaboration,
     await expect(owner.page).toHaveURL(/\/projects\/[^/?]+$/);
     await expect(owner.page.getByRole("heading", { name, exact: true, level: 1 })).toBeVisible();
     const path = new URL(owner.page.url()).pathname;
-    await expect(owner.page.getByLabel("Project access", { exact: true })).toContainText("Private");
-    await expect(owner.page.getByLabel("Project access", { exact: true })).toContainText(`Owner: ${owner.user.name}`);
+    await expect(owner.page.getByLabel("Project permissions", { exact: true })).toContainText("Private");
+    await expect(owner.page.getByLabel("Project permissions", { exact: true })).toContainText(`Owner: ${owner.user.name}`);
     for (const page of [shared.page, adminPage]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();

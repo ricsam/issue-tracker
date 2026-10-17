@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown } from "lucide-react";
 import { orderedLanes } from "../../shared/board";
+import { canCreateIssues } from "../../shared/access";
 import { LANES, type BoardSettings, type Issue } from "../../shared/types";
 import { api, message } from "../lib/api";
-import { useWorkspace, canCreateInWorkspace } from "../lib/workspace";
+import { useWorkspace, canCreateInWorkspace, canCreateProjectsInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice } from "./ui/primitives";
 import "./issue-placement-controls.css";
 
@@ -21,7 +22,10 @@ type BoardState = { projectId: string; board?: BoardSettings; loading: boolean; 
 
 /** Placement writes deliberately never submit body/comment drafts. */
 export function IssuePlacementControls({ issue, board: knownBoard, disabled = false, onBusyChange, onMoved, onBoardChanged }: Props) {
-  const { projects, refresh, workspace } = useWorkspace();
+  const { projects, refresh, workspace, user } = useWorkspace();
+  const ownIssue = issue.authorId === user.id;
+  const canMoveUnassigned = canCreateProjectsInWorkspace(workspace) || ownIssue && canCreateInWorkspace(workspace);
+  const destinations = projects.filter(item => !item.archivedAt && (item.access === "full" || ownIssue && canCreateIssues(item.access)));
   const project = projects.find((item) => item.id === issue.projectId);
   const [projectOpen, setProjectOpen] = useState(false);
   const [laneOpen, setLaneOpen] = useState(false);
@@ -93,8 +97,8 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
 
   async function change(kind: "project" | "lane", value: string) {
     if (submitting.current || locked) return;
-    if (kind === "project" && !value && !canCreateInWorkspace(workspace)) return;
-    if (kind === "project" && (value === (issue.projectId || "") || (value && !projects.some((item) => item.id === value && !item.archivedAt)))) return;
+    if (kind === "project" && !value && !canMoveUnassigned) return;
+    if (kind === "project" && (value === (issue.projectId || "") || (value && !destinations.some((item) => item.id === value)))) return;
     if (kind === "lane" && (issue.state === "draft" || !project || !board || loading || closedOffBoard || value === (card?.lane || "") || (value && !board.lanes.includes(value)))) return;
     submitting.current = true;
     setBusy(true);
@@ -168,8 +172,9 @@ export function IssuePlacementControls({ issue, board: knownBoard, disabled = fa
         </Popover.Trigger>
         <Popover.Portal><Popover.Content className="issue-placement-popover" align="start" sideOffset={6} collisionPadding={12} aria-label="Choose project">
           <label>Project<select value={issue.projectId || ""} disabled={locked} onChange={(event) => void change("project", event.target.value)}>
-            {canCreateInWorkspace(workspace) && <option value="">No project</option>}
-            {projects.filter((item) => !item.archivedAt && item.access === "full").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {(canMoveUnassigned || !issue.projectId) && <option value="" disabled={!canMoveUnassigned}>No project</option>}
+            {project && !destinations.some(item => item.id === project.id) && <option value={project.id} disabled>{project.name}</option>}
+            {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select></label>
           <p>Choosing a project immediately removes placement on the previous project’s board. It does not add the issue to the new board. Unsaved drafts are preserved.</p>
         </Popover.Content></Popover.Portal>

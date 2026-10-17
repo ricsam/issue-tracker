@@ -88,7 +88,7 @@ export function BoardLaneMenu({ lane, collapsed, disabled, readOnly, canRemove, 
     { label: "Remove", icon: <X size={15} />, disabled: readOnly || !canRemove, onSelect: onRemove },
     { label: "Move to left", icon: <ArrowLeft size={15} />, disabled: readOnly || !canMoveLeft, onSelect: () => onMove("left") },
     { label: "Move to right", icon: <ArrowRight size={15} />, disabled: readOnly || !canMoveRight, onSelect: () => onMove("right") },
-    { help: readOnly ? "Archived boards are read-only." : "Rename, remove and reorder are shared with your team. Removing keeps the issues." },
+    { help: readOnly ? "Only the project creator can manage lanes on an active board." : "Rename, remove and reorder are shared with your team. Removing keeps the issues." },
   ]} />;
 }
 

@@ -85,8 +85,8 @@ test("board lane display, filter and sort reflect membership including hidden cu
 });
 
 const projects: Project[] = [
-  { id: "p", name: "Alpha", slug: "alpha", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },
-  { id: "q", name: "Zebra", slug: "zebra", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: "2026-01-02", archivedById: "a", issueCount: 0, openCount: 0 },
+  { creatorId: "a", canManageLanes: true, id: "p", name: "Alpha", slug: "alpha", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: null, archivedById: null, issueCount: 0, openCount: 0 },
+  { creatorId: "a", canManageLanes: false, id: "q", name: "Zebra", slug: "zebra", workspaceId: "default", workspaceSlug: "default", access: "full", description: "", visibility: "public", ownerId: "a", sharedUserIds: [], createdAt: "2026-01-01", lastIssueUpdatedAt: null, archivedAt: "2026-01-02", archivedById: "a", issueCount: 0, openCount: 0 },
 ];
 
 test("project filters distinguish unlinked and archived-project issues and combine with other filters", () => {

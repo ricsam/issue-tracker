@@ -16,9 +16,10 @@ import type {
   Comment,
   BoardSettings,
 } from "../../shared/types";
+import { canCreateIssues } from "../../shared/access";
 import { api, message } from "../lib/api";
 import { useIssueBreadcrumb } from "../lib/issue-breadcrumb";
-import { useWorkspace, issuePath, projectPath, useWorkspaceDraftGuard } from "../lib/workspace";
+import { useWorkspace, issuePath, projectPath, useWorkspaceDraftGuard, canCreateInWorkspace } from "../lib/workspace";
 import { Button, ErrorNotice, Loading } from "../components/ui/primitives";
 import { useNotification } from "../components/ui/snackbar";
 import { IssuePlacementControls } from "../components/issue-placement-controls";
@@ -167,7 +168,8 @@ function IssueDetailForm({
   panelActions,
   boards,
 }: IssueDetailsProps & { initialDetail: IssueDetail }) {
-  const { users, projects, refresh } = useWorkspace();
+  const { users, projects, refresh, workspace } = useWorkspace();
+  const canCreate = canCreateInWorkspace(workspace) || projects.some(project => !project.archivedAt && canCreateIssues(project.access));
   const [issue, setIssue] = useState<Issue>(initialDetail.issue);
   const [persisted, setPersisted] = useState<Issue>(initialDetail.issue);
   const [comments, setComments] = useState<Comment[]>(initialDetail.comments);
@@ -364,7 +366,7 @@ function IssueDetailForm({
         </header>
         {!archived && <PluginIssueActions issue={persisted} comments={comments} />}
         <ExternalLinks issue={persisted} />
-        {draft && <p className="read-only-note">Only you can see this draft, while you have access to its project. Publishing shares the saved issue, comments and history with everyone who has access and cannot be undone. Save any changes before publishing.</p>}
+        {draft && <p className="read-only-note">Only you can see this draft, while you have access to its project. Publishing shares the saved issue, comments and history with members whose permissions allow reading it and cannot be undone. Save any changes before publishing.</p>}
         <fieldset
           disabled={busy || changingState}
           inert={busy || changingState}
@@ -380,7 +382,7 @@ function IssueDetailForm({
               </small>
             {!archived && (
               <div className="save-actions">
-                {!embedded && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
+                {!embedded && canCreate && <Button type="button" variant="secondary" onClick={() => setCreating(true)} title={newIssueTooltip()} aria-keyshortcuts={NEW_ISSUE_KEYS}>
                   <Plus size={15} /> Create issue
                 </Button>}
                 {draft && <Button type="button" variant="secondary"
